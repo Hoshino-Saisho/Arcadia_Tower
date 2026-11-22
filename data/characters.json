@@ -186,25 +186,28 @@
     },
     {
       "id": "C009",
-      "name": "新角色",
-      "color": "#4a90d9",
+      "name": "祭司",
+      "color": "#37474f",
       "placement": "ground",
       "cost": 10,
       "maxHp": 1000,
-      "atk": 50,
+      "atk": 150,
       "def": 50,
       "res": 0,
-      "damageType": "physical",
-      "attackTarget": "enemy",
+      "damageType": "true",
+      "attackTarget": "ally",
       "targetCount": 1,
       "attackInterval": 1,
       "range": 1,
       "blockCount": 1,
       "maxDeploy": 0,
-      "attackType": "basic",
+      "attackType": "area",
       "skills": [],
       "skillSlots": 1,
-      "onHit": null
+      "onHit": {
+        "modifiers": [{"stat":"maxHp","mode":"percent","value":120},{"stat":"range","mode":"add","value":1}],
+        "duration": 2
+      }
     }
   ]
 }
