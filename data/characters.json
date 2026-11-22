@@ -129,7 +129,7 @@
       "attackTarget": "ally",
       "targetCount": 1,
       "attackInterval": 3.2,
-      "range": 2.5,
+      "range": 2,
       "blockCount": 0,
       "maxDeploy": 0,
       "attackType": "basic",
