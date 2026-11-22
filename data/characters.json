@@ -129,7 +129,7 @@
       "attackTarget": "ally",
       "targetCount": 1,
       "attackInterval": 3.2,
-      "range": 2,
+      "range": 2.5,
       "blockCount": 0,
       "maxDeploy": 0,
       "attackType": "basic",
@@ -166,7 +166,7 @@
       "name": "审判者",
       "color": "#f6e58d",
       "placement": "ground",
-      "cost": 14,
+      "cost": 18,
       "maxHp": 1000,
       "atk": 95,
       "def": 60,
@@ -183,6 +183,28 @@
       "skillSlots": 1,
       "onHit": null,
       "description": "真伤：无视物抗和法抗，专门对付盾卫这类高防御敌人"
+    },
+    {
+      "id": "C009",
+      "name": "新角色",
+      "color": "#4a90d9",
+      "placement": "ground",
+      "cost": 10,
+      "maxHp": 1000,
+      "atk": 50,
+      "def": 50,
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 1,
+      "range": 1,
+      "blockCount": 1,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [],
+      "skillSlots": 1,
+      "onHit": null
     }
   ]
 }
