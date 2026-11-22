@@ -18,10 +18,7 @@
       "blockCount": 2,
       "maxDeploy": 0,
       "attackType": "basic",
-      "skills": [
-        "S001",
-        "S002"
-      ],
+      "skills": ["S001","S002"],
       "skillSlots": 1,
       "onHit": null,
       "description": "近战，部署在地面上阻挡敌人"
@@ -44,10 +41,7 @@
       "blockCount": 0,
       "maxDeploy": 0,
       "attackType": "basic",
-      "skills": [
-        "S003",
-        "S004"
-      ],
+      "skills": ["S003","S004"],
       "skillSlots": 1,
       "onHit": null,
       "description": "远程，部署在高台上，攻速快"
@@ -69,11 +63,8 @@
       "range": 2.2,
       "blockCount": 0,
       "maxDeploy": 0,
-      "attackType": "basic",
-      "skills": [
-        "S005",
-        "S006"
-      ],
+      "attackType": "area",
+      "skills": ["S005","S006","S013"],
       "skillSlots": 1,
       "onHit": null,
       "description": "远程法伤，无视物抗，适合对付盾卫"
@@ -96,9 +87,7 @@
       "blockCount": 3,
       "maxDeploy": 2,
       "attackType": "basic",
-      "skills": [
-        "S002"
-      ],
+      "skills": ["S002"],
       "skillSlots": 1,
       "onHit": null,
       "description": "高生命高防御，可阻挡 3 个敌人，最多同时部署 2 名"
@@ -121,9 +110,7 @@
       "blockCount": 1,
       "maxDeploy": 0,
       "attackType": "basic",
-      "skills": [
-        "S007"
-      ],
+      "skills": ["S007"],
       "skillSlots": 1,
       "onHit": null,
       "description": "费用低，适合开局快速部署"
@@ -146,21 +133,9 @@
       "blockCount": 0,
       "maxDeploy": 0,
       "attackType": "basic",
-      "skills": [
-        "S008",
-        "S009"
-      ],
+      "skills": ["S008","S009"],
       "skillSlots": 1,
-      "onHit": {
-        "modifiers": [
-          {
-            "stat": "maxHp",
-            "mode": "percent",
-            "value": 30
-          }
-        ],
-        "duration": 2
-      },
+      "onHit": {"modifiers":[{"stat":"maxHp","mode":"percent","value":30}],"duration":2},
       "description": "攻击队友：攻击力为负数 = 治疗射程内生命比例最低的队友"
     },
     {
@@ -183,16 +158,7 @@
       "attackType": "area",
       "skills": [],
       "skillSlots": 0,
-      "onHit": {
-        "modifiers": [
-          {
-            "stat": "speed",
-            "mode": "percent",
-            "value": -25
-          }
-        ],
-        "duration": 2
-      },
+      "onHit": {"modifiers":[{"stat":"speed","mode":"percent","value":-25}],"duration":2},
       "description": "范围伤害：每次攻击同时打击射程内全部敌人（不发射子弹），命中后减速"
     },
     {
@@ -213,9 +179,7 @@
       "blockCount": 1,
       "maxDeploy": 0,
       "attackType": "basic",
-      "skills": [
-        "S001"
-      ],
+      "skills": ["S001"],
       "skillSlots": 1,
       "onHit": null,
       "description": "真伤：无视物抗和法抗，专门对付盾卫这类高防御敌人"
