@@ -1,1 +1,142 @@
-# Arcadia_Tower
+# Arcadia Tower · v0.02
+
+2D 塔防游戏 + 启动器 + 模块化关卡编辑器（Electron + React + TypeScript + Canvas）。更新内容见 [CHANGELOG.md](CHANGELOG.md)。
+
+```
+启动器（exe / app）
+├─ 开始游戏 → 游戏主页
+│   ├─ Play → 章节选择 → 关卡选择 → 战斗
+│   ├─ 图鉴：全部角色和敌人的数值与技能
+│   └─ 角色设定：选择每个角色携带的技能
+└─ 关卡编辑器
+   ├─ ① 角色编辑   ID · 颜色 · 图标 · 数值 · 攻击方式（物伤/法伤、攻击敌人/队友、目标数）· 技能
+   ├─ ② 敌人编辑   ID · 颜色 · 3~6 边形外观 · 数值 · 移动速度 · 攻击方式 · 技能
+   ├─ ③ 技能编辑   SP（上限/积累方式/速度）· 自动/手动释放 · 增益减益 · 伤害治疗
+   ├─ ④ 章节规划   章节顺序 · 关卡数量 · 战斗音乐 · 主页音乐
+   └─ ⑤ 地图规划   输入「章节编号_关卡编号」(如 ZH_1)
+        ├─ 地图搭建：积木（地面 / 高台 / 出现点 / 基地 / 不可放置）+ 血量金钱 + 战斗音乐
+        └─ 确认 → 敌人路线规划：时间线拼接敌人积木；自动寻路或手动点选路线
+```
+
+## 运行
+
+需要 Node.js 18+。第一次先安装依赖：
+
+```bash
+npm install
+```
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm start` | 构建并启动桌面版（启动器窗口） |
+| `npm run dev` | 浏览器开发模式 http://localhost:5199 （同样读写项目里的 `data/`） |
+| `npm run dist:win` | 打包 Windows 便携版 exe → `release/ArcadiaTower-0.0.2-portable.exe` |
+| `npm run dist:win-zip` | 打包 Windows 免安装 zip |
+| `npm run dist:mac` | 打包 macOS 应用 → `release/mac-arm64/ArcadiaTower.app` |
+| `npm test` | 无界面测试：寻路、解锁、战斗机制（伤害类型/治疗/技能/增减益）、关卡模拟、GitHub 同步逻辑 |
+
+版本号在 `src/version.ts`（显示用，`0.02`）和 `package.json`（`0.0.2`）里，发布新版本时两处一起改。
+
+仓库：https://github.com/Hoshino-Saisho/Arcadia_Tower
+
+## 放到 GitHub（第一次）
+
+（本项目已经完成这一步，换一台电脑时直接 `git clone` 仓库即可。）在一个新文件夹里从头开始时，执行（把地址换成你的仓库）：
+
+```bash
+git init -b main
+```
+
+```bash
+git add -A && git commit -m "Arcadia Tower v0.02"
+```
+
+```bash
+git remote add origin https://github.com/你的用户名/你的仓库.git
+```
+
+```bash
+git push -u origin main
+```
+
+`git push` 时会要求登录：用户名填 GitHub 用户名，密码填 **访问令牌**（见下文），macOS 会把它保存在钥匙串里。
+`.gitignore` 已经排除了 `node_modules/`、构建产物和玩家进度 `data/progress.json`。
+
+## 编辑器保存到 GitHub
+
+在关卡编辑器右上角点 **⚙** 设置同步，有两种方式：
+
+- **GitHub API（推荐，打包版 exe / app 用这个）**：填写仓库（`用户名/仓库名`）、分支、数据文件夹（默认 `data`）和访问令牌。
+  - 访问令牌：GitHub 网页 → 头像 → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token；
+    Repository access 选这个仓库，Permissions 里把 **Contents** 设为 **Read and write**。
+  - 令牌只保存在本机（Electron 用系统钥匙串加密），不会写进 `data/`，也不会上传。
+- **本机 Git**：项目文件夹本身是 Git 仓库时可用（例如在项目里 `npm start`），保存时执行 `git add / commit / pull --rebase / push`，用电脑上已登录的 Git 账号。
+
+同步规则：
+- 勾选「编辑器保存后自动上传」后，每次保存（角色、敌人、技能、章节、关卡、全局设置、导入的图标和音乐）几秒内会自动上传，多次保存合并为一个 commit。
+- 编辑器顶部显示「已同步 / N 个修改待上传 / 出错」，也可以手动「上传」「拉取」。
+- 启动器可以在打开时自动从 GitHub 拉取最新数据（别人上传的关卡、音乐等）。
+- 本地和仓库同时修改了同一个文件时：上传会被拒绝并提示先拉取；拉取时会列出冲突，由你选择用仓库版本覆盖还是保留本地。
+- 玩家进度 `progress.json`（通关记录、角色设定）只保存在本机，不会上传。
+
+## 数据保存在哪里
+
+所有内容都是可读的 JSON，编辑器只是它们的图形界面：
+
+```
+data/
+├─ characters.json        角色
+├─ enemies.json           敌人
+├─ skills.json            技能库（角色 / 敌人通过技能 ID 引用）
+├─ chapters.json          章节（数组顺序 = 解锁顺序）
+├─ settings.json          全局设置（主页音乐）
+├─ levels/ZH_1.json       关卡：地图 + 关卡设置 + 敌人线
+├─ icons/                 以后绘制好的图标
+├─ music/home/            主页音乐（未进入战斗时播放）
+├─ music/battle/          战斗音乐（章节规划 / 关卡设置中选择）
+└─ progress.json          玩家进度（只在本机）
+```
+
+- `npm start` / `npm run dev`：直接读写项目中的 `data/`。
+- Windows 便携版 exe：数据在 exe 旁边的 `ArcadiaTower_Data/` 文件夹；其他打包版本在系统用户数据目录的 `data/`（启动器里「打开数据文件夹」）。
+- 环境变量 `ARCADIA_DATA_DIR` 可以指定其他数据目录。
+
+关卡地图用字符保存：`G` 地面、`H` 高台、`S` 敌人出现点、`B` 基地、`X` 不可放置、`.` 空。
+
+## 游戏规则（默认）
+
+- **血量**：敌人的中心点到达基地方块的中心点时扣 1 点血量。血量归零失败；所有敌人都被处理且血量 > 0 即胜利。
+- **金钱**：初始金钱 + 可选的每分钟自动回复 + 击杀奖励。部署消耗费用，撤退返还 50%。
+- **部署 / 阻挡**：地面角色放地面、高台角色放高台；地面角色按阻挡数阻挡敌人。
+- **伤害类型**：物伤 = 攻击 − 物抗（无视法抗）；法伤 = 攻击 × (1 − 法抗%)（无视物抗）；都至少为攻击力的 5%。技能还可以造成不被减免的真实伤害。
+- **攻击方式**：攻击敌人（默认）或攻击队友（攻击力为负数 = 治疗射程内生命比例最低的队友）；每次攻击的目标数可设置，`-1` = 射程内全部。普通攻击可以附带增益 / 减益。
+- **技能**：每个技能单独积攒 SP —— 「攻击成功」（每次攻击敌人或队友）或「自动积累」（每秒）；SP 满后自动释放或手动释放（点击场上的角色 → 释放技能）。持续期间不积累 SP。敌人的技能总是自动释放。
+- **增益 / 减益**：修改生命上限、攻击、物抗、法抗、攻击间隔、范围、目标数、阻挡数、移动速度、每秒回复（负数 = 持续伤害），固定值或百分比，数量不限，可以同时有增益和减益。同一来源再次施加会刷新时间。
+- **缓速**：选中部署卡片或场上的角色时，时间流速 = 当前倍速 × 0.2（3 倍速时为 0.6 倍）。
+- **解锁**：上一章节全部通关后解锁下一章节；上一关通关后才显示下一关。编辑器中的「试玩」不受限制，也不记录进度。
+
+## 图标与音乐
+
+- 图标：角色 / 敌人编辑中「选择图片…」会复制到 `data/icons/`；没有图标时显示颜色圆形 / 多边形。建议 256×256 透明背景。
+- 音乐：支持 mp3 / ogg / wav / m4a。可以在章节规划中「导入音乐…」，也可以直接上传到 GitHub 仓库的 `data/music/home/`、`data/music/battle/` 后点「拉取」。
+  示例音乐 `sample_home.wav`、`sample_battle.wav` 是程序合成的占位音乐，可以随时删除。
+
+## 代码结构与扩展点
+
+```
+electron/              主进程（启动器、窗口、数据目录、GitHub 令牌加密保存）、preload、本机 Git 同步
+src/core/              数据层：类型、默认值与旧数据兼容、属性与伤害公式、说明文字生成、寻路、解锁规则、存储、GitHub 同步
+src/game/              战斗引擎（纯逻辑，可在 Node 中测试）、攻击方式注册表、渲染器、图标与音乐
+src/ui/                启动器、游戏页面（主页 / 图鉴 / 角色设定 / 战斗）、编辑器各模块
+scripts/sim-test.ts    战斗与关卡测试；scripts/sync-test.ts GitHub 同步测试（模拟 API）
+```
+
+- **新方块类型**：`src/core/tiles.ts` 的 `TILE_TYPES`。
+- **新的特殊攻击方式**（溅射、链式等）：在 `src/game/attacks.ts` 注册新的行为，角色 / 敌人的 `attackType` 选择它。
+- **新的可修改属性**：`src/core/stats.ts` 的 `STATS` + `src/game/entities.ts` 的基础属性。
+- 读取旧数据时缺少的字段会自动补默认值（`src/core/defaults.ts` 的 normalize 函数），v0.01 的数据可以直接使用。
+
+## 关于 Windows exe
+
+`npm run dist:win` 可以在 macOS 上直接打出 Windows 便携版 exe（未签名，第一次运行时 SmartScreen 可能提示「未知发布者」，点「更多信息 → 仍要运行」）。
+exe 目前使用 Electron 默认图标：在 mac 上打包需要 `"signAndEditExecutable": false`；以后在 Windows 上打包时改成 `"signExecutable": false` 并在 `build.win.icon` 指定图标即可。

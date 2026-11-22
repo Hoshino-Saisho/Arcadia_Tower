@@ -1,0 +1,18 @@
+{
+  "chapters": [
+    {
+      "id": "ZH",
+      "name": "主线 · 第一章",
+      "levelCount": 3,
+      "description": "防线初建",
+      "battleMusic": "sample_battle.wav"
+    },
+    {
+      "id": "EX",
+      "name": "外传 · 双翼",
+      "levelCount": 2,
+      "description": "通关主线第一章后解锁",
+      "battleMusic": ""
+    }
+  ]
+}

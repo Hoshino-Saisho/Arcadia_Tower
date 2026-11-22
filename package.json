@@ -1,0 +1,74 @@
+{
+  "name": "arcadia-tower",
+  "version": "0.0.2",
+  "private": true,
+  "description": "Arcadia Tower - 2D 塔防游戏（含启动器与关卡编辑器），版本 0.02",
+  "author": "Arcadia Tower",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "vite build && electron .",
+    "electron": "electron .",
+    "test": "tsx scripts/sim-test.ts && tsx scripts/sync-test.ts",
+    "dist:win": "vite build && electron-builder --win portable --x64",
+    "dist:win-zip": "vite build && electron-builder --win zip --x64",
+    "dist:mac": "vite build && electron-builder --mac dir",
+    "test:sim": "tsx scripts/sim-test.ts",
+    "test:sync": "tsx scripts/sync-test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  },
+  "build": {
+    "appId": "com.arcadia.tower",
+    "productName": "ArcadiaTower",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "data",
+        "to": "default-data",
+        "filter": [
+          "**/*",
+          "!progress.json",
+          "!**/*.tmp-*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "ArcadiaTower-${version}-portable.exe"
+    },
+    "mac": {
+      "identity": null,
+      "category": "public.app-category.games"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hoshino-Saisho/Arcadia_Tower.git"
+  },
+  "homepage": "https://github.com/Hoshino-Saisho/Arcadia_Tower"
+}

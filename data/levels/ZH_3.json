@@ -1,0 +1,214 @@
+{
+  "id": "ZH_3",
+  "chapterId": "ZH",
+  "index": 3,
+  "version": 2,
+  "width": 12,
+  "height": 5,
+  "grid": [
+    "SGGGGGGGGGGH",
+    "HHHHHHHHHHGH",
+    "HGGGGXXGGGGH",
+    "HGHHHHHHHHHH",
+    "HGGGGGGGGGGB"
+  ],
+  "settings": {
+    "name": "蛇形长廊",
+    "initialHp": 8,
+    "initialMoney": 20,
+    "autoMoney": true,
+    "moneyPerMinute": 40,
+    "availableCharacters": [],
+    "battleMusic": ""
+  },
+  "lines": [
+    {
+      "id": "L1",
+      "name": "长廊（手动路线）",
+      "color": "#d1605e",
+      "route": {
+        "mode": "manual",
+        "spawn": {
+          "x": 0,
+          "y": 0
+        },
+        "target": null,
+        "path": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 1,
+            "y": 0
+          },
+          {
+            "x": 2,
+            "y": 0
+          },
+          {
+            "x": 3,
+            "y": 0
+          },
+          {
+            "x": 4,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 0
+          },
+          {
+            "x": 6,
+            "y": 0
+          },
+          {
+            "x": 7,
+            "y": 0
+          },
+          {
+            "x": 8,
+            "y": 0
+          },
+          {
+            "x": 9,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 0
+          },
+          {
+            "x": 10,
+            "y": 1
+          },
+          {
+            "x": 10,
+            "y": 2
+          },
+          {
+            "x": 9,
+            "y": 2
+          },
+          {
+            "x": 8,
+            "y": 2
+          },
+          {
+            "x": 7,
+            "y": 2
+          },
+          {
+            "x": 6,
+            "y": 2
+          },
+          {
+            "x": 5,
+            "y": 2
+          },
+          {
+            "x": 4,
+            "y": 2
+          },
+          {
+            "x": 3,
+            "y": 2
+          },
+          {
+            "x": 2,
+            "y": 2
+          },
+          {
+            "x": 1,
+            "y": 2
+          },
+          {
+            "x": 1,
+            "y": 3
+          },
+          {
+            "x": 1,
+            "y": 4
+          },
+          {
+            "x": 2,
+            "y": 4
+          },
+          {
+            "x": 3,
+            "y": 4
+          },
+          {
+            "x": 4,
+            "y": 4
+          },
+          {
+            "x": 5,
+            "y": 4
+          },
+          {
+            "x": 6,
+            "y": 4
+          },
+          {
+            "x": 7,
+            "y": 4
+          },
+          {
+            "x": 8,
+            "y": 4
+          },
+          {
+            "x": 9,
+            "y": 4
+          },
+          {
+            "x": 10,
+            "y": 4
+          },
+          {
+            "x": 11,
+            "y": 4
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "id": "B1",
+          "enemyId": "E001",
+          "count": 8,
+          "interval": 2,
+          "startTime": 3
+        },
+        {
+          "id": "B2",
+          "enemyId": "E003",
+          "count": 3,
+          "interval": 5,
+          "startTime": 26
+        },
+        {
+          "id": "B5",
+          "enemyId": "E005",
+          "count": 2,
+          "interval": 4,
+          "startTime": 30
+        },
+        {
+          "id": "B3",
+          "enemyId": "E004",
+          "count": 4,
+          "interval": 3,
+          "startTime": 42
+        },
+        {
+          "id": "B4",
+          "enemyId": "E002",
+          "count": 6,
+          "interval": 1.2,
+          "startTime": 58
+        }
+      ]
+    }
+  ]
+}

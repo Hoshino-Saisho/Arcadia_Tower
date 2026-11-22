@@ -1,0 +1,102 @@
+{
+  "id": "EX_1",
+  "chapterId": "EX",
+  "index": 1,
+  "version": 2,
+  "width": 11,
+  "height": 3,
+  "grid": [
+    "BGGGHHHGGGB",
+    "HHHGHHHGHHH",
+    "...GGSGG..."
+  ],
+  "settings": {
+    "name": "双翼",
+    "initialHp": 6,
+    "initialMoney": 30,
+    "autoMoney": true,
+    "moneyPerMinute": 30,
+    "availableCharacters": [
+      "C001",
+      "C002",
+      "C004",
+      "C005"
+    ],
+    "battleMusic": ""
+  },
+  "lines": [
+    {
+      "id": "L1",
+      "name": "左翼",
+      "color": "#8f7ad6",
+      "route": {
+        "mode": "auto",
+        "spawn": {
+          "x": 5,
+          "y": 2
+        },
+        "target": {
+          "x": 0,
+          "y": 0
+        },
+        "path": []
+      },
+      "blocks": [
+        {
+          "id": "B1",
+          "enemyId": "E001",
+          "count": 6,
+          "interval": 2.5,
+          "startTime": 4
+        },
+        {
+          "id": "B5",
+          "enemyId": "E005",
+          "count": 1,
+          "interval": 1,
+          "startTime": 20
+        },
+        {
+          "id": "B2",
+          "enemyId": "E003",
+          "count": 1,
+          "interval": 1,
+          "startTime": 30
+        }
+      ]
+    },
+    {
+      "id": "L2",
+      "name": "右翼",
+      "color": "#6aa84f",
+      "route": {
+        "mode": "auto",
+        "spawn": {
+          "x": 5,
+          "y": 2
+        },
+        "target": {
+          "x": 10,
+          "y": 0
+        },
+        "path": []
+      },
+      "blocks": [
+        {
+          "id": "B3",
+          "enemyId": "E002",
+          "count": 6,
+          "interval": 2.5,
+          "startTime": 6
+        },
+        {
+          "id": "B4",
+          "enemyId": "E004",
+          "count": 2,
+          "interval": 3,
+          "startTime": 34
+        }
+      ]
+    }
+  ]
+}

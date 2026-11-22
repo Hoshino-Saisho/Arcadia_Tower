@@ -1,0 +1,86 @@
+{
+  "id": "ZH_2",
+  "chapterId": "ZH",
+  "index": 2,
+  "version": 2,
+  "width": 16,
+  "height": 5,
+  "grid": [
+    "SGGGGGGHH.......",
+    ".HHHHHGHHHHH....",
+    "......GGGGGGGGGB",
+    ".HHHHHGHHHHHH...",
+    "SGGGGGGHH......."
+  ],
+  "settings": {
+    "name": "两路夹击",
+    "initialHp": 10,
+    "initialMoney": 25,
+    "autoMoney": true,
+    "moneyPerMinute": 36,
+    "availableCharacters": [],
+    "battleMusic": ""
+  },
+  "lines": [
+    {
+      "id": "L1",
+      "name": "上路",
+      "color": "#e8a33d",
+      "route": {
+        "mode": "auto",
+        "spawn": {
+          "x": 0,
+          "y": 0
+        },
+        "target": null,
+        "path": []
+      },
+      "blocks": [
+        {
+          "id": "B1",
+          "enemyId": "E001",
+          "count": 6,
+          "interval": 2.5,
+          "startTime": 5
+        },
+        {
+          "id": "B2",
+          "enemyId": "E003",
+          "count": 2,
+          "interval": 6,
+          "startTime": 32
+        }
+      ]
+    },
+    {
+      "id": "L2",
+      "name": "下路",
+      "color": "#4fb3a9",
+      "route": {
+        "mode": "auto",
+        "spawn": {
+          "x": 0,
+          "y": 4
+        },
+        "target": null,
+        "path": []
+      },
+      "blocks": [
+        {
+          "id": "B3",
+          "enemyId": "E002",
+          "count": 5,
+          "interval": 2,
+          "startTime": 14
+        },
+        {
+          "id": "B4",
+          "enemyId": "E004",
+          "count": 3,
+          "interval": 4,
+          "startTime": 44
+        }
+      ]
+    }
+  ]
+}

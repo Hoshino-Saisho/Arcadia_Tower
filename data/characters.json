@@ -1,0 +1,190 @@
+{
+  "characters": [
+    {
+      "id": "C001",
+      "name": "守卫",
+      "color": "#d0743c",
+      "placement": "ground",
+      "cost": 8,
+      "maxHp": 1200,
+      "atk": 75,
+      "def": 90,
+      "attackInterval": 1,
+      "range": 1,
+      "blockCount": 2,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [
+        "S001",
+        "S002"
+      ],
+      "description": "近战，部署在地面上阻挡敌人",
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "skillSlots": 1,
+      "onHit": null
+    },
+    {
+      "id": "C002",
+      "name": "射手",
+      "color": "#3a8ee6",
+      "placement": "high",
+      "cost": 10,
+      "maxHp": 600,
+      "atk": 55,
+      "def": 30,
+      "attackInterval": 0.8,
+      "range": 2.6,
+      "blockCount": 0,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [
+        "S003",
+        "S004"
+      ],
+      "description": "远程，部署在高台上，攻速快",
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "skillSlots": 1,
+      "onHit": null
+    },
+    {
+      "id": "C003",
+      "name": "术师",
+      "color": "#9b59d0",
+      "placement": "high",
+      "cost": 15,
+      "maxHp": 500,
+      "atk": 150,
+      "def": 15,
+      "attackInterval": 1.6,
+      "range": 2.2,
+      "blockCount": 0,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [
+        "S005",
+        "S006"
+      ],
+      "description": "远程法伤，无视物抗，适合对付盾卫",
+      "res": 15,
+      "damageType": "magic",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "skillSlots": 1,
+      "onHit": null
+    },
+    {
+      "id": "C004",
+      "name": "重装",
+      "color": "#7f8c8d",
+      "placement": "ground",
+      "cost": 16,
+      "maxHp": 2600,
+      "atk": 50,
+      "def": 240,
+      "attackInterval": 1.3,
+      "range": 1,
+      "blockCount": 3,
+      "maxDeploy": 2,
+      "attackType": "basic",
+      "skills": [
+        "S002"
+      ],
+      "description": "高生命高防御，可阻挡 3 个敌人，最多同时部署 2 名",
+      "res": 10,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "skillSlots": 1,
+      "onHit": null
+    },
+    {
+      "id": "C005",
+      "name": "先锋",
+      "color": "#2fb380",
+      "placement": "ground",
+      "cost": 5,
+      "maxHp": 800,
+      "atk": 50,
+      "def": 60,
+      "attackInterval": 1,
+      "range": 1,
+      "blockCount": 1,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [
+        "S007"
+      ],
+      "description": "费用低，适合开局快速部署",
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "skillSlots": 1,
+      "onHit": null
+    },
+    {
+      "id": "C006",
+      "name": "医疗",
+      "color": "#6fd3a8",
+      "placement": "high",
+      "cost": 12,
+      "maxHp": 600,
+      "atk": -180,
+      "def": 30,
+      "res": 20,
+      "damageType": "magic",
+      "attackTarget": "ally",
+      "targetCount": 1,
+      "attackInterval": 2.2,
+      "range": 2.5,
+      "blockCount": 0,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [
+        "S008",
+        "S009"
+      ],
+      "skillSlots": 1,
+      "onHit": null,
+      "description": "攻击队友：攻击力为负数 = 治疗射程内生命比例最低的队友"
+    },
+    {
+      "id": "C007",
+      "name": "炮手",
+      "color": "#e17055",
+      "placement": "high",
+      "cost": 18,
+      "maxHp": 650,
+      "atk": 70,
+      "def": 25,
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": -1,
+      "attackInterval": 2.4,
+      "range": 2,
+      "blockCount": 0,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": [],
+      "skillSlots": 0,
+      "onHit": {
+        "modifiers": [
+          {
+            "stat": "speed",
+            "mode": "percent",
+            "value": -25
+          }
+        ],
+        "duration": 2
+      },
+      "description": "每次攻击射程内全部敌人（目标数 -1），命中后减速"
+    }
+  ]
+}

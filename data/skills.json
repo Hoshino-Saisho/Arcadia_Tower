@@ -1,0 +1,413 @@
+{
+  "skills": [
+    {
+      "id": "S001",
+      "name": "强力击",
+      "color": "#ff9f43",
+      "spMax": 4,
+      "spInitial": 0,
+      "spGain": "attack",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "damage",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": 1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": 200,
+          "damageType": "physical"
+        }
+      ],
+      "description": "每攻击 4 次，对一名敌人造成一次重击"
+    },
+    {
+      "id": "S002",
+      "name": "坚守",
+      "color": "#9aa5b1",
+      "spMax": 25,
+      "spInitial": 10,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "manual",
+      "duration": 10,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "def",
+              "mode": "percent",
+              "value": 60
+            },
+            {
+              "stat": "blockCount",
+              "mode": "add",
+              "value": 1
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S003",
+      "name": "连射",
+      "color": "#54a0ff",
+      "spMax": 20,
+      "spInitial": 5,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "manual",
+      "duration": 10,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "targetCount",
+              "mode": "add",
+              "value": 1
+            },
+            {
+              "stat": "attackInterval",
+              "mode": "percent",
+              "value": -20
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S004",
+      "name": "破甲箭",
+      "color": "#48dbfb",
+      "spMax": 5,
+      "spInitial": 0,
+      "spGain": "attack",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": 1,
+          "modifiers": [
+            {
+              "stat": "def",
+              "mode": "percent",
+              "value": -50
+            }
+          ],
+          "duration": 6,
+          "amount": 0,
+          "damageType": "physical"
+        },
+        {
+          "kind": "damage",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": 1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": 180,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S005",
+      "name": "法术爆发",
+      "color": "#c56cf0",
+      "spMax": 30,
+      "spInitial": 10,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "manual",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "damage",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": 250,
+          "damageType": "magic"
+        }
+      ]
+    },
+    {
+      "id": "S006",
+      "name": "削弱诅咒",
+      "color": "#8e44ad",
+      "spMax": 18,
+      "spInitial": 0,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 8,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 3,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "def",
+              "mode": "add",
+              "value": -40
+            },
+            {
+              "stat": "res",
+              "mode": "add",
+              "value": -20
+            },
+            {
+              "stat": "speed",
+              "mode": "percent",
+              "value": -30
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ],
+      "description": "同时降低敌人的物抗与法抗，并减速"
+    },
+    {
+      "id": "S007",
+      "name": "鼓舞",
+      "color": "#2ecc71",
+      "spMax": 15,
+      "spInitial": 0,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "manual",
+      "duration": 10,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "allies",
+          "scope": "range",
+          "radius": 2,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "atk",
+              "mode": "percent",
+              "value": 20
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        },
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "def",
+              "mode": "percent",
+              "value": 30
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S008",
+      "name": "群体治疗",
+      "color": "#7bed9f",
+      "spMax": 6,
+      "spInitial": 0,
+      "spGain": "attack",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "damage",
+          "target": "allies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": -150,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S009",
+      "name": "治疗强化",
+      "color": "#1dd1a1",
+      "spMax": 25,
+      "spInitial": 8,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "manual",
+      "duration": 12,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "targetCount",
+              "mode": "add",
+              "value": 2
+            },
+            {
+              "stat": "atk",
+              "mode": "percent",
+              "value": 30
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S010",
+      "name": "盾墙",
+      "color": "#576574",
+      "spMax": 15,
+      "spInitial": 0,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 6,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "def",
+              "mode": "percent",
+              "value": 80
+            },
+            {
+              "stat": "speed",
+              "mode": "percent",
+              "value": -50
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ],
+      "description": "增益的同时也有减益：物抗大幅提升但移动变慢"
+    },
+    {
+      "id": "S011",
+      "name": "狂热",
+      "color": "#27ae60",
+      "spMax": 12,
+      "spInitial": 0,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 5,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "allies",
+          "scope": "range",
+          "radius": 2,
+          "maxTargets": -1,
+          "modifiers": [
+            {
+              "stat": "speed",
+              "mode": "percent",
+              "value": 40
+            }
+          ],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
+      "id": "S012",
+      "name": "毒雾",
+      "color": "#6c5ce7",
+      "spMax": 4,
+      "spInitial": 0,
+      "spGain": "attack",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": 2,
+          "modifiers": [
+            {
+              "stat": "hpRegen",
+              "mode": "add",
+              "value": -40
+            },
+            {
+              "stat": "res",
+              "mode": "add",
+              "value": -10
+            }
+          ],
+          "duration": 5,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ],
+      "description": "让附近的角色中毒（每秒损失生命）并降低法抗"
+    }
+  ]
+}
