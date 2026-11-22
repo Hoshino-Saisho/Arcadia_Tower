@@ -125,7 +125,7 @@
       "atk": -80,
       "def": 30,
       "res": 20,
-      "damageType": "magic",
+      "damageType": "true",
       "attackTarget": "ally",
       "targetCount": 1,
       "attackInterval": 2.2,
