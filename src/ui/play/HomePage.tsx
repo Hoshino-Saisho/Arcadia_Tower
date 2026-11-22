@@ -1,7 +1,7 @@
 import { getBridge } from '../../core/storage/backend';
 import { loadProgress, saveProgress } from '../../core/storage/repository';
 import { music, useMusicState } from '../../game/music';
-import { GAME_VERSION } from '../../version';
+import { GAME_VERSION, IS_WEB_PLAY } from '../../version';
 import { toast } from '../common/toast';
 import { navigate } from '../router';
 
@@ -44,14 +44,17 @@ export function HomePage() {
           >
             重置进度
           </button>
-          {!bridge && (
+          {!bridge && !IS_WEB_PLAY && (
             <button className="btn btn-s btn-ghost" onClick={() => navigate('/')}>
               返回启动器
             </button>
           )}
         </div>
       </div>
-      <div className="version-tag">v{GAME_VERSION}</div>
+      <div className="version-tag">
+        v{GAME_VERSION}
+        {IS_WEB_PLAY && ' · 网页版（进度保存在本浏览器）'}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { describeAttack, describeOnHit } from '../../core/describe';
 import { DAMAGE_TYPE_LABEL } from '../../core/stats';
 import { loadDatabase, type GameDatabase } from '../../core/storage/repository';
 import type { CharacterDef, EnemyDef, SkillDef } from '../../core/types';
+import { RangeGrid } from '../common/rangeGrid';
 import { SkillCard } from '../common/skillCard';
 import { UnitToken } from '../common/tokens';
 import { navigate } from '../router';
@@ -122,6 +123,10 @@ function CharacterDetail({ def, skills }: { def: CharacterDef; skills: Map<strin
         <Row k="阻挡数" v={def.placement === 'high' ? '—' : def.blockCount} />
         <Row k="同时部署" v={def.maxDeploy > 0 ? `最多 ${def.maxDeploy} 个` : '不限'} />
       </dl>
+      <div className="codex-range">
+        <RangeGrid range={def.range} color={healer ? '#5dff9d' : def.color} cell={16} />
+        <span className="muted small">射程（中间 = 角色所在方块）</span>
+      </div>
       {describeOnHit(def.onHit) && <div className="codex-note">{describeOnHit(def.onHit)}</div>}
       <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} />
     </>
@@ -145,6 +150,12 @@ function EnemyDetail({ def, skills }: { def: EnemyDef; skills: Map<string, Skill
         <Row k="击杀奖励" v={def.reward} />
         <Row k="外形" v={`${def.sides} 边形`} />
       </dl>
+      {def.canAttack && def.attackRange > 0 && (
+        <div className="codex-range">
+          <RangeGrid range={def.attackRange} color={healer ? '#5dff9d' : def.color} cell={16} />
+          <span className="muted small">射程（中间 = 敌人所在方块）</span>
+        </div>
+      )}
       {describeOnHit(def.onHit) && <div className="codex-note">{describeOnHit(def.onHit)}</div>}
       <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} />
     </>

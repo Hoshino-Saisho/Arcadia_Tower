@@ -8,8 +8,11 @@ import { tileInfo } from '../../core/tiles';
 import type { EnemyDef, EnemySides, SkillDef } from '../../core/types';
 import { enemyRadius } from '../../game/entities';
 import { useIcon } from '../../game/icons';
-import { drawEnemyToken, drawTile, withAlpha } from '../../game/shapes';
+import { drawRangeTiles } from '../../game/renderer';
+import { drawEnemyToken, drawTile } from '../../game/shapes';
+import { listAttackTypes } from '../../game/attacks';
 import { Checkbox, ColorInput, Field, IconPicker, NumberInput, Segmented, TextInput } from '../common/fields';
+import { RangeGrid } from '../common/rangeGrid';
 import { UnitToken } from '../common/tokens';
 import { DefListPanel, SaveBar } from './DefListPanel';
 import type { EditorTabProps } from './EditorApp';
@@ -144,18 +147,26 @@ export function EnemyEditor({ onDirtyChange }: EditorTabProps) {
                   options={[
                     { value: 'physical', label: '物伤' },
                     { value: 'magic', label: '法伤' },
+                    { value: 'true', label: '真伤', title: '无视物抗和法抗' },
                   ]}
                   onChange={(v) => set({ damageType: v })}
+                />
+              </Field>
+              <Field label="攻击方式" wide>
+                <Segmented
+                  value={e.attackType === 'area' ? 'area' : 'basic'}
+                  options={listAttackTypes().map((a) => ({ value: a.id, label: a.name, title: a.description }))}
+                  onChange={(v) => set({ attackType: v })}
                 />
               </Field>
               <Field label="攻击间隔" hint="秒">
                 <NumberInput value={e.attackInterval} min={0.05} max={60} step={0.1} disabled={!e.canAttack} onChange={(v) => set({ attackInterval: v })} />
               </Field>
-              <Field label="攻击范围" hint="格；0 = 只打阻挡者">
-                <NumberInput value={e.attackRange} min={0} max={20} step={0.1} disabled={!e.canAttack} onChange={(v) => set({ attackRange: v })} />
+              <Field label="攻击范围" hint="格，按方块；0 = 只打阻挡者">
+                <NumberInput value={e.attackRange} min={0} max={20} step={0.5} disabled={!e.canAttack} onChange={(v) => set({ attackRange: v })} />
               </Field>
-              <Field label="每次攻击目标数" hint="-1 = 射程内全部">
-                <NumberInput value={e.targetCount} min={-1} max={99} integer disabled={!e.canAttack} onChange={(v) => set({ targetCount: v === 0 ? 1 : v })} />
+              <Field label="每次攻击目标数" hint={e.attackType === 'area' ? '范围伤害总是全部' : '-1 = 射程内全部'}>
+                <NumberInput value={e.targetCount} min={-1} max={99} integer disabled={!e.canAttack || e.attackType === 'area'} onChange={(v) => set({ targetCount: v === 0 ? 1 : v })} />
               </Field>
               <Field label="说明" wide>
                 <div className="static-value">{describeAttack(e)}</div>
@@ -235,15 +246,14 @@ function EnemyPreview({ def }: { def: EnemyDef }) {
       const cx = x * cell;
       const cy = top + cell * 1.5;
       if (d.canAttack && d.attackRange > 0) {
+        // 射程按方块显示：以敌人当前所在的方块为中心
         const color = d.attackTarget === 'ally' && d.atk < 0 ? '#5dff9d' : d.color;
-        ctx.fillStyle = withAlpha(color, 0.12);
-        ctx.strokeStyle = withAlpha(color, 0.7);
-        ctx.setLineDash([5, 4]);
+        ctx.save();
         ctx.beginPath();
-        ctx.arc(cx, cy, d.attackRange * cell, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.rect(0, top, W, cell * 2);
+        ctx.clip();
+        drawRangeTiles(ctx, { scale: cell, ox: 0, oy: top - cell }, null, Math.floor(x), 2, d.attackRange, color, 0.9);
+        ctx.restore();
       }
       drawEnemyToken(ctx, d, cx, cy, enemyRadius(d) * cell, dir > 0 ? 0 : Math.PI, { icon: iconRef.current });
       raf = requestAnimationFrame(loop);
@@ -256,7 +266,12 @@ function EnemyPreview({ def }: { def: EnemyDef }) {
     <aside className="def-preview">
       <div className="panel-head">预览</div>
       <canvas ref={ref} style={{ width: W, height: H }} className="preview-canvas" />
-      <div className="preview-caption muted small">按实际速度在地面上移动{def.canAttack && def.attackRange > 0 ? '，虚线圆 = 攻击范围' : ''}</div>
+      <div className="preview-caption muted small">按实际速度在地面上移动{def.canAttack && def.attackRange > 0 ? '，高亮方块 = 射程' : ''}</div>
+      {def.canAttack && def.attackRange > 0 && (
+        <div className="row gap-s center">
+          <RangeGrid range={def.attackRange} color={def.attackTarget === 'ally' && def.atk < 0 ? '#5dff9d' : def.color} />
+        </div>
+      )}
       <dl className="stat-grid">
         <dt>外形</dt>
         <dd>{SIDE_NAMES[def.sides]}</dd>

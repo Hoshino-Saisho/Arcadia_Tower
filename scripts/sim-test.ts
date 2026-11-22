@@ -18,6 +18,7 @@ import {
 } from '../src/core/defaults';
 import { checkManualPath, findPath, resolveRoute } from '../src/core/pathfinding';
 import { ProgressView } from '../src/core/progress';
+import { rangeOffsets, tileInRange } from '../src/core/range';
 import { applyModifiers, computeDamage } from '../src/core/stats';
 import { TileGrid } from '../src/core/tiles';
 import type { CharacterDef, EnemyDef, GridPos, LevelDef, SkillDef } from '../src/core/types';
@@ -92,7 +93,9 @@ console.log('\n[4] 战斗机制');
   check(computeDamage(100, 'physical', 40, 90) === 60, '物伤：100 攻击 − 40 物抗 = 60（无视法抗）');
   check(computeDamage(100, 'magic', 999, 30) === 70, '法伤：100 攻击 × (1 − 30% 法抗) = 70（无视物抗）');
   check(computeDamage(100, 'physical', 500, 0) === 5, '伤害至少为攻击力的 5%');
-  check(computeDamage(100, 'true', 500, 90) === 100, '真实伤害不被减免');
+  check(computeDamage(100, 'true', 500, 90) === 100, '真伤无视物抗和法抗');
+  check(rangeOffsets(1).length === 5 && rangeOffsets(1.5).length === 9 && rangeOffsets(2).length === 13, '射程按方块：1 = 十字 5 格，1.5 = 3×3，2 = 13 格');
+  check(!tileInRange({ x: 0, y: 0 }, { x: 1, y: 1 }, 1) && tileInRange({ x: 0, y: 0 }, { x: 1, y: 1 }, 1.5), '射程 1 打不到斜角方块，1.5 可以');
   const base = { maxHp: 1000, atk: 100, def: 100, res: 30, attackInterval: 1, range: 1, targetCount: 1, blockCount: 1, speed: 1, hpRegen: 0 };
   const mod = applyModifiers(base, [[{ stat: 'def', mode: 'add', value: -40 }, { stat: 'res', mode: 'add', value: -20 }, { stat: 'atk', mode: 'percent', value: 50 }]]);
   check(mod.def === 60 && mod.res === 10 && mod.atk === 150, '同一个效果可以同时降低物抗 / 法抗并提升攻击力');
@@ -112,16 +115,18 @@ console.log('\n[4] 战斗机制');
     for (let t = 0; t < sec; t += FIXED_DT) eng.step(FIXED_DT);
   };
 
-  // 治疗：医疗角色治疗受伤的队友
+  // 治疗：医疗角色发射治疗子弹，治疗受伤的队友（场上放一个不攻击的敌人，避免战斗立即结束）
   const medic = charById.get('C006')!;
   const guard = charById.get('C001')!;
-  const eng = new GameEngine(lv, [medic, guard], [dummy], { skills });
+  const lvHeal = normalizeLevel({ ...lv, lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [{ id: 'b', enemyId: 'D', count: 1, interval: 1, startTime: 0 }] }] });
+  const eng = new GameEngine(lvHeal, [medic, guard], [dummy], { skills });
   eng.deploy('C006', { x: 2, y: 1 });
   eng.deploy('C001', { x: 2, y: 0 });
   const g0 = eng.units.find((u) => u.def.id === 'C001')!;
   g0.hp = 300;
   runSkills(eng, 1);
   check(g0.hp > 300, `医疗（攻击力 ${medic.atk}，攻击队友）治疗了受伤的守卫：300 → ${Math.round(g0.hp)}`);
+  if (medic.onHit) check(g0.statuses.some((st) => st.key.startsWith('onhit:C006')), '治疗时附带的效果作用在被治疗的队友身上');
 
   // 多目标：目标数 -1 攻击射程内全部敌人
   const gunner = charById.get('C007')!;
@@ -131,8 +136,21 @@ console.log('\n[4] 战斗机制');
   eng2.deploy('C007', { x: 1, y: 1 });
   runSkills(eng2, 0.5);
   const hits = eng2.enemies.filter((e) => e.hp < e.stats.maxHp).length;
-  check(hits === 3, `炮手（目标数 -1）一次攻击命中了射程内全部 ${hits} 个敌人`);
+  check(hits === 3 && eng2.projectiles.length === 0, `炮手（范围伤害）不发射子弹，同时命中了射程内全部 ${hits} 个敌人`);
   check(eng2.enemies.every((e) => e.stats.speed < e.base.speed), '命中附带的减速效果生效');
+
+  // 默认攻击 = 发射子弹；真伤无视物抗和法抗
+  const judge = charById.get('C008')!;
+  const tank = normalizeEnemy({ id: 'T', maxHp: 100000, speed: 0.05, canAttack: false, def: 5000, res: 100 });
+  const lv3 = normalizeLevel({ ...lv, lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [{ id: 'b', enemyId: 'T', count: 1, interval: 1, startTime: 0 }] }] });
+  const eng5 = new GameEngine(lv3, [judge], [tank], { skills: [] });
+  runSkills(eng5, 0.1);
+  eng5.deploy('C008', { x: 1, y: 0 });
+  eng5.step(FIXED_DT);
+  check(eng5.projectiles.length === 1, '默认攻击发射子弹（命中前不结算伤害）');
+  runSkills(eng5, 0.3);
+  const lost = tank.maxHp - eng5.enemies[0].hp;
+  check(Math.abs(lost - judge.atk) < 1e-6, `真伤：对物抗 5000 / 法抗 100% 的敌人仍造成全额 ${lost} 伤害`);
 
   // 技能：攻击积累 SP → 自动释放；自动积累 SP → 手动释放
   const archer = charById.get('C002')!;

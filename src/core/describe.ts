@@ -43,10 +43,12 @@ export function describeAttack(opts: {
   damageType: DamageType;
   attackTarget: AttackTarget;
   targetCount: number;
+  attackType?: string;
   canAttack?: boolean;
 }): string {
   if (opts.canAttack === false) return '不攻击';
-  const count = opts.targetCount < 0 ? '射程内全部目标' : opts.targetCount === 1 ? '单个目标' : `${opts.targetCount} 个目标`;
+  const area = opts.attackType === 'area';
+  const count = area ? '范围（射程内全部）' : opts.targetCount < 0 ? '子弹 · 射程内全部目标' : opts.targetCount === 1 ? '子弹 · 单个目标' : `子弹 · ${opts.targetCount} 个目标`;
   if (opts.attackTarget === 'ally') {
     return opts.atk < 0 ? `治疗队友 · ${count}` : `攻击队友（${DAMAGE_TYPE_LABEL[opts.damageType]}）· ${count}`;
   }

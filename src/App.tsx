@@ -9,11 +9,17 @@ import { CharactersPage } from './ui/play/CharactersPage';
 import { CodexPage } from './ui/play/CodexPage';
 import { HomePage } from './ui/play/HomePage';
 import { LevelSelectPage } from './ui/play/LevelSelectPage';
-import { useRoute } from './ui/router';
+import { navigate, useRoute } from './ui/router';
+import { IS_WEB_PLAY } from './version';
 
 export function App() {
   const route = useRoute();
-  const [top, sub, arg] = route.segments;
+  // 网页游玩版只有游戏：启动器 / 编辑器的地址都转到游戏主页
+  const redirect = IS_WEB_PLAY && route.segments[0] !== 'game';
+  useEffect(() => {
+    if (redirect) navigate('/game');
+  }, [redirect]);
+  const [top, sub, arg] = redirect ? ['game'] : route.segments;
   const inBattle = top === 'game' && sub === 'play' && !!arg;
 
   useEffect(() => {

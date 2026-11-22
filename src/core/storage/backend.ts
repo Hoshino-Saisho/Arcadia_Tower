@@ -5,7 +5,7 @@
  *  - 纯静态网页：退回到 localStorage（以打包进来的默认数据为初始内容）
  */
 export interface DataBackend {
-  readonly kind: 'electron' | 'devserver' | 'local';
+  readonly kind: 'electron' | 'devserver' | 'static' | 'local';
   /** 递归列出 data 目录下的全部文件（相对路径，用于 GitHub 同步） */
   listAll(): Promise<string[]>;
   readText(rel: string): Promise<string | null>;
@@ -190,6 +190,72 @@ class LocalBackend implements DataBackend {
   }
 }
 
+/**
+ * 网页游玩版（GitHub Pages）：游戏数据从网站上的 data/ 读取（文件列表见 data/manifest.json），
+ * 写入的内容（玩家进度、角色设定）保存在浏览器 localStorage 里，覆盖在网站数据之上。
+ */
+class StaticBackend implements DataBackend {
+  readonly kind = 'static' as const;
+  private prefix = 'arcadia-web:';
+  private static DELETED = '\u0000deleted';
+  constructor(private files: string[]) {}
+  private local(rel: string) {
+    return localStorage.getItem(this.prefix + rel);
+  }
+  async listAll() {
+    const set = new Set(this.files);
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)!;
+      if (!k.startsWith(this.prefix)) continue;
+      const rel = k.slice(this.prefix.length);
+      if (localStorage.getItem(k) === StaticBackend.DELETED) set.delete(rel);
+      else set.add(rel);
+    }
+    return [...set];
+  }
+  async list(relDir: string) {
+    const p = relDir ? relDir.replace(/\/$/, '') + '/' : '';
+    return (await this.listAll()).filter((f) => f.startsWith(p) && !f.slice(p.length).includes('/')).map((f) => f.slice(p.length));
+  }
+  private async fetchFile(rel: string): Promise<Response | null> {
+    if (!this.files.includes(rel)) return null;
+    const r = await fetch(`./data/${enc(rel)}`, { cache: 'no-cache' });
+    return r.ok ? r : null;
+  }
+  async readText(rel: string) {
+    const v = this.local(rel);
+    if (v === StaticBackend.DELETED) return null;
+    if (v != null) return v.startsWith('b64:') ? new TextDecoder().decode(decodeB64(v.slice(4))) : v;
+    const r = await this.fetchFile(rel);
+    return r ? r.text() : null;
+  }
+  async readBinary(rel: string) {
+    const v = this.local(rel);
+    if (v === StaticBackend.DELETED) return null;
+    if (v != null) return v.startsWith('b64:') ? decodeB64(v.slice(4)) : new TextEncoder().encode(v);
+    const r = await this.fetchFile(rel);
+    return r ? new Uint8Array(await r.arrayBuffer()) : null;
+  }
+  async writeText(rel: string, text: string) {
+    localStorage.setItem(this.prefix + rel, text);
+  }
+  async writeBinary(rel: string, bytes: Uint8Array) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    localStorage.setItem(this.prefix + rel, 'b64:' + btoa(s));
+  }
+  async remove(rel: string) {
+    if (this.files.includes(rel)) localStorage.setItem(this.prefix + rel, StaticBackend.DELETED);
+    else localStorage.removeItem(this.prefix + rel);
+  }
+  async rename(from: string, to: string) {
+    const bytes = await this.readBinary(from);
+    if (!bytes) return;
+    await this.writeBinary(to, bytes);
+    await this.remove(from);
+  }
+}
+
 function decodeB64(b64: string): Uint8Array {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -209,6 +275,16 @@ export function getBackend(): Promise<DataBackend> {
         if (r.ok && (r.headers.get('content-type') || '').includes('json')) return new DevServerBackend();
       } catch {
         /* 没有开发服务器 */
+      }
+      // 网页游玩版：网站上有 data/manifest.json
+      try {
+        const r = await fetch('./data/manifest.json', { cache: 'no-cache' });
+        if (r.ok) {
+          const files = await r.json();
+          if (Array.isArray(files)) return new StaticBackend(files.filter((f): f is string => typeof f === 'string'));
+        }
+      } catch {
+        /* 不是网页游玩版 */
       }
       const local = new LocalBackend();
       await local.seed();

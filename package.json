@@ -17,7 +17,9 @@
     "dist:win-zip": "vite build && electron-builder --win zip --x64",
     "dist:mac": "vite build && electron-builder --mac dir",
     "test:sim": "tsx scripts/sim-test.ts",
-    "test:sync": "tsx scripts/sync-test.ts"
+    "test:sync": "tsx scripts/sync-test.ts",
+    "build:web": "tsc --noEmit && vite build --mode pages",
+    "preview:web": "vite preview --mode pages --outDir dist-web"
   },
   "devDependencies": {
     "@types/node": "22.19.1",

@@ -1,0 +1,46 @@
+# 每次推送到 main（包括编辑器上传的数据）都会自动构建网页游玩版并发布到 GitHub Pages：
+# https://hoshino-saisho.github.io/Arcadia_Tower/
+name: 发布网页游玩版
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: 安装依赖（不下载 Electron）
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: 构建网页游玩版
+        run: npm run build:web
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist-web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

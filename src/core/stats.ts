@@ -70,7 +70,7 @@ export function applyModifiers(base: Stats, modifierLists: StatModifier[][]): St
  * 伤害公式：
  *  - 物伤：攻击 − 物抗，至少为攻击力的 5%（无视法抗）
  *  - 法伤：攻击 × (1 − 法抗%)，至少为攻击力的 5%（无视物抗）
- *  - 真实伤害：不被减免（只用于技能）
+ *  - 真伤：无视物抗和法抗，不被减免
  */
 export function computeDamage(atk: number, type: DamageType | SkillDamageType, def: number, res: number): number {
   if (atk <= 0) return 0;
@@ -79,7 +79,7 @@ export function computeDamage(atk: number, type: DamageType | SkillDamageType, d
   return Math.max(atk - def, atk * 0.05);
 }
 
-export const DAMAGE_TYPE_LABEL: Record<SkillDamageType, string> = { physical: '物伤', magic: '法伤', true: '真实伤害' };
+export const DAMAGE_TYPE_LABEL: Record<SkillDamageType, string> = { physical: '物伤', magic: '法伤', true: '真伤' };
 
 /** 格式化一条修改，例如「攻击力 +30%」「物抗 −50」 */
 export function formatModifier(m: StatModifier): string {

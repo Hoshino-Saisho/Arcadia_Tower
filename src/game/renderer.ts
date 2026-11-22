@@ -1,3 +1,4 @@
+import { rangeOffsets } from '../core/range';
 import { tileInfo, type TileGrid } from '../core/tiles';
 import type { CharacterDef, GridPos } from '../core/types';
 import type { GameEngine } from './engine';
@@ -307,18 +308,9 @@ export class BattleRenderer {
     }
   }
 
-  private drawRange(ctx: CanvasRenderingContext2D, vp: Viewport, x: number, y: number, range: number, color: string) {
-    if (range <= 0) return;
-    ctx.save();
-    ctx.fillStyle = withAlpha(color, 0.12);
-    ctx.strokeStyle = withAlpha(color, 0.8);
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.arc(vp.ox + x * vp.scale, vp.oy + y * vp.scale, range * vp.scale, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+  /** 射程：高亮射程内的方块（只画在地图上有方块的位置） */
+  private drawRange(ctx: CanvasRenderingContext2D, vp: Viewport, x: number, y: number, range: number, color: string, alpha = 1) {
+    drawRangeTiles(ctx, vp, this.engine.grid, Math.floor(x), Math.floor(y), range, color, alpha);
   }
 
   private drawPlacement(ctx: CanvasRenderingContext2D, vp: Viewport, def: CharacterDef, hover: GridPos | null) {
@@ -443,6 +435,10 @@ export class BattleRenderer {
           ctx.fillText(fx.text ?? '', cx, ty);
           break;
         }
+        case 'area':
+          // 范围伤害：射程内的方块闪一下
+          drawRangeTiles(ctx, vp, this.engine.grid, Math.floor(fx.x), Math.floor(fx.y), fx.size ?? 1, fx.color, (1 - k) * 1.4, true);
+          break;
         case 'text':
           ctx.globalAlpha = 1 - k * k;
           ctx.fillStyle = fx.color;
@@ -457,4 +453,34 @@ export class BattleRenderer {
       ctx.restore();
     }
   }
+}
+
+/** 画出某个方块周围的射程方块（游戏和编辑器预览共用） */
+export function drawRangeTiles(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  grid: TileGrid | null,
+  cx: number,
+  cy: number,
+  range: number,
+  color: string,
+  alpha = 1,
+  flash = false,
+) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  const pad = Math.max(1.5, vp.scale * 0.05);
+  for (const o of rangeOffsets(range)) {
+    const tx = cx + o.x;
+    const ty = cy + o.y;
+    if (grid && !grid.get(tx, ty)) continue;
+    const sx = vp.ox + tx * vp.scale;
+    const sy = vp.oy + ty * vp.scale;
+    ctx.fillStyle = withAlpha(color, flash ? 0.35 : 0.2);
+    ctx.fillRect(sx + pad, sy + pad, vp.scale - pad * 2, vp.scale - pad * 2);
+    ctx.strokeStyle = withAlpha(color, flash ? 0.9 : 0.75);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx + pad + 0.75, sy + pad + 0.75, vp.scale - pad * 2 - 1.5, vp.scale - pad * 2 - 1.5);
+  }
+  ctx.restore();
 }

@@ -1,8 +1,9 @@
 import { LEAK_DAMAGE, RETREAT_REFUND_RATIO, resolveLoadout } from '../core/defaults';
+import { tileInRange, tileOf } from '../core/range';
 import { applyModifiers, computeDamage, isBuff } from '../core/stats';
 import { TileGrid } from '../core/tiles';
 import type { CharacterDef, EnemyDef, GridPos, LevelDef, SkillDamageType, SkillDef, SkillEffect, StatModifier } from '../core/types';
-import { attackBehavior } from './attacks';
+import { attackBehavior, tileOfCombatant } from './attacks';
 import {
   BLOCK_DISTANCE,
   UNIT_RADIUS,
@@ -295,9 +296,15 @@ export class GameEngine {
       const step = p.speed * dt;
       if (d <= step + 0.05) {
         const src = p.sourceSide === 'enemy' ? this.enemyByUid(p.sourceUid) : this.unitByUid(p.sourceUid);
-        this.dealDamage(target, p.atk, p.damageType);
-        if (p.onHit) this.applyOnHit(target, p.onHit, src);
-        this.addEffect({ kind: 'hit', x: target.x, y: target.y, duration: 0.18, color: p.color });
+        if (p.heal) {
+          this.heal(src ?? null, target, p.atk);
+          // 命中附带效果对治疗的队友同样生效（例如治疗时附带增益）
+          if (p.onHit) this.applyOnHit(target, p.onHit, src);
+        } else {
+          this.dealDamage(target, p.atk, p.damageType);
+          if (p.onHit) this.applyOnHit(target, p.onHit, src);
+          this.addEffect({ kind: 'hit', x: target.x, y: target.y, duration: 0.18, color: p.color });
+        }
         continue;
       }
       p.x += ((target.x - p.x) / d) * step;
@@ -395,7 +402,14 @@ export class GameEngine {
     return healed;
   }
 
-  /** 普通攻击命中（近战）：伤害 + 命中附带效果 */
+  /** 范围治疗命中：治疗 + 命中附带效果 */
+  healWithAttack(attacker: Combatant, target: Combatant) {
+    this.heal(attacker, target, -attacker.stats.atk);
+    const oh = attacker.def.onHit;
+    if (oh && oh.modifiers.length) this.applyOnHit(target, { ...oh, key: `onhit:${attacker.def.id}` }, attacker);
+  }
+
+  /** 普通攻击立即命中（范围伤害）：伤害 + 命中附带效果 */
   hitWithAttack(attacker: Combatant, target: Combatant) {
     this.dealDamage(target, attacker.stats.atk, attacker.def.damageType);
     const oh = attacker.def.onHit;
@@ -406,8 +420,11 @@ export class GameEngine {
     this.addStatus(target, { key: oh.key, name: src ? `${src.def.name}的攻击效果` : '攻击效果', color: src?.def.color ?? '#ffffff', modifiers: oh.modifiers, duration: oh.duration });
   }
 
+  /** 发射子弹（默认攻击）：攻击队友且攻击力为负数时发射治疗子弹 */
   fireProjectile(attacker: Combatant, target: Combatant) {
     const oh = attacker.def.onHit;
+    const heal = attacker.def.attackTarget === 'ally' && attacker.stats.atk < 0;
+    const type = attacker.def.damageType;
     this.projectiles.push({
       id: this.seq++,
       sourceUid: attacker.uid,
@@ -417,10 +434,11 @@ export class GameEngine {
       x: attacker.x,
       y: attacker.y,
       speed: PROJECTILE_SPEED,
-      atk: attacker.stats.atk,
-      damageType: attacker.def.damageType,
+      atk: heal ? -attacker.stats.atk : attacker.stats.atk,
+      heal,
+      damageType: type,
       onHit: oh && oh.modifiers.length ? { ...oh, key: `onhit:${attacker.def.id}` } : null,
-      color: attacker.def.damageType === 'magic' ? '#c79bff' : attacker.def.color,
+      color: heal ? '#5dff9d' : type === 'magic' ? '#c79bff' : type === 'true' ? '#fff3c4' : attacker.def.color,
       radius: 0.08,
     });
   }
@@ -447,8 +465,12 @@ export class GameEngine {
     if (eff.target === 'self') return caster.hp > 0 ? [caster] : [];
     let pool = eff.target === 'allies' ? this.alliesOf(caster) : this.opponentsOf(caster);
     if (eff.scope === 'range') {
+      // 和攻击射程一样按方块判断
       const r = eff.radius > 0 ? eff.radius : caster.stats.range;
-      pool = pool.filter((t) => dist(caster, t) <= r + 1e-6 || (caster.side === 'ally' && t.side === 'enemy' && (t as Enemy).blockedBy === caster.uid));
+      const from = tileOfCombatant(caster);
+      pool = pool.filter(
+        (t) => t === caster || tileInRange(from, tileOf(t), r) || (caster.side === 'ally' && t.side === 'enemy' && (t as Enemy).blockedBy === caster.uid),
+      );
     }
     pool.sort((p, q) => dist(caster, p) - dist(caster, q));
     return eff.maxTargets > 0 ? pool.slice(0, eff.maxTargets) : pool;

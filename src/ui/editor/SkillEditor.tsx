@@ -198,7 +198,7 @@ export function SkillEditor({ onDirtyChange }: EditorTabProps) {
                           options={[
                             { value: 'physical', label: '物伤' },
                             { value: 'magic', label: '法伤' },
-                            { value: 'true', label: '真实伤害' },
+                            { value: 'true', label: '真伤' },
                           ]}
                           onChange={(damageType) => setEffect(i, { damageType })}
                         />

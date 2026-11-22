@@ -22,9 +22,9 @@ export interface GridPos {
 /** 角色可部署的位置 */
 export type PlacementType = 'ground' | 'high' | 'any';
 
-/** 伤害类型：物伤只被物抗减免，法伤只被法抗减免（真实伤害只用于技能，不被减免） */
-export type DamageType = 'physical' | 'magic';
-export type SkillDamageType = DamageType | 'true';
+/** 伤害类型：物伤只被物抗减免，法伤只被法抗减免，真伤无视物抗和法抗 */
+export type DamageType = 'physical' | 'magic' | 'true';
+export type SkillDamageType = DamageType;
 
 /** 攻击对象：敌人（默认）或队友（伤害值为负数时为治疗） */
 export type AttackTarget = 'enemy' | 'ally';
@@ -128,13 +128,13 @@ export interface CharacterDef {
   targetCount: number;
   /** 攻击间隔（秒） */
   attackInterval: number;
-  /** 攻击范围（格，半径） */
+  /** 攻击范围（格）：以所在方块为中心，方块中心距离不超过该值的方块都在射程内 */
   range: number;
   /** 阻挡数：部署在地面上时最多同时阻挡的敌人数，0 = 不阻挡 */
   blockCount: number;
   /** 同时部署上限，0 = 不限 */
   maxDeploy: number;
-  /** 攻击方式 ID（攻击方式注册表，以后可扩展） */
+  /** 攻击方式：basic = 发射子弹（默认）；area = 范围伤害（同时攻击射程内全部目标，不发射子弹） */
   attackType: string;
   /** 可用技能 ID（按顺序，默认携带前 skillSlots 个） */
   skills: string[];

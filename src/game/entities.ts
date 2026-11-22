@@ -84,15 +84,17 @@ export interface Projectile {
   x: number;
   y: number;
   speed: number;
-  /** 攻击力（命中时再结算抗性） */
+  /** 攻击力（命中时再结算抗性）；治疗子弹为治疗量 */
   atk: number;
+  /** 治疗子弹（攻击队友且攻击力为负数） */
+  heal: boolean;
   damageType: SkillDamageType;
   onHit: { modifiers: StatModifier[]; duration: number; key: string } | null;
   color: string;
   radius: number;
 }
 
-export type EffectKind = 'hit' | 'slash' | 'leak' | 'death' | 'spawn' | 'deploy' | 'text' | 'heal' | 'beam' | 'skill';
+export type EffectKind = 'hit' | 'slash' | 'leak' | 'death' | 'spawn' | 'deploy' | 'text' | 'heal' | 'beam' | 'skill' | 'area';
 
 export interface Effect {
   kind: EffectKind;
@@ -113,8 +115,6 @@ export const UNIT_RADIUS = 0.36;
 export const ENEMY_BASE_RADIUS = 0.27;
 /** 敌人中心与地面角色中心距离小于该值时被阻挡 */
 export const BLOCK_DISTANCE = 0.62;
-/** 攻击范围不超过该值时视为近战（直接命中，无弹道） */
-export const MELEE_RANGE = 1.3;
 
 export function enemyRadius(def: EnemyDef): number {
   return ENEMY_BASE_RADIUS * def.size;

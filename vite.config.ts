@@ -131,11 +131,51 @@ function cspPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
-  base: './',
-  plugins: [react(), dataApiPlugin(), cspPlugin()],
-  // data/ 由编辑器读写，不需要触发热更新（否则每次保存都会刷新页面）
-  server: { port: 5199, strictPort: true, watch: { ignored: ['**/data/**', '**/release/**'] } },
-  preview: { port: 5198, strictPort: true },
-  build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 2000 },
+/**
+ * 网页游玩版（GitHub Pages）：把 data/ 复制到输出目录，并生成 data/manifest.json（文件列表），
+ * 网页版通过它读取关卡、音乐等数据。玩家进度保存在浏览器里。
+ */
+function staticDataPlugin(): Plugin {
+  let outDir = '';
+  return {
+    name: 'arcadia-static-data',
+    apply: 'build',
+    configResolved(c) {
+      outDir = path.resolve(c.root, c.build.outDir);
+    },
+    closeBundle() {
+      const src = path.resolve(__dirname, 'data');
+      const dst = path.join(outDir, 'data');
+      const files: string[] = [];
+      const walk = (dir: string, prefix: string) => {
+        for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (d.name.startsWith('.')) continue;
+          const rel = prefix ? `${prefix}/${d.name}` : d.name;
+          if (d.isDirectory()) walk(path.join(dir, d.name), rel);
+          else if (d.isFile() && rel !== 'progress.json' && !/\.tmp-\d+$/.test(rel)) {
+            fs.mkdirSync(path.dirname(path.join(dst, rel)), { recursive: true });
+            fs.copyFileSync(path.join(dir, d.name), path.join(dst, rel));
+            files.push(rel);
+          }
+        }
+      };
+      walk(src, '');
+      fs.writeFileSync(path.join(dst, 'manifest.json'), JSON.stringify(files.sort()));
+      console.log(`[arcadia] 网页版数据：${files.length} 个文件 → ${path.relative(__dirname, dst)}`);
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const web = mode === 'pages';
+  return {
+    base: './',
+    // 网页游玩版没有读写 data/ 的接口（和 GitHub Pages 上一样，只读网站上的数据）
+    plugins: [react(), cspPlugin(), ...(web ? [staticDataPlugin()] : [dataApiPlugin()])],
+    // data/ 由编辑器读写，不需要触发热更新（否则每次保存都会刷新页面）
+    server: { port: 5199, strictPort: true, watch: { ignored: ['**/data/**', '**/release/**'] } },
+    preview: { port: 5198, strictPort: true },
+    // 网页游玩版输出到 dist-web/（GitHub Pages 部署这个目录），桌面版输出到 dist/
+    build: { outDir: web ? 'dist-web' : 'dist', emptyOutDir: true, chunkSizeWarningLimit: 2000 },
+  };
 });

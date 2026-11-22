@@ -17,6 +17,9 @@ const gitSync = require('./git-sync.cjs');
 // 背景音乐不需要用户先点击才能播放
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// 开发运行（npm start）和打包版（exe / app）使用不同的身份：两者可以同时打开，互不抢占
+if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'arcadia-tower-dev'));
+
 const DEV_URL = process.env.ARCADIA_DEV_URL || '';
 const SMOKE_DIR = process.env.ARCADIA_SMOKE_DIR || '';
 
@@ -48,9 +51,14 @@ let DATA_DIR = '';
 function ensureDataDir() {
   DATA_DIR = resolveDataDir();
   const seed = bundledDataDir();
-  const empty = !fs.existsSync(DATA_DIR) || fs.readdirSync(DATA_DIR).length === 0;
-  if (empty && path.resolve(seed) !== path.resolve(DATA_DIR) && fs.existsSync(seed)) {
-    copyDir(seed, DATA_DIR);
+  if (path.resolve(seed) !== path.resolve(DATA_DIR) && fs.existsSync(seed)) {
+    // 第一次运行：复制全部示例数据；升级到新版本：只补上缺少的新文件（例如新版的技能库、音乐），不覆盖已有文件
+    const marker = path.join(DATA_DIR, '.seed-version');
+    const seeded = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : '';
+    if (seeded !== app.getVersion()) {
+      copyDir(seed, DATA_DIR);
+      fs.writeFileSync(marker, app.getVersion());
+    }
   }
   for (const sub of ['levels', 'icons']) fs.mkdirSync(path.join(DATA_DIR, sub), { recursive: true });
 }
@@ -326,6 +334,7 @@ async function smokeTest() {
 
 const gotLock = SMOKE_DIR ? true : app.requestSingleInstanceLock();
 if (!gotLock) {
+  console.log('Arcadia Tower 已经在运行，已切换到已经打开的窗口。');
   app.quit();
 } else {
   app.on('second-instance', () => openWindow('launcher'));

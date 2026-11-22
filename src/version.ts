@@ -6,3 +6,6 @@ export const GAME_VERSION = '0.02';
 
 /** 游戏的 GitHub 仓库（编辑器「GitHub 同步设置」的默认值） */
 export const DEFAULT_GITHUB_REPO = 'Hoshino-Saisho/Arcadia_Tower';
+
+/** 是否是网页游玩版（GitHub Pages 上的版本，只有游戏，没有启动器和编辑器） */
+export const IS_WEB_PLAY = (import.meta as { env?: { MODE?: string } }).env?.MODE === 'pages';

@@ -8,8 +8,10 @@ import { tileInfo } from '../../core/tiles';
 import type { CharacterDef, PlacementType, SkillDef } from '../../core/types';
 import { listAttackTypes } from '../../game/attacks';
 import { useIcon } from '../../game/icons';
-import { drawCharacterToken, drawTile, withAlpha } from '../../game/shapes';
+import { drawRangeTiles } from '../../game/renderer';
+import { drawCharacterToken, drawTile } from '../../game/shapes';
 import { ColorInput, Field, IconPicker, NumberInput, Segmented, TextInput } from '../common/fields';
+import { RangeGrid } from '../common/rangeGrid';
 import { UnitToken } from '../common/tokens';
 import { DefListPanel, SaveBar } from './DefListPanel';
 import type { EditorTabProps } from './EditorApp';
@@ -104,8 +106,8 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="攻击间隔" hint="秒">
                 <NumberInput value={c.attackInterval} min={0.05} max={60} step={0.1} onChange={(v) => set({ attackInterval: v })} />
               </Field>
-              <Field label="攻击范围" hint="格（半径）">
-                <NumberInput value={c.range} min={0} max={20} step={0.1} onChange={(v) => set({ range: v })} />
+              <Field label="攻击范围" hint="格，按方块计算">
+                <NumberInput value={c.range} min={0} max={20} step={0.5} onChange={(v) => set({ range: v })} />
               </Field>
               <Field label="阻挡数" hint="地面部署时">
                 <NumberInput value={c.blockCount} min={0} max={10} integer onChange={(v) => set({ blockCount: v })} />
@@ -138,21 +140,20 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
                   options={[
                     { value: 'physical', label: '物伤', title: '被物抗减免，无视法抗' },
                     { value: 'magic', label: '法伤', title: '被法抗减免，无视物抗' },
+                    { value: 'true', label: '真伤', title: '无视物抗和法抗' },
                   ]}
                   onChange={(v) => set({ damageType: v })}
                 />
               </Field>
-              <Field label="每次攻击目标数" hint="-1 = 射程内全部">
-                <NumberInput value={c.targetCount} min={-1} max={99} integer onChange={(v) => set({ targetCount: v === 0 ? 1 : v })} />
+              <Field label="攻击方式" wide>
+                <Segmented
+                  value={c.attackType === 'area' ? 'area' : 'basic'}
+                  options={listAttackTypes().map((a) => ({ value: a.id, label: a.name, title: a.description }))}
+                  onChange={(v) => set({ attackType: v })}
+                />
               </Field>
-              <Field label="攻击行为">
-                <select className="input" value={c.attackType} onChange={(e) => set({ attackType: e.target.value })}>
-                  {listAttackTypes().map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
+              <Field label="每次攻击目标数" hint={c.attackType === 'area' ? '范围伤害总是攻击射程内全部' : '-1 = 射程内全部'}>
+                <NumberInput value={c.targetCount} min={-1} max={99} integer disabled={c.attackType === 'area'} onChange={(v) => set({ targetCount: v === 0 ? 1 : v })} />
               </Field>
               <Field label="说明" wide>
                 <div className="static-value">{describeAttack(c)}</div>
@@ -200,30 +201,21 @@ function CharacterPreview({ def, healer, skills }: { def: CharacterDef; healer: 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#10141c';
     ctx.fillRect(0, 0, size, size);
-    const n = 7;
+    const n = Math.max(7, Math.min(13, Math.ceil(def.range + 1e-6) * 2 + 3));
     const cell = size / n;
     const centerType = def.placement === 'high' ? 'high' : 'ground';
     for (let y = 0; y < n; y++) {
       for (let x = 0; x < n; x++) {
-        const isCenter = x === 3 && y === 3;
-        const t = isCenter ? centerType : y === 3 ? 'ground' : 'high';
+        const isCenter = x === (n - 1) / 2 && y === (n - 1) / 2;
+        const t = isCenter ? centerType : y === (n - 1) / 2 ? 'ground' : 'high';
         drawTile(ctx, tileInfo(t), x * cell, y * cell, cell);
       }
     }
     const cx = size / 2;
     const cy = size / 2;
-    if (def.range > 0) {
-      const color = healer ? '#5dff9d' : def.color;
-      ctx.fillStyle = withAlpha(color, 0.15);
-      ctx.strokeStyle = withAlpha(color, 0.9);
-      ctx.setLineDash([6, 4]);
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, def.range * cell, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
+    // 射程按方块显示（和游戏中一致）
+    const mid = (n - 1) / 2;
+    drawRangeTiles(ctx, { scale: cell, ox: 0, oy: 0 }, null, mid, mid, def.range, healer ? '#5dff9d' : def.color);
     drawCharacterToken(ctx, def, cx, cy, cell * 0.36, { icon, label: def.name.slice(0, 1) });
   }, [def, icon, healer]);
 
@@ -234,7 +226,10 @@ function CharacterPreview({ def, healer, skills }: { def: CharacterDef; healer: 
     <aside className="def-preview">
       <div className="panel-head">预览</div>
       <canvas ref={ref} style={{ width: size, height: size }} className="preview-canvas" />
-      <div className="preview-caption muted small">虚线圆 = 攻击范围（{def.range} 格）</div>
+      <div className="preview-caption muted small">高亮方块 = 射程（{def.range} 格，按方块计算）</div>
+      <div className="row gap-s center">
+        <RangeGrid range={def.range} color={healer ? '#5dff9d' : def.color} />
+      </div>
       <dl className="stat-grid">
         <dt>{healer ? '每秒治疗' : '每秒伤害'}</dt>
         <dd>

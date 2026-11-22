@@ -2623,3 +2623,14 @@ select.input {
   background: #3a1a20;
   color: #ffb3b5;
 }
+
+/* ---------- 射程方块示意图 ---------- */
+.range-grid {
+  display: block;
+  flex: none;
+}
+.codex-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
