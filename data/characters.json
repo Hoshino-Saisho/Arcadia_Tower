@@ -128,7 +128,7 @@
       "damageType": "true",
       "attackTarget": "ally",
       "targetCount": 1,
-      "attackInterval": 2.2,
+      "attackInterval": 3.2,
       "range": 2.5,
       "blockCount": 0,
       "maxDeploy": 0,
