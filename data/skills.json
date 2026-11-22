@@ -320,6 +320,31 @@
           "damageType": "physical"
         }
       ]
+    },
+    {
+      "id": "S013",
+      "name": "冰冻",
+      "color": "#6c5ce7",
+      "description": "让附近的敌人减速",
+      "spMax": 5,
+      "spInitial": 4,
+      "spGain": "attack",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [{"stat":"speed","mode":"percent","value":-40}],
+          "duration": 5,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
     }
   ]
 }
