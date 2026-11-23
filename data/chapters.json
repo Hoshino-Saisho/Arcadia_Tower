@@ -13,6 +13,7 @@
       "levelCount": 2,
       "description": "通关主线第一章后解锁",
       "battleMusic": "sample_battle.wav"
-    }
+    },
+    {"id":"CH1","name":"杨永信","levelCount":3,"battleMusic":"sample_battle.wav"}
   ]
 }
