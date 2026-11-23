@@ -120,7 +120,7 @@
       "name": "医疗",
       "color": "#6fd3a8",
       "placement": "high",
-      "cost": 12,
+      "cost": 10,
       "maxHp": 600,
       "atk": -80,
       "def": 30,
