@@ -58,8 +58,8 @@
       "blocks": [
         {"id":"Bw48sx1aemh","enemyId":"E001","count":6,"interval":2,"startTime":8.5},
         {"id":"Bw5zi21n5c0","enemyId":"E001","count":3,"interval":2,"startTime":38.5},
-        {"id":"Bw682o1qulp","enemyId":"E004","count":3,"interval":2,"startTime":63},
-        {"id":"Bw651o1pntd","enemyId":"E005","count":3,"interval":2,"startTime":71.5}
+        {"id":"Bw682o1qulp","enemyId":"E004","count":3,"interval":2,"startTime":75.5},
+        {"id":"Bw651o1pntd","enemyId":"E005","count":3,"interval":2,"startTime":113.5}
       ]
     },
     {
@@ -128,11 +128,11 @@
       },
       "blocks": [
         {"id":"Bw4inb1e3dk","enemyId":"E003","count":3,"interval":2,"startTime":51.5},
-        {"id":"Bw4e3f1c8ov","enemyId":"E003","count":3,"interval":2,"startTime":51.5},
+        {"id":"Bw4e3f1c8ov","enemyId":"E003","count":6,"interval":2,"startTime":51.5},
         {"id":"Bw4glm1dq8i","enemyId":"E003","count":3,"interval":2,"startTime":53.5},
-        {"id":"Bw4bpf1bbyt","enemyId":"E003","count":3,"interval":2,"startTime":53.5},
-        {"id":"Bw4o5m1fs2h","enemyId":"E004","count":3,"interval":2,"startTime":64.5},
-        {"id":"Bw4qap1gyx2","enemyId":"E005","count":3,"interval":2,"startTime":74.5}
+        {"id":"Bw4bpf1bbyt","enemyId":"E003","count":6,"interval":2,"startTime":53.5},
+        {"id":"Bw4o5m1fs2h","enemyId":"E004","count":3,"interval":2,"startTime":75.5},
+        {"id":"Bw4qap1gyx2","enemyId":"E005","count":3,"interval":2,"startTime":113.5}
       ]
     },
     {
