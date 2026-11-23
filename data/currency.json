@@ -1,7 +1,7 @@
 {
   "name": "金币",
   "color": "#f2c94c",
-  "baseExp": 10,
+  "baseExp": 100,
   "expGrowth": 0.2,
   "maxLevel": 100,
   "books": [
