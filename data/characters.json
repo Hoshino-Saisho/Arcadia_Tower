@@ -131,7 +131,7 @@
       "attackInterval": 3.2,
       "range": 2.5,
       "blockCount": 0,
-      "maxDeploy": 0,
+      "maxDeploy": 1,
       "attackType": "basic",
       "skills": ["S008","S009"],
       "skillSlots": 1,
