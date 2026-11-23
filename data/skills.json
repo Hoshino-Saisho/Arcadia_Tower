@@ -151,7 +151,7 @@
       "id": "S005",
       "name": "法术爆发",
       "color": "#c56cf0",
-      "spMax": 30,
+      "spMax": 20,
       "spInitial": 10,
       "spGain": "auto",
       "spRate": 1,
