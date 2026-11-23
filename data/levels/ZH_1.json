@@ -64,7 +64,10 @@
           {"x":13,"y":4}
         ]
       },
-      "blocks": [{"id":"B7pio727zyq","enemyId":"E001","count":3,"interval":2,"startTime":9}]
+      "blocks": [
+        {"id":"B7pio727zyq","enemyId":"E001","count":3,"interval":2,"startTime":9},
+        {"id":"B7qgbq28azp","enemyId":"E004","count":3,"interval":2,"startTime":21.5}
+      ]
     }
   ]
 }
