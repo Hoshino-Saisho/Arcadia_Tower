@@ -9,7 +9,7 @@
     {"id":"B002","name":"中级经验书","color":"#5b9bd5","exp":300,"cost":30},
     {"id":"B003","name":"高级经验书","color":"#b07ad9","exp":1000,"cost":100}
   ],
-  "defaultCurrency": 1000,
+  "defaultCurrency": 10000,
   "defaultBooks": [
     {"bookId":"B001","chance":100,"min":10,"max":20},
     {"bookId":"B002","chance":50,"min":2,"max":10},
