@@ -198,7 +198,7 @@
       "attackTarget": "ally",
       "targetCount": 1,
       "attackInterval": 1.5,
-      "range": 2.5,
+      "range": 1.5,
       "blockCount": 1,
       "maxDeploy": 1,
       "attackType": "area",
