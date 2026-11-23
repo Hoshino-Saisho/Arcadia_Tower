@@ -11,7 +11,7 @@
   ],
   "defaultCurrency": 1000,
   "defaultBooks": [
-    {"bookId":"B001","chance":100,"min":1,"max":10},
+    {"bookId":"B001","chance":100,"min":10,"max":20},
     {"bookId":"B002","chance":50,"min":1,"max":5},
     {"bookId":"B003","chance":10,"min":1,"max":2}
   ],
