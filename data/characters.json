@@ -189,7 +189,7 @@
       "name": "祭司",
       "color": "#37474f",
       "placement": "high",
-      "cost": 15,
+      "cost": 20,
       "maxHp": 1000,
       "atk": 350,
       "def": 50,
