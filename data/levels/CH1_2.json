@@ -1,0 +1,150 @@
+{
+  "id": "CH1_2",
+  "chapterId": "CH1",
+  "index": 2,
+  "version": 2,
+  "width": 16,
+  "height": 9,
+  "grid": [
+    "SGGGGGGGGGGGGGGB",
+    "..G.H..........G",
+    "H.G....H......GG",
+    "SGG.GGGXXXXXXXG.",
+    "....GHHGXXXXXXG.",
+    "....GHHHGH..HGG.",
+    "....G.H.GGGGGGG.",
+    "...SG........S..",
+    "....S..........."
+  ],
+  "settings": {
+    "name": "CH1_2",
+    "initialHp": 10,
+    "initialMoney": 20,
+    "autoMoney": true,
+    "moneyPerMinute": 30,
+    "availableCharacters": [],
+    "battleMusic": "",
+    "rewardCurrency": null,
+    "rewardBooks": null
+  },
+  "lines": [
+    {
+      "id": "Lw33ey13v57",
+      "name": "敌人线 1",
+      "color": "#e8a33d",
+      "route": {"mode":"auto","spawn":{"x":0,"y":0},"target":null,"path":[],"waits":[]},
+      "blocks": [
+        {"id":"Bw421l189bp","enemyId":"E001","count":6,"interval":2,"startTime":4.5},
+        {"id":"Bw5ogj1jeym","enemyId":"E001","count":3,"interval":2,"startTime":23},
+        {"id":"Bw62091o4uj","enemyId":"E001","count":3,"interval":2,"startTime":49.5}
+      ]
+    },
+    {
+      "id": "Lw35ct1469q",
+      "name": "敌人线 2",
+      "color": "#4fb3a9",
+      "route": {"mode":"auto","spawn":{"x":0,"y":3},"target":null,"path":[],"waits":[]},
+      "blocks": [
+        {"id":"Bw45eh19t8x","enemyId":"E001","count":6,"interval":2,"startTime":8.5},
+        {"id":"Bw5xgb1momq","enemyId":"E004","count":3,"interval":2,"startTime":25.5},
+        {"id":"Bw5qfl1knap","enemyId":"E001","count":3,"interval":2,"startTime":38}
+      ]
+    },
+    {
+      "id": "Lw3agw15bb0",
+      "name": "敌人线 3",
+      "color": "#d1605e",
+      "route": {"mode":"auto","spawn":{"x":3,"y":7},"target":null,"path":[],"waits":[]},
+      "blocks": [
+        {"id":"Bw48sx1aemh","enemyId":"E001","count":6,"interval":2,"startTime":8.5},
+        {"id":"Bw5zi21n5c0","enemyId":"E001","count":3,"interval":2,"startTime":38.5},
+        {"id":"Bw682o1qulp","enemyId":"E004","count":3,"interval":2,"startTime":63},
+        {"id":"Bw651o1pntd","enemyId":"E005","count":3,"interval":2,"startTime":71.5}
+      ]
+    },
+    {
+      "id": "Lw3e1416rv4",
+      "name": "敌人线 4",
+      "color": "#8f7ad6",
+      "route": {
+        "mode": "manual",
+        "spawn": {"x":13,"y":7},
+        "target": null,
+        "path": [
+          {"x":13,"y":7},
+          {"x":13,"y":6},
+          {"x":12,"y":6},
+          {"x":11,"y":6},
+          {"x":10,"y":6},
+          {"x":9,"y":6},
+          {"x":8,"y":6},
+          {"x":8,"y":5},
+          {"x":8,"y":4},
+          {"x":8,"y":3},
+          {"x":9,"y":3},
+          {"x":10,"y":3},
+          {"x":11,"y":3},
+          {"x":12,"y":3},
+          {"x":13,"y":3},
+          {"x":13,"y":4},
+          {"x":13,"y":5},
+          {"x":13,"y":6},
+          {"x":12,"y":6},
+          {"x":11,"y":6},
+          {"x":10,"y":6},
+          {"x":9,"y":6},
+          {"x":8,"y":6},
+          {"x":8,"y":5},
+          {"x":8,"y":4},
+          {"x":8,"y":3},
+          {"x":9,"y":3},
+          {"x":10,"y":3},
+          {"x":11,"y":3},
+          {"x":12,"y":3},
+          {"x":13,"y":3},
+          {"x":13,"y":4},
+          {"x":13,"y":5},
+          {"x":13,"y":6},
+          {"x":12,"y":6},
+          {"x":11,"y":6},
+          {"x":10,"y":6},
+          {"x":9,"y":6},
+          {"x":8,"y":6},
+          {"x":8,"y":5},
+          {"x":8,"y":4},
+          {"x":8,"y":3},
+          {"x":9,"y":3},
+          {"x":10,"y":3},
+          {"x":11,"y":3},
+          {"x":12,"y":3},
+          {"x":13,"y":3},
+          {"x":14,"y":3},
+          {"x":14,"y":2},
+          {"x":15,"y":2},
+          {"x":15,"y":1},
+          {"x":15,"y":0}
+        ],
+        "waits": []
+      },
+      "blocks": [
+        {"id":"Bw4inb1e3dk","enemyId":"E003","count":3,"interval":2,"startTime":51.5},
+        {"id":"Bw4e3f1c8ov","enemyId":"E003","count":3,"interval":2,"startTime":51.5},
+        {"id":"Bw4glm1dq8i","enemyId":"E003","count":3,"interval":2,"startTime":53.5},
+        {"id":"Bw4bpf1bbyt","enemyId":"E003","count":3,"interval":2,"startTime":53.5},
+        {"id":"Bw4o5m1fs2h","enemyId":"E004","count":3,"interval":2,"startTime":64.5},
+        {"id":"Bw4qap1gyx2","enemyId":"E005","count":3,"interval":2,"startTime":74.5}
+      ]
+    },
+    {
+      "id": "Lw3ime17drj",
+      "name": "敌人线 5",
+      "color": "#6aa84f",
+      "route": {"mode":"auto","spawn":{"x":4,"y":8},"target":null,"path":[],"waits":[]},
+      "blocks": [
+        {"id":"Bw4tlr1hfyk","enemyId":"E002","count":8,"interval":2,"startTime":9},
+        {"id":"Bw4v6p1iz95","enemyId":"E002","count":3,"interval":2,"startTime":33},
+        {"id":"Bw5st41lotb","enemyId":"E002","count":3,"interval":2,"startTime":51}
+      ]
+    }
+  ]
+}
