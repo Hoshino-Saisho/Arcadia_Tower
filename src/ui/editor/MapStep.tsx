@@ -11,7 +11,7 @@ import {
   shiftGrid,
   tileFromCode,
 } from '../../core/tiles';
-import type { CharacterDef, GridPos, LevelDef, LevelSettings } from '../../core/types';
+import type { CharacterDef, CurrencyConfig, GridPos, LevelDef, LevelSettings } from '../../core/types';
 import { drawGrid } from '../../game/renderer';
 import { drawTile } from '../../game/shapes';
 import { Checkbox, Field, NumberInput, TextInput } from '../common/fields';
@@ -20,6 +20,7 @@ import { UnitToken } from '../common/tokens';
 import { MusicSelect, useMusicTracks } from './effectEditors';
 import { GridCanvas, type GridPointer } from './GridCanvas';
 import type { ApplyFn } from './LevelEditor';
+import { DropListEditor, DropSummary } from './rewardEditors';
 
 type Tool = 'brush' | 'rect';
 
@@ -48,7 +49,13 @@ function shiftLevel(lv: LevelDef, dx: number, dy: number): LevelDef {
     grid: shiftGrid(lv.grid, dx, dy),
     lines: lv.lines.map((l) => ({
       ...l,
-      route: { ...l.route, spawn: mv(l.route.spawn), target: mv(l.route.target), path: l.route.path.map((p) => ({ x: p.x + dx, y: p.y + dy })) },
+      route: {
+        ...l.route,
+        spawn: mv(l.route.spawn),
+        target: mv(l.route.target),
+        path: l.route.path.map((p) => ({ x: p.x + dx, y: p.y + dy })),
+        waits: l.route.waits.map((w) => ({ ...w, x: w.x + dx, y: w.y + dy })),
+      },
     })),
   };
 }
@@ -56,11 +63,13 @@ function shiftLevel(lv: LevelDef, dx: number, dy: number): LevelDef {
 export function MapStep({
   level,
   characters,
+  currency,
   apply,
   onConfirm,
 }: {
   level: LevelDef;
   characters: CharacterDef[];
+  currency: CurrencyConfig;
   apply: ApplyFn;
   onConfirm: () => void;
 }) {
@@ -276,6 +285,26 @@ export function MapStep({
           </Field>
           <Field label="每分钟恢复数量">
             <NumberInput value={s.moneyPerMinute} min={0} max={99999} step={1} disabled={!s.autoMoney} onChange={(v) => setSettings({ moneyPerMinute: v })} />
+          </Field>
+          <Field label={`通关奖励 · ${currency.name}`} hint="每次通关固定获得" block>
+            <Checkbox
+              checked={s.rewardCurrency == null}
+              onChange={(v) => setSettings({ rewardCurrency: v ? null : currency.defaultCurrency })}
+              label={`使用默认（${currency.defaultCurrency}）`}
+            />
+            {s.rewardCurrency != null && <NumberInput value={s.rewardCurrency} min={0} max={1e9} integer onChange={(v) => setSettings({ rewardCurrency: v })} />}
+          </Field>
+          <Field label="通关奖励 · 经验书" hint="按概率掉落" block>
+            <Checkbox
+              checked={s.rewardBooks == null}
+              onChange={(v) => setSettings({ rewardBooks: v ? null : structuredClone(currency.defaultBooks) })}
+              label="使用默认掉落"
+            />
+            {s.rewardBooks == null ? (
+              <DropSummary drops={currency.defaultBooks} currency={currency} />
+            ) : (
+              <DropListEditor value={s.rewardBooks} books={currency.books} onChange={(v) => setSettings({ rewardBooks: v })} />
+            )}
           </Field>
           <Field label="战斗音乐" hint="默认跟随章节">
             <MusicSelect kind="battle" value={s.battleMusic} tracks={tracks.battle} emptyLabel="跟随章节设置" onChange={(v) => setSettings({ battleMusic: v })} />

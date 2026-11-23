@@ -6,6 +6,7 @@
  *   data/skills.json       技能库（角色和敌人通过技能 ID 引用）
  *   data/chapters.json     章节顺序
  *   data/settings.json     全局设置（主页音乐等）
+ *   data/currency.json     货币编辑：游戏外货币、经验书、升级经验、默认通关奖励
  *   data/levels/<章节>_<关卡>.json   关卡（地图 + 敌人线 + 数值设置）
  *   data/icons/            以后绘制好的图标（png/jpg/webp）
  *   data/music/home/       主页音乐（未进入战斗时播放）
@@ -114,6 +115,14 @@ export interface SkillDef {
   effects: SkillEffect[];
 }
 
+/** 升级成长：每升 1 级增加的数值（攻击力对治疗角色 = 治疗量） */
+export interface CharacterGrowth {
+  maxHp: number;
+  atk: number;
+  def: number;
+  res: number;
+}
+
 /** 角色（塔）定义 */
 export interface CharacterDef {
   /** 唯一 ID，用于区分角色，例如 "C001" */
@@ -151,6 +160,8 @@ export interface CharacterDef {
   blockCount: number;
   /** 同时部署上限，0 = 不限 */
   maxDeploy: number;
+  /** 部署冷却（秒）：部署后这段时间内不能再次部署同一个角色，0 = 没有冷却 */
+  deployCooldown: number;
   /** 攻击方式：basic = 发射子弹（默认）；area = 范围伤害（同时攻击射程内全部目标，不发射子弹） */
   attackType: string;
   /** 可用技能 ID（按顺序，默认携带前 skillSlots 个） */
@@ -159,6 +170,8 @@ export interface CharacterDef {
   skillSlots: number;
   /** 普通攻击命中时附带的效果 */
   onHit: OnHitEffect | null;
+  /** 升级成长（等级上限和升级经验在「货币编辑」中设置） */
+  growth: CharacterGrowth;
   description?: string;
 }
 
@@ -229,6 +242,19 @@ export interface SpawnBlock {
   startTime: number;
 }
 
+/**
+ * 路线上的停留点：敌人第 visit 次走到方块 (x, y) 的中心时，停在那里 duration 秒再继续走。
+ * 路线可以重复经过同一个方块（转圈），所以用 visit 区分是第几次经过。
+ */
+export interface RouteWait {
+  x: number;
+  y: number;
+  /** 第几次经过这个方块（从 1 开始） */
+  visit: number;
+  /** 停留时间（秒） */
+  duration: number;
+}
+
 /** 敌人路线 */
 export interface RouteDef {
   /** auto = 程序自动寻路；manual = 手动逐格设置 */
@@ -237,8 +263,10 @@ export interface RouteDef {
   spawn: GridPos | null;
   /** 自动寻路的目的地（null = 最近的基地） */
   target: GridPos | null;
-  /** 手动路线：从出现点到基地的连续方块序列 */
+  /** 手动路线：从出现点到基地的连续方块序列（可以重复经过同一个方块） */
   path: GridPos[];
+  /** 停留点（自动寻路和手动路线都可以设置） */
+  waits: RouteWait[];
 }
 
 /** 敌人线：一条路线 + 时间线上的若干积木 */
@@ -265,6 +293,10 @@ export interface LevelSettings {
   availableCharacters: string[];
   /** 本关战斗音乐；空 = 跟随章节设置 */
   battleMusic: string;
+  /** 通关奖励：固定获得的游戏外货币；null = 使用「货币编辑」中的默认值 */
+  rewardCurrency: number | null;
+  /** 通关奖励：经验书掉落；null = 使用「货币编辑」中的默认掉落 */
+  rewardBooks: BookDrop[] | null;
 }
 
 /** 关卡：编号为 "<章节编号>_<关卡序号>"，例如 "ZH_1" */
@@ -288,9 +320,63 @@ export interface GameSettings {
   homeMusic: string;
 }
 
+/** 经验书：给角色使用后增加固定的经验值，每使用 1 本消耗一定的游戏外货币 */
+export interface ExpBookDef {
+  /** 自动生成，不能修改（玩家的库存和关卡掉落都用它引用） */
+  id: string;
+  name: string;
+  color: string;
+  /** 每本增加的经验值 */
+  exp: number;
+  /** 使用 1 本消耗的游戏外货币 */
+  cost: number;
+}
+
+/** 通关时的一项经验书掉落：按概率掉落，数量在 min ~ max 之间随机 */
+export interface BookDrop {
+  bookId: string;
+  /** 掉落概率（%） */
+  chance: number;
+  min: number;
+  max: number;
+}
+
+/** 关卡选择中掉落信息的显示方式：精确数值 / 概率等级（固定 · 大概率 · 小概率 · 罕见）/ 不显示 */
+export type DropDisplay = 'exact' | 'tier' | 'hidden';
+
+/** 货币编辑（data/currency.json）：游戏外货币、经验书、升级经验和默认通关奖励 */
+export interface CurrencyConfig {
+  /** 游戏外货币的名称（战斗中的「金钱」是另一种东西，只在一场战斗里有效） */
+  name: string;
+  color: string;
+  /** 基础升级经验：1 级升 2 级需要的经验值（全部角色通用） */
+  baseExp: number;
+  /** 每一级比上一级多需要的比例：0.75 → 每一级所需经验 = 上一级 × 1.75 */
+  expGrowth: number;
+  /** 等级上限 */
+  maxLevel: number;
+  books: ExpBookDef[];
+  /** 关卡默认的通关奖励（关卡可以在关卡设置中单独设置） */
+  defaultCurrency: number;
+  defaultBooks: BookDrop[];
+  dropDisplay: DropDisplay;
+}
+
+/** 角色的等级和当前等级已经积累的经验 */
+export interface CharacterProgress {
+  level: number;
+  exp: number;
+}
+
 /** 玩家进度（data/progress.json，只保存在本机） */
 export interface ProgressData {
   cleared: string[];
   /** 角色设定：角色 ID → 携带的技能 ID */
   loadouts: Record<string, string[]>;
+  /** 游戏外货币 */
+  currency: number;
+  /** 经验书库存：经验书 ID → 数量 */
+  books: Record<string, number>;
+  /** 角色等级：角色 ID → 等级与经验（没有记录的角色为 1 级） */
+  levels: Record<string, CharacterProgress>;
 }

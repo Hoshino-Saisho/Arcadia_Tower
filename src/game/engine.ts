@@ -1,4 +1,5 @@
 import { LEAK_DAMAGE, RETREAT_REFUND_RATIO, resolveLoadout } from '../core/defaults';
+import { leveledCharacter } from '../core/leveling';
 import { tileInRange, tileOf } from '../core/range';
 import { applyModifiers, computeDamage, isBuff } from '../core/stats';
 import { TileGrid } from '../core/tiles';
@@ -44,6 +45,16 @@ export interface EngineOptions {
   skills?: SkillDef[];
   /** 玩家的角色设定：角色 ID → 携带的技能 ID */
   loadouts?: Record<string, string[]>;
+  /** 角色等级：角色 ID → 等级（没有 = 1 级），按升级成长提高基础数值 */
+  levels?: Record<string, number>;
+}
+
+/** 卡片状态：能否部署；冷却中时附带剩余时间 */
+export interface CardState {
+  ok: boolean;
+  reason?: string;
+  /** 部署冷却的剩余时间（秒），没有冷却为 0 */
+  cooldown: number;
 }
 
 /**
@@ -53,8 +64,10 @@ export interface EngineOptions {
 export class GameEngine {
   readonly level: LevelDef;
   readonly grid: TileGrid;
-  /** 本关可用角色（按编辑器中的顺序） */
+  /** 本关可用角色（按编辑器中的顺序；已经按玩家的角色等级提高了数值） */
   readonly roster: CharacterDef[];
+  /** 角色等级：角色 ID → 等级 */
+  readonly levels: Record<string, number>;
   readonly enemyDefs: Map<string, EnemyDef>;
   readonly skillDefs: Map<string, SkillDef>;
   readonly loadouts: Record<string, string[]>;
@@ -81,12 +94,15 @@ export class GameEngine {
   private schedule: SpawnEvent[];
   private nextEvent = 0;
   private seq = 1;
+  /** 部署冷却：角色 ID → 可以再次部署的时间 */
+  private readyAt = new Map<string, number>();
 
   constructor(level: LevelDef, characters: CharacterDef[], enemies: EnemyDef[], opts: EngineOptions = {}) {
     this.level = level;
     this.grid = TileGrid.fromLevel(level);
     const allowed = level.settings.availableCharacters;
-    this.roster = allowed.length ? characters.filter((c) => allowed.includes(c.id)) : characters.slice();
+    this.levels = opts.levels ?? {};
+    this.roster = (allowed.length ? characters.filter((c) => allowed.includes(c.id)) : characters).map((c) => leveledCharacter(c, this.levelOf(c.id)));
     this.enemyDefs = new Map(enemies.map((e) => [e.id, e]));
     this.skillDefs = new Map((opts.skills ?? []).map((s) => [s.id, s]));
     this.loadouts = opts.loadouts ?? {};
@@ -98,6 +114,11 @@ export class GameEngine {
     this.lastSpawnTime = sched.duration;
     this.hp = this.maxHp = level.settings.initialHp;
     this.money = level.settings.initialMoney;
+  }
+
+  /** 角色等级（没有记录 = 1 级） */
+  levelOf(charId: string): number {
+    return Math.max(1, Math.floor(this.levels[charId] ?? 1));
   }
 
   get moneyPerSecond(): number {
@@ -151,6 +172,10 @@ export class GameEngine {
         lineId: ev.lineId,
         path: ev.path,
         waypoint: 1,
+        waits: ev.waits,
+        // 停留点设在出现点上：出现后先停留
+        waitLeft: ev.waits[0] ?? 0,
+        waitTotal: ev.waits[0] ?? 0,
         x: start.x,
         y: start.y,
         hp: def.maxHp,
@@ -265,7 +290,13 @@ export class GameEngine {
 
   private moveEnemies(dt: number) {
     for (const e of this.enemies) {
-      if (e.hp <= 0 || e.blockedBy != null) continue;
+      if (e.hp <= 0) continue;
+      // 停留点：停留时间照常计时（被阻挡时也一样），停留结束后的下一帧继续前进
+      if (e.waitLeft > 0) {
+        e.waitLeft = Math.max(0, e.waitLeft - dt);
+        continue;
+      }
+      if (e.blockedBy != null) continue;
       let step = e.stats.speed * dt;
       while (step > 0 && e.waypoint < e.path.length) {
         const target = tileCenter(e.path[e.waypoint]);
@@ -282,7 +313,13 @@ export class GameEngine {
             this.leak(e);
             break;
           }
+          const wait = e.waits[e.waypoint] ?? 0;
           e.waypoint++;
+          if (wait > 0) {
+            // 到达停留点：停在方块中心
+            e.waitLeft = e.waitTotal = wait;
+            break;
+          }
         } else {
           e.x += ((target.x - e.x) / d) * step;
           e.y += ((target.y - e.y) / d) * step;
@@ -621,12 +658,20 @@ export class GameEngine {
       .filter((s): s is SkillDef => !!s);
   }
 
+  /** 部署冷却的剩余时间（秒） */
+  cooldownLeft(charId: string): number {
+    const t = this.readyAt.get(charId);
+    return t == null ? 0 : Math.max(0, t - this.time);
+  }
+
   /** 当前是否买得起 / 还能部署（不看位置） */
-  cardState(def: CharacterDef): { ok: boolean; reason?: string } {
-    if (this.status !== 'running') return { ok: false, reason: '战斗已结束' };
-    if (def.maxDeploy > 0 && this.deployedCount(def.id) >= def.maxDeploy) return { ok: false, reason: '已达部署上限' };
-    if (Math.floor(this.money + 1e-9) < def.cost) return { ok: false, reason: '金钱不足' };
-    return { ok: true };
+  cardState(def: CharacterDef): CardState {
+    const cooldown = this.cooldownLeft(def.id);
+    if (this.status !== 'running') return { ok: false, reason: '战斗已结束', cooldown };
+    if (def.maxDeploy > 0 && this.deployedCount(def.id) >= def.maxDeploy) return { ok: false, reason: '已达部署上限', cooldown };
+    if (cooldown > 1e-9) return { ok: false, reason: `部署冷却中（还需 ${Math.ceil(cooldown - 1e-6)} 秒）`, cooldown };
+    if (Math.floor(this.money + 1e-9) < def.cost) return { ok: false, reason: '金钱不足', cooldown };
+    return { ok: true, cooldown };
   }
 
   /** 检查能否部署到某个方块，返回 null 表示可以，否则返回原因 */
@@ -649,6 +694,8 @@ export class GameEngine {
     const err = this.checkDeploy(def, tile);
     if (err) return err;
     this.money -= def.cost;
+    // 部署冷却：同一个角色在冷却结束前不能再次部署
+    if (def.deployCooldown > 0) this.readyAt.set(def.id, this.time + def.deployCooldown);
     const c = tileCenter(tile);
     const t = this.grid.get(tile.x, tile.y)!;
     const base = unitBaseStats(def);
@@ -656,6 +703,7 @@ export class GameEngine {
       uid: this.seq++,
       side: 'ally',
       def,
+      level: this.levelOf(def.id),
       tile: { ...tile },
       x: c.x,
       y: c.y,

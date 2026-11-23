@@ -1,6 +1,7 @@
 import {
   normalizeChapter,
   normalizeCharacter,
+  normalizeCurrency,
   normalizeEnemy,
   normalizeLevel,
   normalizeProgress,
@@ -8,7 +9,7 @@ import {
   normalizeSkill,
 } from '../defaults';
 import { parseLevelCode } from '../ids';
-import type { ChapterDef, CharacterDef, EnemyDef, GameSettings, LevelDef, ProgressData, SkillDef } from '../types';
+import type { ChapterDef, CharacterDef, CurrencyConfig, EnemyDef, GameSettings, LevelDef, ProgressData, SkillDef } from '../types';
 import { getBackend } from './backend';
 
 /**
@@ -22,6 +23,7 @@ export const FILES = {
   skills: 'skills.json',
   chapters: 'chapters.json',
   settings: 'settings.json',
+  currency: 'currency.json',
   progress: 'progress.json',
   levelsDir: 'levels',
   iconsDir: 'icons',
@@ -75,11 +77,13 @@ export async function loadCharacters(): Promise<CharacterDef[]> {
 export async function saveCharacters(list: CharacterDef[], renames: Map<string, string> = new Map()) {
   await writeJson(FILES.characters, { characters: list });
   if (renames.size) {
-    // 玩家的角色设定也跟着改名
+    // 玩家的角色设定和角色等级也跟着改名
     const prog = await loadProgress();
     const loadouts: Record<string, string[]> = {};
     for (const [k, v] of Object.entries(prog.loadouts)) loadouts[renames.get(k) ?? k] = v;
-    await saveProgress({ ...prog, loadouts });
+    const levels: ProgressData['levels'] = {};
+    for (const [k, v] of Object.entries(prog.levels)) levels[renames.get(k) ?? k] = v;
+    await saveProgress({ ...prog, loadouts, levels });
     await updateAllLevels((lv) => {
       let changed = false;
       lv.settings.availableCharacters = lv.settings.availableCharacters.map((id) => {
@@ -154,6 +158,20 @@ export async function loadSettings(): Promise<GameSettings> {
 
 export async function saveSettings(s: GameSettings): Promise<void> {
   await writeJson(FILES.settings, s);
+}
+
+/* ---------- 货币编辑（游戏外货币、经验书、升级经验、默认通关奖励） ---------- */
+
+export async function loadCurrency(): Promise<CurrencyConfig> {
+  try {
+    return normalizeCurrency(await readJson(FILES.currency));
+  } catch {
+    return normalizeCurrency(null);
+  }
+}
+
+export async function saveCurrency(c: CurrencyConfig): Promise<void> {
+  await writeJson(FILES.currency, c);
 }
 
 /* ---------- 音乐 ---------- */
@@ -261,7 +279,7 @@ export async function loadProgress(): Promise<ProgressData> {
   try {
     return normalizeProgress(await readJson(FILES.progress));
   } catch {
-    return { cleared: [], loadouts: {} };
+    return normalizeProgress(null);
   }
 }
 
@@ -295,19 +313,21 @@ export interface GameDatabase {
   skills: SkillDef[];
   chapters: ChapterDef[];
   settings: GameSettings;
+  currency: CurrencyConfig;
   levelCodes: Set<string>;
   progress: ProgressData;
 }
 
 export async function loadDatabase(): Promise<GameDatabase> {
-  const [characters, enemies, skills, chapters, settings, codes, progress] = await Promise.all([
+  const [characters, enemies, skills, chapters, settings, currency, codes, progress] = await Promise.all([
     loadCharacters(),
     loadEnemies(),
     loadSkills(),
     loadChapters(),
     loadSettings(),
+    loadCurrency(),
     listLevelCodes(),
     loadProgress(),
   ]);
-  return { characters, enemies, skills, chapters, settings, levelCodes: new Set(codes), progress };
+  return { characters, enemies, skills, chapters, settings, currency, levelCodes: new Set(codes), progress };
 }

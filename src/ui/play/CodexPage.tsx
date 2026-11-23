@@ -122,7 +122,13 @@ function CharacterDetail({ def, skills }: { def: CharacterDef; skills: Map<strin
         <Row k="攻击范围" v={`${def.range} 格`} />
         <Row k="阻挡数" v={def.placement === 'high' ? '—' : def.blockCount} />
         <Row k="同时部署" v={def.maxDeploy > 0 ? `最多 ${def.maxDeploy} 个` : '不限'} />
+        <Row k="部署冷却" v={def.deployCooldown > 0 ? `${def.deployCooldown} 秒` : '无'} />
+        <Row
+          k="升级成长"
+          v={`每级 生命 +${def.growth.maxHp} · ${healer ? '治疗' : '攻击'} +${def.growth.atk} · 物抗 +${def.growth.def}${def.growth.res ? ` · 法抗 +${def.growth.res}%` : ''}`}
+        />
       </dl>
+      <div className="muted small">以上是 1 级的数值；在「角色设定」中用经验书升级。</div>
       <div className="codex-range">
         <RangeGrid range={def.range} color={healer ? '#5dff9d' : def.color} cell={16} />
         <span className="muted small">射程（中间 = 角色所在方块）</span>

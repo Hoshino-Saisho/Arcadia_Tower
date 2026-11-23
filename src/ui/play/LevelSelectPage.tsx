@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { levelCode } from '../../core/ids';
+import { levelRewardInfo, type LevelRewardInfo } from '../../core/leveling';
 import { ProgressView } from '../../core/progress';
 import { loadDatabase, loadLevel, type GameDatabase } from '../../core/storage/repository';
+import { RewardPreview } from '../common/wallet';
 import { navigate } from '../router';
 
 /**
@@ -12,6 +14,7 @@ import { navigate } from '../router';
 export function LevelSelectPage({ chapterId }: { chapterId: string }) {
   const [db, setDb] = useState<GameDatabase | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [rewards, setRewards] = useState<Record<string, LevelRewardInfo>>({});
   const [error, setError] = useState('');
   useEffect(() => {
     loadDatabase().then(async (d) => {
@@ -19,15 +22,18 @@ export function LevelSelectPage({ chapterId }: { chapterId: string }) {
       const ch = d.chapters.find((c) => c.id === chapterId);
       if (!ch) return;
       const out: Record<string, string> = {};
+      const rw: Record<string, LevelRewardInfo> = {};
       await Promise.all(
         Array.from({ length: ch.levelCount }, (_, i) => levelCode(ch.id, i + 1))
           .filter((c) => d.levelCodes.has(c))
           .map(async (c) => {
             const lv = await loadLevel(c).catch(() => null);
             if (lv && lv.settings.name !== c) out[c] = lv.settings.name;
+            if (lv) rw[c] = levelRewardInfo(d.currency, lv.settings);
           }),
       );
       setNames(out);
+      setRewards(rw);
     }, (e) => setError(String(e)));
   }, [chapterId]);
 
@@ -77,6 +83,11 @@ export function LevelSelectPage({ chapterId }: { chapterId: string }) {
             >
               <span className="level-slim-code mono">{code}</span>
               <span className="level-slim-name">{built ? names[code] ?? '' : '尚未制作'}</span>
+              {built && rewards[code] && (
+                <span className="level-slim-rewards" title="通关奖励（每次通关都会获得）">
+                  <RewardPreview cfg={db.currency} info={rewards[code]} />
+                </span>
+              )}
               <span className="level-slim-state">{cleared ? '已通关' : built ? '' : ''}</span>
             </button>
           );

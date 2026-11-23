@@ -1,22 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { newLevel } from '../../core/defaults';
+import { newCurrencyConfig, newLevel } from '../../core/defaults';
 import { levelCode, parseLevelCode } from '../../core/ids';
 import {
   deleteLevel,
   listLevelCodes,
   loadChapters,
   loadCharacters,
+  loadCurrency,
   loadEnemies,
   loadLevel,
   saveLevel,
 } from '../../core/storage/repository';
-import type { ChapterDef, CharacterDef, EnemyDef, LevelDef } from '../../core/types';
+import type { ChapterDef, CharacterDef, CurrencyConfig, EnemyDef, LevelDef } from '../../core/types';
 import { notifySaved } from '../../core/github/sync';
 import { toast } from '../common/toast';
 import { openApp } from '../router';
 import type { EditorTabProps } from './EditorApp';
 import { MapStep, mapProblems } from './MapStep';
-import { RouteStep } from './RouteStep';
+import { RouteStep, type RouteHistory } from './RouteStep';
 import { useSaveShortcut } from './useListDraft';
 
 /** push = 记录撤销历史后修改；replace = 直接修改（用于拖动过程中的连续变化） */
@@ -30,6 +31,7 @@ export function LevelEditor({ onDirtyChange, initialLevel }: EditorTabProps & { 
   const [built, setBuilt] = useState<Set<string>>(new Set());
   const [characters, setCharacters] = useState<CharacterDef[]>([]);
   const [enemies, setEnemies] = useState<EnemyDef[]>([]);
+  const [currency, setCurrency] = useState<CurrencyConfig>(newCurrencyConfig);
   const [loaded, setLoaded] = useState(false);
 
   const [level, setLevel] = useState<LevelDef | null>(null);
@@ -41,6 +43,8 @@ export function LevelEditor({ onDirtyChange, initialLevel }: EditorTabProps & { 
   const [codeInput, setCodeInput] = useState('');
   const [saving, setSaving] = useState(false);
   const history = useRef<{ past: LevelDef[]; future: LevelDef[] }>({ past: [], future: [] });
+  /** 每条敌人线的路线修改记录（路线规划中的「撤回 / 取消撤回」） */
+  const routeHistory = useRef<RouteHistory>(new Map());
   const [, setHistoryTick] = useState(0);
 
   const setDirty = useCallback(
@@ -58,11 +62,12 @@ export function LevelEditor({ onDirtyChange, initialLevel }: EditorTabProps & { 
   };
 
   const refreshLists = useCallback(async () => {
-    const [chs, codes, chars, ens] = await Promise.all([loadChapters(), listLevelCodes(), loadCharacters(), loadEnemies()]);
+    const [chs, codes, chars, ens, cur] = await Promise.all([loadChapters(), listLevelCodes(), loadCharacters(), loadEnemies(), loadCurrency()]);
     setChapters(chs);
     setBuilt(new Set(codes));
     setCharacters(chars);
     setEnemies(ens);
+    setCurrency(cur);
     return { chs, codes };
   }, []);
 
@@ -122,6 +127,7 @@ export function LevelEditor({ onDirtyChange, initialLevel }: EditorTabProps & { 
       try {
         const lv = await loadLevel(code);
         history.current = { past: [], future: [] };
+        routeHistory.current = new Map();
         setCurrent(lv ?? newLevel(p.chapterId, p.index));
         setIsNew(!lv);
         setDirty(false);
@@ -321,9 +327,9 @@ export function LevelEditor({ onDirtyChange, initialLevel }: EditorTabProps & { 
               </div>
             </div>
             {step === 'map' ? (
-              <MapStep level={level} characters={characters} apply={apply} onConfirm={goRoute} />
+              <MapStep level={level} characters={characters} currency={currency} apply={apply} onConfirm={goRoute} />
             ) : (
-              <RouteStep key={level.id} level={level} enemies={enemies} apply={apply} onBack={() => setStep('map')} />
+              <RouteStep key={level.id} level={level} enemies={enemies} apply={apply} onBack={() => setStep('map')} routeHistory={routeHistory.current} />
             )}
           </>
         ) : (
@@ -333,9 +339,10 @@ export function LevelEditor({ onDirtyChange, initialLevel }: EditorTabProps & { 
               在左侧输入关卡编号（<span className="mono accent">章节编号_关卡编号</span>，例如 <span className="mono">ZH_1</span>）或直接点击列表中的关卡。
             </p>
             <ol className="help-list">
-              <li>① 地图搭建：用积木（地面、高台、敌人出现点、基地、不可放置）拼出地图，并设置血量与金钱。</li>
+              <li>① 地图搭建：用积木（地面、高台、敌人出现点、基地、不可放置）拼出地图，并设置血量、金钱和通关奖励。</li>
               <li>② 点击「确认地图」进入敌人路线规划：新建敌人线，拖入敌人积木，安排出现时间与生成间隔。</li>
-              <li>每条敌人线可以选择自动寻路，或在地图上逐个点击相连的方块手动设置路线。</li>
+              <li>每条敌人线可以选择自动寻路，或在地图上逐个点击相连的方块手动设置路线（可以重复经过同一个方块，例如转圈）。</li>
+              <li>「⏸ 停留点」：在路线上的方块设置停留时间，敌人走到那里会停下来等待。</li>
               <li>保存后点击「试玩」即可直接在游戏中测试（不计入进度）。</li>
             </ol>
           </div>

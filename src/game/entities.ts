@@ -46,6 +46,8 @@ export interface Unit extends CombatantBase {
   side: 'ally';
   def: CharacterDef;
   tile: GridPos;
+  /** 角色等级（影响基础数值） */
+  level: number;
   /** 地面上的角色才能阻挡敌人 */
   canBlock: boolean;
   /** 当前阻挡的敌人 uid */
@@ -63,6 +65,11 @@ export interface Enemy extends CombatantBase {
   path: GridPos[];
   /** 下一个要走向的路点下标 */
   waypoint: number;
+  /** 路线上每一格的停留时间（秒） */
+  waits: number[];
+  /** 正在停留：剩余时间 / 这次停留的总时间（秒） */
+  waitLeft: number;
+  waitTotal: number;
   blockedBy: number | null;
   /** 剩余到达基地的距离（格），用于角色选择优先攻击的目标 */
   distLeft: number;

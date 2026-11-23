@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { RETREAT_REFUND_RATIO, SELECT_SLOW_FACTOR } from '../../core/defaults';
 import { describeSkill, describeSkillTrigger } from '../../core/describe';
 import { levelCode } from '../../core/ids';
+import { grantRewards, levelMap, rollRewards, type RolledRewards } from '../../core/leveling';
 import { ProgressView } from '../../core/progress';
 import { DAMAGE_TYPE_LABEL, formatModifier, formatNumber } from '../../core/stats';
 import { loadDatabase, loadLevel, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
@@ -14,6 +15,7 @@ import { BattleRenderer, screenToTile, type Viewport } from '../../game/renderer
 import { clientToLocal } from '../common/stage';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
+import { RewardList } from '../common/wallet';
 import { navigate } from '../router';
 import { MusicControl } from './HomePage';
 
@@ -95,7 +97,12 @@ interface CardPress {
 function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: LevelDef; test: boolean; onRestart: () => void }) {
   const engineRef = useRef<GameEngine>(null as unknown as GameEngine);
   if (!engineRef.current) {
-    engineRef.current = new GameEngine(level, db.characters, db.enemies, { skills: db.skills, loadouts: db.progress.loadouts });
+    engineRef.current = new GameEngine(level, db.characters, db.enemies, {
+      skills: db.skills,
+      loadouts: db.progress.loadouts,
+      // 角色等级（玩家用经验书升级）提高基础数值
+      levels: levelMap(db.currency, db.progress),
+    });
   }
   const engine = engineRef.current;
 
@@ -115,6 +122,8 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
   const [showRoutes, setShowRoutes] = useState(true);
   const [, setTick] = useState(0);
   const [next, setNext] = useState<{ code: string; built: boolean } | null>(null);
+  /** 这次通关获得的奖励（试玩模式没有） */
+  const [rewards, setRewards] = useState<RolledRewards | null>(null);
 
   const ctrl = useRef<Ctrl>({ started, paused, speed, placing, pending, selectedUid, showRoutes });
   ctrl.current = { started, paused, speed, placing, pending, selectedUid, showRoutes };
@@ -189,10 +198,14 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
     if (status !== 'won' || savedRef.current) return;
     savedRef.current = true;
     (async () => {
-      const progress = await loadProgress();
-      if (!test && !progress.cleared.includes(level.id)) {
-        progress.cleared.push(level.id);
+      let progress = await loadProgress();
+      if (!test) {
+        // 通关奖励：每次通关都获得固定的货币，经验书按概率掉落
+        const r = rollRewards(db.currency, level.settings);
+        progress = grantRewards(progress, r);
+        if (!progress.cleared.includes(level.id)) progress.cleared = [...progress.cleared, level.id];
         await saveProgress(progress);
+        setRewards(r);
       }
       const view = new ProgressView(db.chapters, progress, db.levelCodes);
       const n = view.nextLevel(level.chapterId, level.index);
@@ -550,6 +563,13 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
                 <dt>用时</dt>
                 <dd>{formatTime(engine.time)}</dd>
               </dl>
+              {engine.status === 'won' && !test && (
+                <div className="result-rewards">
+                  <div className="result-rewards-title">通关奖励</div>
+                  {rewards ? <RewardList cfg={db.currency} rewards={rewards} /> : <span className="muted small">结算中…</span>}
+                </div>
+              )}
+              {engine.status === 'won' && test && <div className="muted small">试玩模式：不计进度，没有通关奖励</div>}
               {engine.status === 'won' && !test && <div className="muted small">进度已保存</div>}
               <div className="row gap-s center">
                 {engine.status === 'won' && next && !test && (
@@ -581,10 +601,12 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
           const st = engine.cardState(def);
           const count = engine.deployedCount(def.id);
           const skills = engine.loadoutOf(def);
+          const lv = engine.levelOf(def.id);
+          const cooling = st.cooldown > 0 && def.deployCooldown > 0;
           return (
             <button
               key={def.id}
-              className={`deploy-card${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}`}
+              className={`deploy-card${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}${cooling ? ' cooling' : ''}`}
               onPointerDown={(e) => onCardPointerDown(e, def.id)}
               onPointerMove={onCardPointerMove}
               onPointerUp={onCardPointerUp}
@@ -593,16 +615,23 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
               // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
               onClick={(e) => e.detail === 0 && selectCard(def.id)}
               onContextMenu={(e) => e.preventDefault()}
-              title={`${def.name}（${def.id}）\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${st.ok ? '' : '\n' + st.reason}`}
+              title={`${def.name}（${def.id}）Lv.${lv}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${st.ok ? '' : '\n' + st.reason}`}
             >
               <span className="card-key">{i + 1}</span>
               <span className="card-cost">{def.cost}</span>
+              {lv > 1 && <span className="card-lv">Lv.{lv}</span>}
               <UnitToken kind="character" def={def} size={44} dim={!st.ok} />
               <span className="card-name">{def.name}</span>
               <span className="card-meta">
                 {placementText(def.placement)}
                 {def.maxDeploy > 0 ? ` · ${count}/${def.maxDeploy}` : count > 0 ? ` · ×${count}` : ''}
               </span>
+              {cooling && (
+                // 部署冷却：遮罩从上往下退去，中间显示剩余秒数
+                <span className="card-cooldown" style={{ ['--cd' as string]: `${Math.min(1, st.cooldown / def.deployCooldown) * 100}%` }}>
+                  <span className="mono">{st.cooldown.toFixed(st.cooldown < 10 ? 1 : 0)}</span>
+                </span>
+              )}
             </button>
           );
         })}
@@ -691,7 +720,9 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
       <div className="row gap-s">
         <UnitToken kind="character" def={unit.def} size={40} />
         <div className="grow">
-          <div className="unit-name">{unit.def.name}</div>
+          <div className="unit-name">
+            {unit.def.name} <span className="lv-text small">Lv.{unit.level}</span>
+          </div>
           <div className="muted small mono">{unit.def.id}</div>
         </div>
         <button className="icon-btn" onClick={onClose} aria-label="关闭">

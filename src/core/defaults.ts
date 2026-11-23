@@ -2,11 +2,16 @@ import { levelCode, shortUid } from './ids';
 import { STATS } from './stats';
 import { makeEmptyGrid, resizeGrid } from './tiles';
 import type {
+  BookDrop,
   ChapterDef,
   CharacterDef,
+  CharacterGrowth,
+  CharacterProgress,
+  CurrencyConfig,
   EnemyDef,
   EnemyLine,
   EnemySides,
+  ExpBookDef,
   GameSettings,
   GridPos,
   IconPoint,
@@ -15,6 +20,7 @@ import type {
   OnHitEffect,
   ProgressData,
   RouteDef,
+  RouteWait,
   SkillDef,
   SkillEffect,
   SpawnBlock,
@@ -29,22 +35,24 @@ export const RETREAT_REFUND_RATIO = 0.5;
 export const LEAK_DAMAGE = 1;
 /** 选中角色（部署卡片或场上角色）时的时间流速倍率 */
 export const SELECT_SLOW_FACTOR = 0.2;
+/** 新建停留点的默认停留时间（秒） */
+export const DEFAULT_WAIT = 2;
+/** 没有设置升级成长的角色：每级增加基础数值的 5% */
+export const DEFAULT_GROWTH_RATIO = 0.05;
 
 export const LINE_COLORS = ['#e8a33d', '#4fb3a9', '#d1605e', '#8f7ad6', '#6aa84f', '#d98cc0', '#5b9bd5', '#c9b458'];
 
 /* ---------- 新建对象 ---------- */
 
 export function newCharacter(id: string): CharacterDef {
+  const base = { maxHp: 1000, atk: 50, def: 50, res: 0 };
   return {
     id,
     name: '新角色',
     color: '#4a90d9',
     placement: 'ground',
     cost: 10,
-    maxHp: 1000,
-    atk: 50,
-    def: 50,
-    res: 0,
+    ...base,
     damageType: 'physical',
     attackTarget: 'enemy',
     targetCount: 1,
@@ -52,11 +60,19 @@ export function newCharacter(id: string): CharacterDef {
     range: 1,
     blockCount: 1,
     maxDeploy: 0,
+    deployCooldown: 0,
     attackType: 'basic',
     skills: [],
     skillSlots: 1,
     onHit: null,
+    growth: defaultGrowth(base),
   };
+}
+
+/** 默认的升级成长：每级增加基础生命 / 攻击（治疗量）/ 物抗的 5%（取整），法抗不增加 */
+export function defaultGrowth(base: { maxHp: number; atk: number; def: number }): CharacterGrowth {
+  const r = (v: number) => Math.round(Math.abs(v) * DEFAULT_GROWTH_RATIO);
+  return { maxHp: r(base.maxHp), atk: r(base.atk), def: r(base.def), res: 0 };
 }
 
 export function newEnemy(id: string): EnemyDef {
@@ -129,6 +145,8 @@ export function defaultLevelSettings(code: string): LevelSettings {
     moneyPerMinute: 30,
     availableCharacters: [],
     battleMusic: '',
+    rewardCurrency: null,
+    rewardBooks: null,
   };
 }
 
@@ -148,7 +166,7 @@ export function newLevel(chapterId: string, index: number): LevelDef {
 }
 
 export function newRoute(spawn: GridPos | null): RouteDef {
-  return { mode: 'auto', spawn, target: null, path: [] };
+  return { mode: 'auto', spawn, target: null, path: [], waits: [] };
 }
 
 export function newLine(index: number, spawn: GridPos | null): EnemyLine {
@@ -163,6 +181,39 @@ export function newLine(index: number, spawn: GridPos | null): EnemyLine {
 
 export function newBlock(enemyId: string, startTime: number): SpawnBlock {
   return { id: shortUid('B'), enemyId, count: 3, interval: 2, startTime };
+}
+
+/* ---------- 货币编辑 ---------- */
+
+export function newBook(id: string, name = '经验书', exp = 100, cost = 10, color = '#5b9bd5'): ExpBookDef {
+  return { id, name, color, exp, cost };
+}
+
+export function newDrop(bookId: string): BookDrop {
+  return { bookId, chance: 100, min: 1, max: 1 };
+}
+
+/** 默认的货币设置（还没有 data/currency.json 时使用） */
+export function newCurrencyConfig(): CurrencyConfig {
+  return {
+    name: '金币',
+    color: '#f2c94c',
+    baseExp: 100,
+    expGrowth: 0.75,
+    maxLevel: 20,
+    books: [
+      newBook('B001', '初级经验书', 100, 10, '#6aa84f'),
+      newBook('B002', '中级经验书', 300, 30, '#5b9bd5'),
+      newBook('B003', '高级经验书', 1000, 100, '#b07ad9'),
+    ],
+    defaultCurrency: 100,
+    defaultBooks: [
+      { bookId: 'B001', chance: 100, min: 2, max: 3 },
+      { bookId: 'B002', chance: 50, min: 1, max: 1 },
+      { bookId: 'B003', chance: 10, min: 1, max: 1 },
+    ],
+    dropDisplay: 'exact',
+  };
 }
 
 /** 一块积木持续的时间（第一个到最后一个敌人生成的时间差） */
@@ -244,11 +295,28 @@ export function normalizeCharacter(raw: any): CharacterDef {
     range: num(raw?.range, d.range, 0),
     blockCount: Math.round(num(raw?.blockCount, d.blockCount, 0, 10)),
     maxDeploy: Math.round(num(raw?.maxDeploy, d.maxDeploy, 0, 99)),
+    deployCooldown: num(raw?.deployCooldown, 0, 0, 3600),
     attackType: str(raw?.attackType, 'basic'),
     skills: strList(raw?.skills),
     skillSlots: Math.round(num(raw?.skillSlots, 1, 0, 9)),
     onHit: normalizeOnHit(raw?.onHit),
+    growth: normalizeGrowth(raw?.growth, {
+      maxHp: num(raw?.maxHp, d.maxHp, 1),
+      atk: num(raw?.atk, d.atk, -99999, 99999),
+      def: num(raw?.def, d.def, 0),
+    }),
     description: typeof raw?.description === 'string' ? raw.description : undefined,
+  };
+}
+
+/** 升级成长：没有设置时按基础数值的 5% 生成；不允许负数 */
+function normalizeGrowth(raw: any, base: { maxHp: number; atk: number; def: number }): CharacterGrowth {
+  if (!raw || typeof raw !== 'object') return defaultGrowth(base);
+  return {
+    maxHp: num(raw.maxHp, 0, 0, 99999),
+    atk: num(raw.atk, 0, 0, 99999),
+    def: num(raw.def, 0, 0, 99999),
+    res: num(raw.res, 0, 0, 100),
   };
 }
 
@@ -341,6 +409,20 @@ function normalizeBlock(raw: any): SpawnBlock {
   };
 }
 
+/** 停留点：同一方块的同一次经过只保留一个，按方块和次数排序 */
+export function normalizeWaits(v: unknown): RouteWait[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Map<string, RouteWait>();
+  for (const raw of v as any[]) {
+    const p = pos(raw);
+    if (!p) continue;
+    const visit = Math.round(num(raw?.visit, 1, 1, 999));
+    const duration = Math.round(num(raw?.duration, DEFAULT_WAIT, 0.1, 3600) * 100) / 100;
+    seen.set(`${p.x},${p.y},${visit}`, { x: p.x, y: p.y, visit, duration });
+  }
+  return [...seen.values()];
+}
+
 function normalizeLine(raw: any, i: number): EnemyLine {
   const r = raw?.route ?? {};
   return {
@@ -352,6 +434,7 @@ function normalizeLine(raw: any, i: number): EnemyLine {
       spawn: pos(r.spawn),
       target: pos(r.target),
       path: Array.isArray(r.path) ? r.path.map(pos).filter((p: GridPos | null): p is GridPos => !!p) : [],
+      waits: normalizeWaits(r.waits),
     },
     blocks: Array.isArray(raw?.blocks) ? raw.blocks.map(normalizeBlock) : [],
   };
@@ -383,8 +466,58 @@ export function normalizeLevel(raw: any, fallbackCode?: string): LevelDef {
       moneyPerMinute: num(s.moneyPerMinute, ds.moneyPerMinute, 0, 99999),
       availableCharacters: strList(s.availableCharacters),
       battleMusic: str(s.battleMusic, ''),
+      rewardCurrency: typeof s.rewardCurrency === 'number' && Number.isFinite(s.rewardCurrency) ? Math.round(num(s.rewardCurrency, 0, 0, 1e9)) : null,
+      rewardBooks: Array.isArray(s.rewardBooks) ? normalizeDrops(s.rewardBooks) : null,
     },
     lines: Array.isArray(raw?.lines) ? raw.lines.map(normalizeLine) : [],
+  };
+}
+
+/* ---------- 货币编辑 ---------- */
+
+export function normalizeDrop(raw: any): BookDrop | null {
+  if (!raw || typeof raw.bookId !== 'string' || !raw.bookId) return null;
+  const a = Math.round(num(raw.min, 1, 0, 9999));
+  const b = Math.round(num(raw.max, a, 0, 9999));
+  return { bookId: raw.bookId, chance: Math.round(num(raw.chance, 100, 0, 100) * 100) / 100, min: Math.min(a, b), max: Math.max(a, b) };
+}
+
+export function normalizeDrops(v: unknown): BookDrop[] {
+  return Array.isArray(v) ? v.map(normalizeDrop).filter((d): d is BookDrop => !!d) : [];
+}
+
+function normalizeBook(raw: any, i: number): ExpBookDef | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const d = newBook(`B${String(i + 1).padStart(3, '0')}`);
+  return {
+    id: str(raw.id, d.id) || d.id,
+    name: str(raw.name, d.name),
+    color: str(raw.color, d.color),
+    exp: Math.round(num(raw.exp, d.exp, 1, 1e9)),
+    cost: Math.round(num(raw.cost, d.cost, 0, 1e9)),
+  };
+}
+
+export function normalizeCurrency(raw: any): CurrencyConfig {
+  const d = newCurrencyConfig();
+  if (!raw || typeof raw !== 'object') return d;
+  const books: ExpBookDef[] = [];
+  if (Array.isArray(raw.books)) {
+    raw.books.forEach((b: any, i: number) => {
+      const book = normalizeBook(b, i);
+      if (book && !books.some((x) => x.id === book.id)) books.push(book);
+    });
+  }
+  return {
+    name: str(raw.name, d.name).trim() || d.name,
+    color: str(raw.color, d.color),
+    baseExp: Math.round(num(raw.baseExp, d.baseExp, 1, 1e9)),
+    expGrowth: Math.round(num(raw.expGrowth, d.expGrowth, 0, 10) * 1000) / 1000,
+    maxLevel: Math.round(num(raw.maxLevel, d.maxLevel, 1, 999)),
+    books: Array.isArray(raw.books) ? books : d.books,
+    defaultCurrency: Math.round(num(raw.defaultCurrency, d.defaultCurrency, 0, 1e9)),
+    defaultBooks: Array.isArray(raw.defaultBooks) ? normalizeDrops(raw.defaultBooks) : d.defaultBooks,
+    dropDisplay: raw.dropDisplay === 'tier' || raw.dropDisplay === 'hidden' ? raw.dropDisplay : 'exact',
   };
 }
 
@@ -397,5 +530,20 @@ export function normalizeProgress(raw: any): ProgressData {
   if (raw?.loadouts && typeof raw.loadouts === 'object') {
     for (const [k, v] of Object.entries(raw.loadouts)) loadouts[k] = strList(v);
   }
-  return { cleared: strList(raw?.cleared), loadouts };
+  const books: Record<string, number> = {};
+  if (raw?.books && typeof raw.books === 'object') {
+    for (const [k, v] of Object.entries(raw.books)) {
+      const n = Math.floor(num(v, 0, 0, 1e9));
+      if (n > 0) books[k] = n;
+    }
+  }
+  const levels: Record<string, CharacterProgress> = {};
+  if (raw?.levels && typeof raw.levels === 'object') {
+    for (const [k, v] of Object.entries(raw.levels as Record<string, any>)) {
+      const level = Math.round(num(v?.level, 1, 1, 999));
+      const exp = Math.floor(num(v?.exp, 0, 0, 1e15));
+      if (level > 1 || exp > 0) levels[k] = { level, exp };
+    }
+  }
+  return { cleared: strList(raw?.cleared), loadouts, currency: Math.floor(num(raw?.currency, 0, 0, 1e15)), books, levels };
 }

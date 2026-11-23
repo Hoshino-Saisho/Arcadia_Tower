@@ -3,9 +3,10 @@ import { RETREAT_REFUND_RATIO, newCharacter } from '../../core/defaults';
 import { describeAttack, describeOnHit } from '../../core/describe';
 import { notifySaved } from '../../core/github/sync';
 import { nextId, validateUnitId } from '../../core/ids';
-import { loadCharacters, loadSkills, saveCharacters } from '../../core/storage/repository';
+import { leveledCharacter } from '../../core/leveling';
+import { loadCharacters, loadCurrency, loadSkills, saveCharacters } from '../../core/storage/repository';
 import { tileInfo } from '../../core/tiles';
-import type { CharacterDef, PlacementType, SkillDef } from '../../core/types';
+import type { CharacterDef, CharacterGrowth, PlacementType, SkillDef } from '../../core/types';
 import { listAttackTypes } from '../../game/attacks';
 import { useIcon } from '../../game/icons';
 import { drawRangeTiles } from '../../game/renderer';
@@ -38,8 +39,10 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
     label: '角色',
   });
   const [skills, setSkills] = useState<SkillDef[]>([]);
+  const [maxLevel, setMaxLevel] = useState(20);
   useEffect(() => {
     void loadSkills().then(setSkills);
+    void loadCurrency().then((c) => setMaxLevel(c.maxLevel));
   }, []);
   useSaveShortcut(() => void draft.saveAll());
 
@@ -48,6 +51,7 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
   const sel = draft.selected;
   const c = sel?.value;
   const set = (patch: Partial<CharacterDef>) => sel && draft.update(sel.key, patch);
+  const setGrowth = (patch: Partial<CharacterGrowth>) => c && set({ growth: { ...c.growth, ...patch } });
   const ids = draft.items.map((d) => d.value.id);
   const healer = c?.attackTarget === 'ally' && c.atk < 0;
 
@@ -117,6 +121,9 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="同时部署上限" hint="0 = 不限">
                 <NumberInput value={c.maxDeploy} min={0} max={99} integer onChange={(v) => set({ maxDeploy: v })} />
               </Field>
+              <Field label="部署冷却" hint="秒，部署后多久才能再部署这个角色；0 = 无">
+                <NumberInput value={c.deployCooldown} min={0} max={3600} step={1} onChange={(v) => set({ deployCooldown: v })} />
+              </Field>
             </div>
             <div className="form-grid">
               <Field label="部署位置" wide>
@@ -165,6 +172,28 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
               </Field>
             </div>
 
+            <h3 className="form-title">升级成长</h3>
+            <div className="form-grid cols-4">
+              <Field label="每级生命值" hint="+">
+                <NumberInput value={c.growth.maxHp} min={0} max={99999} integer onChange={(v) => setGrowth({ maxHp: v })} />
+              </Field>
+              <Field label={healer ? '每级治疗量' : '每级攻击力'} hint="+">
+                <NumberInput value={c.growth.atk} min={0} max={99999} integer onChange={(v) => setGrowth({ atk: v })} />
+              </Field>
+              <Field label="每级物抗" hint="+">
+                <NumberInput value={c.growth.def} min={0} max={99999} integer onChange={(v) => setGrowth({ def: v })} />
+              </Field>
+              <Field label="每级法抗" hint="+%">
+                <NumberInput value={c.growth.res} min={0} max={100} step={0.5} onChange={(v) => setGrowth({ res: v })} />
+              </Field>
+              <Field label="成长预览" wide>
+                <GrowthPreview def={c} maxLevel={maxLevel} />
+              </Field>
+            </div>
+            <div className="muted small help-text">
+              玩家用经验书给角色升级，每升 1 级基础数值增加上面的数值（{healer ? '治疗角色的攻击力成长 = 治疗量增加' : '对治疗角色来说是治疗量'}）。等级上限、升级经验和经验书在「货币编辑」中设置。
+            </div>
+
             <h3 className="form-title">技能</h3>
             <div className="form-grid">
               <Field label="战斗中可携带的技能数" hint="玩家可以在游戏的「角色设定」中选择">
@@ -185,6 +214,24 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
       )}
 
       {c && <CharacterPreview def={c} healer={!!healer} skills={skills} />}
+    </div>
+  );
+}
+
+/** 成长预览：1 级 / 10 级 / 满级的数值 */
+function GrowthPreview({ def, maxLevel }: { def: CharacterDef; maxLevel: number }) {
+  const healer = def.attackTarget === 'ally' && def.atk < 0;
+  const levels = [...new Set([1, Math.min(10, maxLevel), maxLevel])];
+  return (
+    <div className="growth-preview">
+      {levels.map((lv) => {
+        const d = leveledCharacter(def, lv);
+        return (
+          <span key={lv} className="growth-cell">
+            <strong>Lv.{lv}</strong> 生命 {d.maxHp} · {healer ? '治疗' : '攻击'} {Math.abs(d.atk)} · 物抗 {d.def} · 法抗 {d.res}%
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -247,6 +294,8 @@ function CharacterPreview({ def, healer, skills }: { def: CharacterDef; healer: 
         <dd>{def.placement === 'high' ? '高台不阻挡' : `${def.blockCount} 个`}</dd>
         <dt>撤退返还</dt>
         <dd>{Math.floor(def.cost * RETREAT_REFUND_RATIO)}</dd>
+        <dt>部署冷却</dt>
+        <dd>{def.deployCooldown > 0 ? `${def.deployCooldown} 秒` : '无'}</dd>
         <dt>技能</dt>
         <dd>{names.length ? `${names.join('、')}（带 ${def.skillSlots} 个）` : '无'}</dd>
       </dl>

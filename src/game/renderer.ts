@@ -52,13 +52,26 @@ export function drawGrid(ctx: CanvasRenderingContext2D, grid: TileGrid, vp: View
   }
 }
 
-/** 画一条路线（折线 + 箭头） */
+/** 路线上显示的停留点 */
+export interface WaitMark {
+  x: number;
+  y: number;
+  duration: number;
+  /** 编辑器中选中的停留点 */
+  selected?: boolean;
+}
+
+/**
+ * 画一条路线（折线 + 箭头）。
+ * 路线可以重复经过同一个方块（转圈）：arrows 在每一段中间画方向箭头（往返的两段分别画在两侧），
+ * numbers 在方块上显示第几步（同一方块经过多次时显示「3·9」）。
+ */
 export function drawRoute(
   ctx: CanvasRenderingContext2D,
   path: GridPos[],
   vp: Viewport,
   color: string,
-  opt: { alpha?: number; width?: number; offset?: number; dashed?: boolean; numbers?: boolean } = {},
+  opt: { alpha?: number; width?: number; offset?: number; dashed?: boolean; numbers?: boolean; arrows?: boolean; waits?: WaitMark[] } = {},
 ) {
   if (path.length === 0) return;
   const off = (opt.offset ?? 0) * vp.scale;
@@ -79,6 +92,25 @@ export function drawRoute(
   ctx.beginPath();
   ctx.arc(pts[0].x, pts[0].y, Math.max(3, vp.scale * 0.1), 0, Math.PI * 2);
   ctx.fill();
+  // 每一段的方向箭头：画在行进方向的右侧，往返的两段不会重叠
+  if (opt.arrows && pts.length > 1) {
+    const s = Math.max(4, vp.scale * 0.13);
+    const side = vp.scale * 0.13;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      // 行进方向 (cos, sin) 的右侧是 (−sin, cos)（屏幕坐标 y 向下）
+      const mx = (a.x + b.x) / 2 - Math.sin(ang) * side;
+      const my = (a.y + b.y) / 2 + Math.cos(ang) * side;
+      ctx.beginPath();
+      ctx.moveTo(mx + Math.cos(ang) * s * 0.6, my + Math.sin(ang) * s * 0.6);
+      ctx.lineTo(mx - Math.cos(ang - 0.6) * s * 0.6, my - Math.sin(ang - 0.6) * s * 0.6);
+      ctx.lineTo(mx - Math.cos(ang + 0.6) * s * 0.6, my - Math.sin(ang + 0.6) * s * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
   // 终点箭头
   if (pts.length > 1) {
     const a = pts[pts.length - 2];
@@ -93,20 +125,76 @@ export function drawRoute(
     ctx.fill();
   }
   if (opt.numbers) {
-    ctx.font = `bold ${Math.max(9, Math.round(vp.scale * 0.28))}px sans-serif`;
+    // 同一个方块经过多次：合并成一个标签
+    const groups = new Map<string, { x: number; y: number; steps: number[] }>();
+    pts.forEach((p, i) => {
+      const k = `${path[i].x},${path[i].y}`;
+      const g = groups.get(k);
+      if (g) g.steps.push(i + 1);
+      else groups.set(k, { x: p.x, y: p.y, steps: [i + 1] });
+    });
+    const fs = Math.max(9, Math.round(vp.scale * 0.26));
+    ctx.font = `bold ${fs}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    pts.forEach((p, i) => {
+    for (const g of groups.values()) {
+      const text = g.steps.length > 3 ? `${g.steps.slice(0, 2).join('·')}…` : g.steps.join('·');
       const r = Math.max(7, vp.scale * 0.2);
+      const w = Math.max(r * 2, ctx.measureText(text).width + 8);
       ctx.fillStyle = 'rgba(10,12,18,0.85)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      roundRect(ctx, g.x - w / 2, g.y - r, w, r * 2, r);
       ctx.fill();
       ctx.fillStyle = color;
-      ctx.fillText(String(i + 1), p.x, p.y + 0.5);
-    });
+      ctx.fillText(text, g.x, g.y + 0.5);
+    }
+  }
+  if (opt.waits?.length) drawWaitMarks(ctx, vp, opt.waits, color, off);
+  ctx.restore();
+}
+
+/** 停留点标记：方块右上角的时钟徽章「⏸ 2s」（同一方块多次停留时合并显示） */
+export function drawWaitMarks(ctx: CanvasRenderingContext2D, vp: Viewport, waits: WaitMark[], color: string, off = 0) {
+  const groups = new Map<string, { x: number; y: number; durations: number[]; selected: boolean }>();
+  for (const w of waits) {
+    const k = `${w.x},${w.y}`;
+    const g = groups.get(k);
+    if (g) {
+      g.durations.push(w.duration);
+      g.selected ||= !!w.selected;
+    } else groups.set(k, { x: w.x, y: w.y, durations: [w.duration], selected: !!w.selected });
+  }
+  const fs = Math.max(9, Math.round(vp.scale * 0.22));
+  ctx.save();
+  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const g of groups.values()) {
+    const text = `⏸${g.durations.map((d) => `${Math.round(d * 10) / 10}s`).join('·')}`;
+    const h = Math.max(13, fs + 5);
+    const w = ctx.measureText(text).width + 8;
+    const cx = vp.ox + (g.x + 1) * vp.scale + off - Math.min(w / 2, vp.scale * 0.5) - 1;
+    const cy = vp.oy + g.y * vp.scale + off + h / 2 + 1;
+    ctx.fillStyle = g.selected ? '#ffd166' : 'rgba(12,14,20,0.9)';
+    roundRect(ctx, cx - w / 2, cy - h / 2, w, h, h / 2);
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = g.selected ? '#ffffff' : color;
+    ctx.stroke();
+    ctx.fillStyle = g.selected ? '#1b1405' : '#ffe08a';
+    ctx.fillText(text, cx, cy + 0.5);
   }
   ctx.restore();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
 }
 
 /** 战斗画面渲染器 */
@@ -146,6 +234,8 @@ export class BattleRenderer {
         const offset = (i % 2 === 0 ? 1 : -1) * Math.ceil(i / 2) * 0.07;
         drawRoute(ctx, r.path, vp, r.color, { alpha: 0.4, offset, dashed: true });
       });
+      // 停留点不透明显示，方便看清
+      eng.routes.forEach((r) => r.waits.length && drawWaitMarks(ctx, vp, r.waits, r.color));
     }
 
     // 部署提示
@@ -213,6 +303,21 @@ export class BattleRenderer {
         ctx.restore();
       }
       drawEnemyToken(ctx, e.def, cx, cy, r, e.angle, { icon: getIcon(e.def.icon), flash: e.flash, alpha: fade });
+      if (e.waitLeft > 0 && e.waitTotal > 0) {
+        // 正在停留：外圈显示剩余的停留时间
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = Math.max(3, vp.scale * 0.07);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + Math.max(4, vp.scale * 0.08), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffe08a';
+        ctx.lineWidth = Math.max(2, vp.scale * 0.045);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + Math.max(4, vp.scale * 0.08), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (e.waitLeft / e.waitTotal));
+        ctx.stroke();
+        ctx.restore();
+      }
       const hpTop = cy - r - Math.max(6, vp.scale * 0.13);
       drawHpBar(ctx, cx, hpTop, vp.scale * 0.6, e.hp / e.stats.maxHp, '#e5484d');
       this.drawStatusMarks(ctx, e, cx, hpTop, vp.scale * 0.6);

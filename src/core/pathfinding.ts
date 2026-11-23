@@ -1,5 +1,5 @@
 import { TileGrid, formatPos, samePos } from './tiles';
-import type { GridPos, RouteDef } from './types';
+import type { GridPos, RouteDef, RouteWait } from './types';
 
 const DIRS: GridPos[] = [
   { x: 1, y: 0 },
@@ -125,6 +125,55 @@ export interface ResolvedRoute {
   path: GridPos[] | null;
   spawn: GridPos | null;
   error?: string;
+  /** 路线有效时：停留点换算到每一格的停留时间 */
+  waits?: ResolvedWaits;
+}
+
+/** 停留点换算到路线上的结果 */
+export interface ResolvedWaits {
+  /** 每一格的停留时间（秒），下标和路线一致 */
+  perStep: number[];
+  /** 不在路线上的停留点（路线改过以后失效，或设置在终点基地上），不会生效 */
+  invalid: RouteWait[];
+  /** 停留时间合计（秒） */
+  total: number;
+}
+
+/** 路线上的每一格分别是第几次经过这个方块（从 1 开始；转圈时同一方块会经过多次） */
+export function visitNumbers(path: GridPos[]): number[] {
+  const count = new Map<string, number>();
+  return path.map((p) => {
+    const k = `${p.x},${p.y}`;
+    const n = (count.get(k) ?? 0) + 1;
+    count.set(k, n);
+    return n;
+  });
+}
+
+/** 第 visit 次经过方块 (x, y) 时在路线上的下标；不存在返回 -1 */
+export function stepOfVisit(path: GridPos[], x: number, y: number, visit: number): number {
+  let n = 0;
+  for (let i = 0; i < path.length; i++) {
+    if (path[i].x === x && path[i].y === y && ++n === visit) return i;
+  }
+  return -1;
+}
+
+/** 把停留点（方块 + 第几次经过）换算成路线上每一格的停留时间；终点（基地）不能停留 */
+export function resolveWaits(path: GridPos[], waits: RouteWait[]): ResolvedWaits {
+  const perStep = new Array<number>(path.length).fill(0);
+  const invalid: RouteWait[] = [];
+  let total = 0;
+  for (const w of waits) {
+    const i = stepOfVisit(path, w.x, w.y, w.visit);
+    if (i < 0 || i === path.length - 1) {
+      invalid.push(w);
+      continue;
+    }
+    perStep[i] += w.duration;
+    total += w.duration;
+  }
+  return { perStep, invalid, total };
 }
 
 /** 根据路线设置得到最终行走的方块序列 */
@@ -141,11 +190,11 @@ export function resolveRoute(grid: TileGrid, route: RouteDef): ResolvedRoute {
       return { path: null, spawn, error: '手动路线的起点与所选出现点不一致' };
     }
     const check = checkManualPath(grid, route.path);
-    return check.ok ? { path: route.path, spawn } : { path: null, spawn, error: check.error };
+    return check.ok ? { path: route.path, spawn, waits: resolveWaits(route.path, route.waits ?? []) } : { path: null, spawn, error: check.error };
   }
   if (route.target && !grid.isType(route.target.x, route.target.y, 'base')) {
     return { path: null, spawn, error: `目的地 ${formatPos(route.target)} 不是基地` };
   }
   const path = findPath(grid, spawn, route.target);
-  return path ? { path, spawn } : { path: null, spawn, error: '自动寻路失败：出现点无法到达基地' };
+  return path ? { path, spawn, waits: resolveWaits(path, route.waits ?? []) } : { path: null, spawn, error: '自动寻路失败：出现点无法到达基地' };
 }

@@ -1,16 +1,28 @@
+import { useEffect, useState } from 'react';
 import { getBridge } from '../../core/storage/backend';
-import { loadProgress, saveProgress } from '../../core/storage/repository';
+import { loadCurrency, loadProgress, saveProgress } from '../../core/storage/repository';
+import type { CurrencyConfig, ProgressData } from '../../core/types';
 import { music, useMusicState } from '../../game/music';
 import { GAME_VERSION, IS_WEB_PLAY } from '../../version';
 import { toast } from '../common/toast';
+import { Wallet } from '../common/wallet';
 import { navigate } from '../router';
 
-/** 游戏主页：Play → 章节选择；下方是图鉴和角色设定 */
+/** 游戏主页：Play → 章节选择；下方是图鉴和角色设定；右上角是游戏外货币和经验书 */
 export function HomePage() {
   const bridge = getBridge();
+  const [wallet, setWallet] = useState<{ cfg: CurrencyConfig; progress: ProgressData } | null>(null);
+  useEffect(() => {
+    void Promise.all([loadCurrency(), loadProgress()]).then(([cfg, progress]) => setWallet({ cfg, progress }));
+  }, []);
   return (
     <div className="home">
       <div className="home-bg" />
+      {wallet && (
+        <div className="home-wallet">
+          <Wallet cfg={wallet.cfg} currency={wallet.progress.currency} books={wallet.progress.books} />
+        </div>
+      )}
       <div className="home-content">
         <div className="home-kicker">2D TOWER DEFENSE</div>
         <h1 className="home-title">
@@ -28,7 +40,7 @@ export function HomePage() {
           </button>
           <button className="home-menu-btn" onClick={() => navigate('/game/characters')}>
             <strong>角色设定</strong>
-            <span>选择每个角色携带的技能</span>
+            <span>用经验书升级 · 选择携带的技能</span>
           </button>
         </div>
         <div className="home-links">
@@ -36,9 +48,12 @@ export function HomePage() {
           <button
             className="btn btn-s btn-ghost"
             onClick={async () => {
-              if (!window.confirm('确定要重置全部通关进度吗？（角色设定会保留）')) return;
+              const name = wallet?.cfg.name ?? '货币';
+              if (!window.confirm(`确定要重置全部进度吗？\n通关记录、${name}、经验书和角色等级都会清空（携带的技能设定会保留）。`)) return;
               const p = await loadProgress();
-              await saveProgress({ ...p, cleared: [] });
+              const next: ProgressData = { ...p, cleared: [], currency: 0, books: {}, levels: {} };
+              await saveProgress(next);
+              setWallet((w) => (w ? { ...w, progress: next } : w));
               toast('进度已重置', 'ok');
             }}
           >

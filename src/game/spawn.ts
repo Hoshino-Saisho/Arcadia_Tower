@@ -7,6 +7,15 @@ export interface SpawnEvent {
   enemyId: string;
   lineId: string;
   path: GridPos[];
+  /** 路线上每一格的停留时间（秒），和 path 下标一致 */
+  waits: number[];
+}
+
+/** 路线上的停留点（显示用） */
+export interface RouteWaitMark {
+  x: number;
+  y: number;
+  duration: number;
 }
 
 export interface RouteInfo {
@@ -14,6 +23,7 @@ export interface RouteInfo {
   name: string;
   color: string;
   path: GridPos[];
+  waits: RouteWaitMark[];
 }
 
 export interface Schedule {
@@ -36,14 +46,17 @@ export function buildSchedule(level: LevelDef, grid: TileGrid, enemies: Map<stri
       warnings.push(`「${line.name}」路线无效：${r.error ?? '未知错误'}，该线的敌人不会出现`);
       continue;
     }
-    routes.push({ lineId: line.id, name: line.name, color: line.color, path: r.path });
+    const perStep = r.waits?.perStep ?? [];
+    const marks = r.path.flatMap((p, i) => (perStep[i] > 0 ? [{ x: p.x, y: p.y, duration: perStep[i] }] : []));
+    routes.push({ lineId: line.id, name: line.name, color: line.color, path: r.path, waits: marks });
+    if (r.waits?.invalid.length) warnings.push(`「${line.name}」有 ${r.waits.invalid.length} 个停留点不在路线上，不会生效`);
     for (const b of line.blocks) {
       if (!enemies.has(b.enemyId)) {
         warnings.push(`「${line.name}」中的敌人 ${b.enemyId || '(未选择)'} 不存在，已跳过`);
         continue;
       }
       for (let i = 0; i < b.count; i++) {
-        events.push({ time: b.startTime + i * b.interval, enemyId: b.enemyId, lineId: line.id, path: r.path });
+        events.push({ time: b.startTime + i * b.interval, enemyId: b.enemyId, lineId: line.id, path: r.path, waits: perStep });
       }
     }
   }

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { LINE_COLORS, blockDuration, newLine } from '../../core/defaults';
+import { DEFAULT_WAIT, LINE_COLORS, blockDuration, newLine } from '../../core/defaults';
 import { shortUid } from '../../core/ids';
-import { connectTiles, findPath, isAdjacent, resolveRoute, type ResolvedRoute } from '../../core/pathfinding';
+import { connectTiles, findPath, isAdjacent, resolveRoute, stepOfVisit, type ResolvedRoute } from '../../core/pathfinding';
 import { TileGrid, formatPos, samePos } from '../../core/tiles';
-import type { EnemyDef, EnemyLine, GridPos, LevelDef, RouteDef, SpawnBlock } from '../../core/types';
-import { drawGrid, drawRoute, type Viewport } from '../../game/renderer';
+import type { EnemyDef, EnemyLine, GridPos, LevelDef, RouteDef, RouteWait, SpawnBlock } from '../../core/types';
+import { drawGrid, drawRoute, type Viewport, type WaitMark } from '../../game/renderer';
 import { Field, NumberInput, Segmented, TextInput } from '../common/fields';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
@@ -12,17 +12,38 @@ import { GridCanvas, type GridPointer } from './GridCanvas';
 import type { ApplyFn } from './LevelEditor';
 import { Timeline, cloneLine } from './Timeline';
 
+/** 每条敌人线自己的路线修改记录（撤回 / 取消撤回），保存在关卡编辑器里，切换步骤不会丢失 */
+export type RouteHistory = Map<string, { past: RouteDef[]; future: RouteDef[] }>;
+
+type Tool = 'path' | 'wait';
+
 /**
  * 敌人路线规划：上方地图显示 / 编辑路线，下方时间线安排敌人出现时间。
  *  - 自动寻路：程序在地图上找到出现点 → 基地的最短路线
- *  - 手动设置：在地图上逐个点击相连的方块，设定路线和顺序
+ *  - 手动设置：在地图上逐个点击相连的方块，设定路线和顺序（可以重复经过同一个方块，例如转圈）
+ *  - 停留点：在路线上的方块设置停留时间，敌人走到那里会停下来
  */
-export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; enemies: EnemyDef[]; apply: ApplyFn; onBack: () => void }) {
+export function RouteStep({
+  level,
+  enemies,
+  apply,
+  onBack,
+  routeHistory,
+}: {
+  level: LevelDef;
+  enemies: EnemyDef[];
+  apply: ApplyFn;
+  onBack: () => void;
+  routeHistory: RouteHistory;
+}) {
   const grid = useMemo(() => TileGrid.fromLevel(level), [level.grid, level.width, level.height]);
   const spawns = useMemo(() => grid.find('spawn'), [grid]);
   const bases = useMemo(() => grid.find('base'), [grid]);
   const [sel, setSel] = useState<{ line: string | null; block: string | null }>({ line: level.lines[0]?.id ?? null, block: null });
   const [hover, setHover] = useState<GridPos | null>(null);
+  const [tool, setTool] = useState<Tool>('path');
+  /** 停留点工具中选中的方块 */
+  const [selWait, setSelWait] = useState<GridPos | null>(null);
 
   const resolved = useMemo(() => {
     const m = new Map<string, ResolvedRoute>();
@@ -42,9 +63,40 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
   const block = line?.blocks.find((b) => b.id === sel.block) ?? null;
   const lineRoute = line ? resolved.get(line.id)! : null;
 
+  /** 当前线实际行走的方块：手动路线用正在设置的方块（还没到达基地时也可以设置停留点），自动寻路用寻路结果 */
+  const effPath: GridPos[] = line ? (line.route.mode === 'manual' ? line.route.path : lineRoute?.path ?? []) : [];
+
   const applyLines = (fn: (lines: EnemyLine[]) => EnemyLine[], mode: 'push' | 'replace') => apply((lv) => ({ ...lv, lines: fn(lv.lines) }), mode);
   const setLine = (patch: Partial<EnemyLine>) => line && applyLines((ls) => ls.map((l) => (l.id === line.id ? { ...l, ...patch } : l)), 'push');
-  const setRoute = (patch: Partial<RouteDef>) => line && setLine({ route: { ...line.route, ...patch } });
+
+  /* ---------- 路线修改：每次修改都记录下来，可以撤回 / 取消撤回 ---------- */
+  const histOf = (id: string) => {
+    let h = routeHistory.get(id);
+    if (!h) routeHistory.set(id, (h = { past: [], future: [] }));
+    return h;
+  };
+  const hist = line ? histOf(line.id) : null;
+  const setRoute = (patch: Partial<RouteDef>) => {
+    if (!line) return;
+    const h = histOf(line.id);
+    h.past.push(line.route);
+    if (h.past.length > 300) h.past.shift();
+    h.future = [];
+    setLine({ route: { ...line.route, ...patch } });
+  };
+  const undoRoute = () => {
+    const prev = line && hist?.past.pop();
+    if (!line || !hist || !prev) return;
+    hist.future.push(line.route);
+    setLine({ route: prev });
+  };
+  const redoRoute = () => {
+    const next = line && hist?.future.pop();
+    if (!line || !hist || !next) return;
+    hist.past.push(line.route);
+    setLine({ route: next });
+  };
+  const setWaits = (fn: (ws: RouteWait[]) => RouteWait[]) => line && setRoute({ waits: fn(line.route.waits) });
   const setBlock = (patch: Partial<SpawnBlock>) =>
     line &&
     block &&
@@ -70,6 +122,8 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
     const t = grid.get(p.x, p.y);
     const route = line.route;
 
+    if (tool === 'wait') return onWaitPointer(p, ev.button === 2);
+
     if (route.mode === 'auto') {
       if (t?.type === 'spawn') setRoute({ spawn: p });
       else if (t?.type === 'base') setRoute({ target: samePos(route.target, p) ? null : p });
@@ -77,27 +131,29 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
       return;
     }
 
-    // 手动路线
+    // 手动路线：可以重复经过同一个方块（转圈 / 往返）
     const path = route.path;
     if (ev.button === 2) {
       if (path.length > 1) setRoute({ path: path.slice(0, -1) });
       return;
     }
-    const lastTile = path[path.length - 1];
-    const passThroughSpawn = t?.type === 'spawn' && lastTile && isAdjacent(lastTile, p) && !path.some((q) => samePos(q, p));
-    if (path.length === 0 || (t?.type === 'spawn' && !passThroughSpawn)) {
-      if (t?.type !== 'spawn') return toast('手动路线需要从敌人出现点开始，请先点击一个出现点', 'error');
-      if (path.length > 0 && samePos(path[0], p)) return;
-      setRoute({ spawn: p, path: [p] });
-      return;
-    }
-    const idx = path.findIndex((q) => samePos(q, p));
-    if (idx >= 0) {
-      if (idx < path.length - 1) setRoute({ path: path.slice(0, idx + 1) });
-      return;
-    }
     const last = path[path.length - 1];
-    if (grid.isType(last.x, last.y, 'base')) return toast('路线已经到达基地。点击路线上的方块可以从该处截断重画', 'info');
+    if (ev.shiftKey && last) {
+      // Shift + 点击路线上的方块：从最后一次经过该方块的地方截断
+      const idx = path.map((q) => samePos(q, p)).lastIndexOf(true);
+      if (idx >= 0 && idx < path.length - 1) setRoute({ path: path.slice(0, idx + 1) });
+      else if (idx < 0) toast('Shift + 点击路线上的方块，可以从该处截断', 'info');
+      return;
+    }
+    if (!last || (t?.type === 'spawn' && !isAdjacent(last, p) && !samePos(path[0], p))) {
+      // 还没有起点，或点击了另一个不相邻的出现点：从这个出现点重新开始
+      if (t?.type !== 'spawn') return toast('手动路线需要从敌人出现点开始，请先点击一个出现点', 'error');
+      setRoute({ spawn: p, path: [p] });
+      if (last) toast(`已从出现点 ${formatPos(p)} 重新开始（可以「撤回」）`, 'info', 1800);
+      return;
+    }
+    if (grid.isType(last.x, last.y, 'base')) return toast('路线已经到达基地。可以「撤回」或右键删除最后一格后继续', 'info');
+    if (samePos(last, p)) return;
     if (!t?.walkable) return toast(`「${t ? t.label : '空白'}」不可行走`, 'error');
     if (isAdjacent(last, p)) {
       setRoute({ path: [...path, p] });
@@ -108,6 +164,33 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
       toast(`已自动补全 ${seg.length - 1} 格相连的路线`, 'info', 1500);
     }
   };
+
+  /** 停留点工具：点击路线上的方块添加 / 选中停留点，右键删除该方块的停留点 */
+  const onWaitPointer = (p: GridPos, right: boolean) => {
+    if (!line) return;
+    const waitsHere = line.route.waits.filter((w) => samePos(w, p));
+    if (right) {
+      if (waitsHere.length) setWaits((ws) => ws.filter((w) => !samePos(w, p)));
+      setSelWait(null);
+      return;
+    }
+    const visits = effPath.filter((q) => samePos(q, p)).length;
+    if (!visits && !waitsHere.length) return toast('停留点只能设置在路线经过的方块上', 'info');
+    if (grid.isType(p.x, p.y, 'base')) return toast('基地（终点）不能设置停留点', 'info');
+    setSelWait(p);
+    if (!waitsHere.length) setWaits((ws) => [...ws, { x: p.x, y: p.y, visit: 1, duration: DEFAULT_WAIT }]);
+  };
+
+  /** 停留点按路线顺序排列；不在路线上的排在最后 */
+  const waitRows = useMemo(() => {
+    if (!line) return [];
+    return line.route.waits
+      .map((w) => ({ w, step: stepOfVisit(effPath, w.x, w.y, w.visit) }))
+      .map((r) => ({ ...r, valid: r.step >= 0 && !grid.isType(r.w.x, r.w.y, 'base') }))
+      .sort((a, b) => (a.valid === b.valid ? a.step - b.step || a.w.visit - b.w.visit : a.valid ? -1 : 1));
+  }, [line, effPath, grid]);
+  const totalWait = waitRows.reduce((sum, r) => sum + (r.valid ? r.w.duration : 0), 0);
+  const invalidWaits = waitRows.filter((r) => !r.valid).length;
 
   const draw = (ctx: CanvasRenderingContext2D, vp: Viewport) => {
     drawGrid(ctx, grid, vp);
@@ -132,12 +215,20 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
     });
     // 当前线
     if (line) {
+      const marks: WaitMark[] = waitRows
+        .filter((r) => r.valid)
+        .map((r) => ({ x: r.w.x, y: r.w.y, duration: r.w.duration, selected: tool === 'wait' && samePos(selWait, r.w) }));
+      if (tool === 'wait') {
+        // 停留点工具：路线经过的方块淡淡高亮，表示可以点击
+        ctx.fillStyle = 'rgba(255,224,138,0.10)';
+        for (const q of effPath) ctx.fillRect(vp.ox + q.x * vp.scale + 2, vp.oy + q.y * vp.scale + 2, vp.scale - 4, vp.scale - 4);
+      }
       if (line.route.mode === 'manual') {
         const path = line.route.path;
-        if (path.length) drawRoute(ctx, path, vp, line.color, { width: Math.max(3, vp.scale * 0.12), numbers: vp.scale >= 22 });
-        // 可以继续点击的相邻方块
+        if (path.length) drawRoute(ctx, path, vp, line.color, { width: Math.max(3, vp.scale * 0.12), numbers: vp.scale >= 22, arrows: true, waits: marks });
+        // 可以继续点击的相邻方块（包括已经走过的方块：可以转圈 / 往返）
         const last = path[path.length - 1];
-        if (last && !grid.isType(last.x, last.y, 'base')) {
+        if (tool === 'path' && last && !grid.isType(last.x, last.y, 'base')) {
           for (const d of [
             { x: 1, y: 0 },
             { x: -1, y: 0 },
@@ -145,8 +236,8 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
             { x: 0, y: -1 },
           ]) {
             const q = { x: last.x + d.x, y: last.y + d.y };
-            if (grid.isWalkable(q.x, q.y) && !path.some((pp) => samePos(pp, q))) {
-              ctx.strokeStyle = 'rgba(125,255,176,0.8)';
+            if (grid.isWalkable(q.x, q.y)) {
+              ctx.strokeStyle = path.some((pp) => samePos(pp, q)) ? 'rgba(255,224,138,0.75)' : 'rgba(125,255,176,0.8)';
               ctx.lineWidth = 2;
               ctx.setLineDash([4, 3]);
               ctx.strokeRect(vp.ox + q.x * vp.scale + 3, vp.oy + q.y * vp.scale + 3, vp.scale - 6, vp.scale - 6);
@@ -155,7 +246,12 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
           }
         }
       } else if (lineRoute?.path) {
-        drawRoute(ctx, lineRoute.path, vp, line.color, { width: Math.max(3, vp.scale * 0.12) });
+        drawRoute(ctx, lineRoute.path, vp, line.color, { width: Math.max(3, vp.scale * 0.12), arrows: true, waits: marks });
+      }
+      if (tool === 'wait' && selWait) {
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(vp.ox + selWait.x * vp.scale + 1.5, vp.oy + selWait.y * vp.scale + 1.5, vp.scale - 3, vp.scale - 3);
       }
       // 起点 / 目的地高亮
       const ring = (p: GridPos | null, color: string) => {
@@ -185,15 +281,28 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
             <button className="btn btn-s btn-ghost" onClick={onBack}>
               ← 返回地图搭建
             </button>
+            <Segmented
+              value={tool}
+              options={[
+                { value: 'path', label: '编辑路线', title: '在地图上设置路线' },
+                { value: 'wait', label: '⏸ 停留点', title: '点击路线上的方块，设置敌人在那里停留的时间' },
+              ]}
+              onChange={(v) => {
+                setTool(v);
+                setSelWait(null);
+              }}
+            />
             <span className="muted small">
-              {line
-                ? line.route.mode === 'manual'
-                  ? `手动设置「${line.name}」：从出现点开始，逐个点击相连的地面方块直到基地；右键撤销一格，点击路线上的方块可从该处截断`
-                  : `自动寻路「${line.name}」：点击出现点选择起点，点击基地指定目的地（再次点击取消，取消后前往最近的基地）`
-                : '选择或新建一条敌人线'}
+              {!line
+                ? '选择或新建一条敌人线'
+                : tool === 'wait'
+                  ? `停留点「${line.name}」：点击路线经过的方块添加停留点，在右侧设置停留时间；右键删除该方块的停留点`
+                  : line.route.mode === 'manual'
+                    ? `手动设置「${line.name}」：从出现点开始逐个点击相连的方块直到基地，可以重复经过同一个方块（转圈）；右键删除最后一格，Shift+点击从该处截断`
+                    : `自动寻路「${line.name}」：点击出现点选择起点，点击基地指定目的地（再次点击取消，取消后前往最近的基地）`}
             </span>
           </div>
-          <GridCanvas cols={level.width} rows={level.height} draw={draw} onPointer={onPointer} onHover={setHover} cursor={line ? 'pointer' : 'default'} maxCell={60} />
+          <GridCanvas cols={level.width} rows={level.height} draw={draw} onPointer={onPointer} onHover={setHover} cursor={line ? (tool === 'wait' ? 'cell' : 'pointer') : 'default'} maxCell={60} />
         </section>
 
         <aside className="route-props">
@@ -261,10 +370,10 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
                 ) : (
                   <Field label="手动路线">
                     <div className="row gap-s wrap">
-                      <button className="btn btn-s" disabled={line.route.path.length <= 1} onClick={() => setRoute({ path: line.route.path.slice(0, -1) })}>
-                        撤销一格
+                      <button className="btn btn-s" disabled={line.route.path.length <= 1} onClick={() => setRoute({ path: line.route.path.slice(0, -1) })} title="和右键点击地图一样">
+                        删除最后一格
                       </button>
-                      <button className="btn btn-s" onClick={() => setRoute({ path: line.route.spawn ? [line.route.spawn] : [] })}>
+                      <button className="btn btn-s" disabled={line.route.path.length <= 1} onClick={() => setRoute({ path: line.route.spawn ? [line.route.spawn] : [] })}>
                         清空
                       </button>
                       <button
@@ -280,19 +389,54 @@ export function RouteStep({ level, enemies, apply, onBack }: { level: LevelDef; 
                         用自动路线填充
                       </button>
                     </div>
-                    <span className="field-note">已设置 {line.route.path.length} 格</span>
+                    <span className="field-note">
+                      已设置 {line.route.path.length} 格
+                      {line.route.path.length > new Set(line.route.path.map((q) => `${q.x},${q.y}`)).size ? '（有重复经过的方块）' : ''}
+                    </span>
                   </Field>
                 )}
+                <Field label="路线修改">
+                  <div className="row gap-s">
+                    <button className="btn btn-s" disabled={!hist?.past.length} onClick={undoRoute} title="撤回这条线上一次的路线修改（路线、出现点、目的地、停留点）">
+                      ↶ 撤回
+                    </button>
+                    <button className="btn btn-s" disabled={!hist?.future.length} onClick={redoRoute} title="恢复刚才撤回的修改">
+                      ↷ 取消撤回
+                    </button>
+                    <span className="muted small">
+                      {hist?.past.length ? `可撤回 ${hist.past.length} 步` : ''}
+                    </span>
+                  </div>
+                </Field>
                 <div className={`route-status ${lineRoute?.path ? 'ok' : 'bad'}`}>
-                  {lineRoute?.path ? `✓ 路线有效：${lineRoute.path.length} 格，${formatPos(lineRoute.path[0])} → ${formatPos(lineRoute.path[lineRoute.path.length - 1])}` : `✗ ${lineRoute?.error}`}
+                  {lineRoute?.path
+                    ? `✓ 路线有效：${lineRoute.path.length} 格，${formatPos(lineRoute.path[0])} → ${formatPos(lineRoute.path[lineRoute.path.length - 1])}${totalWait > 0 ? `，停留共 ${Math.round(totalWait * 100) / 100} 秒` : ''}`
+                    : `✗ ${lineRoute?.error}`}
                 </div>
               </div>
+
+              <WaitList
+                rows={waitRows}
+                path={effPath}
+                selected={selWait}
+                invalidCount={invalidWaits}
+                active={tool === 'wait'}
+                onActivate={() => setTool('wait')}
+                onSelect={(p) => {
+                  setTool('wait');
+                  setSelWait(p);
+                }}
+                onChange={(w, duration) => setWaits((ws) => ws.map((x) => (x === w ? { ...x, duration } : x)))}
+                onAdd={(p, visit) => setWaits((ws) => [...ws, { x: p.x, y: p.y, visit, duration: DEFAULT_WAIT }])}
+                onRemove={(w) => setWaits((ws) => ws.filter((x) => x !== w))}
+              />
 
               {block ? (
                 <BlockProps
                   block={block}
                   enemies={enemies}
                   pathLength={lineRoute?.path?.length ?? 0}
+                  totalWait={lineRoute?.waits?.total ?? 0}
                   onChange={setBlock}
                   onDuplicate={() => {
                     const b = { ...block, id: shortUid('B'), startTime: block.startTime + blockDuration(block) + Math.max(1, block.interval) };
@@ -350,6 +494,7 @@ function BlockProps({
   block,
   enemies,
   pathLength,
+  totalWait,
   onChange,
   onDuplicate,
   onDelete,
@@ -357,6 +502,7 @@ function BlockProps({
   block: SpawnBlock;
   enemies: EnemyDef[];
   pathLength: number;
+  totalWait: number;
   onChange: (p: Partial<SpawnBlock>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -393,7 +539,11 @@ function BlockProps({
           <div className="static-value">{Math.round(end * 10) / 10} 秒</div>
         </Field>
       </div>
-      {e && pathLength > 0 && <div className="muted small help-text">该敌人走完这条路线约需 {((pathLength - 1) / e.speed).toFixed(1)} 秒</div>}
+      {e && pathLength > 0 && (
+        <div className="muted small help-text">
+          该敌人走完这条路线约需 {((pathLength - 1) / e.speed + totalWait).toFixed(1)} 秒{totalWait > 0 ? `（含停留 ${Math.round(totalWait * 100) / 100} 秒）` : ''}
+        </div>
+      )}
       <div className="row gap-s">
         <button className="btn btn-s" onClick={onDuplicate}>
           复制积木
@@ -403,5 +553,85 @@ function BlockProps({
         </button>
       </div>
     </>
+  );
+}
+
+/** 右侧的停留点列表：按路线顺序列出，每个停留点可以修改停留时间或删除 */
+function WaitList({
+  rows,
+  path,
+  selected,
+  invalidCount,
+  active,
+  onActivate,
+  onSelect,
+  onChange,
+  onAdd,
+  onRemove,
+}: {
+  rows: { w: RouteWait; step: number; valid: boolean }[];
+  path: GridPos[];
+  selected: GridPos | null;
+  invalidCount: number;
+  active: boolean;
+  onActivate: () => void;
+  onSelect: (p: GridPos) => void;
+  onChange: (w: RouteWait, duration: number) => void;
+  onAdd: (p: GridPos, visit: number) => void;
+  onRemove: (w: RouteWait) => void;
+}) {
+  const visitsOf = (p: GridPos) => path.filter((q) => samePos(q, p)).length;
+  const selVisits = selected ? visitsOf(selected) : 0;
+  const missing = selected
+    ? Array.from({ length: selVisits }, (_, i) => i + 1).filter((v) => !rows.some((r) => samePos(r.w, selected) && r.w.visit === v))
+    : [];
+  return (
+    <div className="wait-list">
+      <div className="panel-head">
+        <span>⏸ 停留点</span>
+        {!active && (
+          <button className="btn btn-s btn-ghost" onClick={onActivate}>
+            设置停留点
+          </button>
+        )}
+      </div>
+      {rows.length === 0 && (
+        <div className="muted small help-text">
+          {active ? '点击地图上路线经过的方块添加停留点。' : '敌人走到停留点会停下来，等待设置的时间后再继续前进。'}
+        </div>
+      )}
+      {rows.map((r) => {
+        const multi = visitsOf(r.w) > 1;
+        const isSel = samePos(selected, r.w);
+        return (
+          <div key={`${r.w.x},${r.w.y},${r.w.visit}`} className={`wait-row${isSel ? ' active' : ''}${r.valid ? '' : ' invalid'}`}>
+            <button className="wait-pos mono" onClick={() => onSelect(r.w)} title={r.valid ? `路线第 ${r.step + 1} 格` : '不在路线上：路线改过以后失效，不会生效'}>
+              {formatPos(r.w)}
+              {multi || r.w.visit > 1 ? <small> 第 {r.w.visit} 次</small> : null}
+              {r.valid ? <small className="muted"> · 第 {r.step + 1} 格</small> : <small className="field-error"> 不在路线上</small>}
+            </button>
+            <NumberInput value={r.w.duration} min={0.1} max={3600} step={0.5} width={64} onChange={(v) => onChange(r.w, v)} />
+            <span className="muted small">秒</span>
+            <button className="icon-btn" onClick={() => onRemove(r.w)} aria-label="删除停留点" title="删除停留点">
+              ×
+            </button>
+          </div>
+        );
+      })}
+      {selected && missing.length > 0 && (
+        <div className="row gap-s wrap wait-add">
+          <span className="muted small">
+            {formatPos(selected)} 经过 {selVisits} 次：
+          </span>
+          {missing.map((v) => (
+            <button key={v} className="btn btn-s" onClick={() => onAdd(selected, v)}>
+              + 第 {v} 次经过时停留
+            </button>
+          ))}
+        </div>
+      )}
+      {invalidCount > 0 && <div className="field-error small">有 {invalidCount} 个停留点不在当前路线上，不会生效（可以删除）。</div>}
+      {path.length === 0 && rows.length > 0 && <div className="muted small">路线无效时停留点不会生效。</div>}
+    </div>
   );
 }
