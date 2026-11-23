@@ -51,7 +51,7 @@
       "name": "术师",
       "color": "#9b59d0",
       "placement": "high",
-      "cost": 15,
+      "cost": 25,
       "maxHp": 500,
       "atk": 150,
       "def": 15,
