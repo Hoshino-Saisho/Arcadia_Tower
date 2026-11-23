@@ -2,7 +2,7 @@
   "name": "金币",
   "color": "#f2c94c",
   "baseExp": 10,
-  "expGrowth": 0.75,
+  "expGrowth": 0.25,
   "maxLevel": 100,
   "books": [
     {"id":"B001","name":"初级经验书","color":"#6aa84f","exp":100,"cost":10},
