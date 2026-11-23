@@ -188,7 +188,7 @@
       "id": "C009",
       "name": "祭司",
       "color": "#37474f",
-      "placement": "ground",
+      "placement": "high",
       "cost": 15,
       "maxHp": 1000,
       "atk": 150,
@@ -197,15 +197,15 @@
       "damageType": "true",
       "attackTarget": "ally",
       "targetCount": 1,
-      "attackInterval": 1,
+      "attackInterval": 1.5,
       "range": 2.5,
       "blockCount": 1,
-      "maxDeploy": 0,
+      "maxDeploy": 1,
       "attackType": "area",
       "skills": [],
       "skillSlots": 1,
       "onHit": {
-        "modifiers": [{"stat":"maxHp","mode":"percent","value":120},{"stat":"range","mode":"add","value":1}],
+        "modifiers": [{"stat":"maxHp","mode":"percent","value":1200},{"stat":"range","mode":"add","value":1}],
         "duration": 2
       }
     }
