@@ -166,7 +166,7 @@
       "name": "审判者",
       "color": "#f6e58d",
       "placement": "ground",
-      "cost": 28,
+      "cost": 20,
       "maxHp": 1000,
       "atk": 95,
       "def": 60,
