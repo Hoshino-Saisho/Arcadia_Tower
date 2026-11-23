@@ -59,7 +59,7 @@
       "damageType": "magic",
       "attackTarget": "enemy",
       "targetCount": 1,
-      "attackInterval": 1.6,
+      "attackInterval": 2,
       "range": 2.2,
       "blockCount": 0,
       "maxDeploy": 0,
