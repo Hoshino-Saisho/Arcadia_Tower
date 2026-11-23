@@ -209,7 +209,7 @@
           {"stat":"range","mode":"add","value":1},
           {"stat":"def","mode":"percent","value":40},
           {"stat":"res","mode":"percent","value":40},
-          {"stat":"maxHp","mode":"percent","value":220}
+          {"stat":"maxHp","mode":"percent","value":2200}
         ],
         "duration": 2
       }
