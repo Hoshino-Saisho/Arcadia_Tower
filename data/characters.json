@@ -213,6 +213,28 @@
         ],
         "duration": 2
       }
+    },
+    {
+      "id": "C010",
+      "name": "资本家",
+      "color": "#f0ad4e",
+      "placement": "ground",
+      "cost": 10,
+      "maxHp": 1000,
+      "atk": 0,
+      "def": 50,
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 1,
+      "range": 1,
+      "blockCount": 1,
+      "maxDeploy": 0,
+      "attackType": "basic",
+      "skills": ["S014"],
+      "skillSlots": 1,
+      "onHit": null
     }
   ]
 }
