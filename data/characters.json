@@ -74,7 +74,7 @@
       "name": "重装",
       "color": "#7f8c8d",
       "placement": "ground",
-      "cost": 16,
+      "cost": 15,
       "maxHp": 2600,
       "atk": 50,
       "def": 240,
