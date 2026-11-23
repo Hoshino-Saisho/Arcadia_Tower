@@ -26,6 +26,30 @@
       ]
     },
     {
+      "id": "S014",
+      "name": "新技能",
+      "color": "#f2b544",
+      "spMax": 20,
+      "spInitial": 0,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 10,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [{"stat":"atk","mode":"percent","value":30}],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical"
+        }
+      ]
+    },
+    {
       "id": "S002",
       "name": "坚守",
       "color": "#9aa5b1",
