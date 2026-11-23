@@ -1,0 +1,146 @@
+{
+  "id": "CH1_1",
+  "chapterId": "CH1",
+  "index": 1,
+  "version": 2,
+  "width": 16,
+  "height": 9,
+  "grid": [
+    "..............S.",
+    ".BXXGG.....GGXX.",
+    "...HHGXXXXXGHHX.",
+    ".BXXGG..H..G..G.",
+    "...........XHHG.",
+    "...........XXGG.",
+    "...HH.........X.",
+    ".BXXGXXXXXXXXXX.",
+    "................"
+  ],
+  "settings": {
+    "name": "CH1_1",
+    "initialHp": 10,
+    "initialMoney": 20,
+    "autoMoney": true,
+    "moneyPerMinute": 30,
+    "availableCharacters": [],
+    "battleMusic": ""
+  },
+  "lines": [
+    {
+      "id": "Lc5we63ihiv",
+      "name": "敌人线 1",
+      "color": "#e8a33d",
+      "route": {
+        "mode": "manual",
+        "spawn": {"x":14,"y":0},
+        "target": null,
+        "path": [
+          {"x":14,"y":0},
+          {"x":14,"y":1},
+          {"x":13,"y":1},
+          {"x":12,"y":1},
+          {"x":11,"y":1},
+          {"x":11,"y":2},
+          {"x":10,"y":2},
+          {"x":9,"y":2},
+          {"x":8,"y":2},
+          {"x":7,"y":2},
+          {"x":6,"y":2},
+          {"x":5,"y":2},
+          {"x":5,"y":3},
+          {"x":4,"y":3},
+          {"x":3,"y":3},
+          {"x":2,"y":3},
+          {"x":1,"y":3}
+        ]
+      },
+      "blocks": [
+        {"id":"Bc7mtz3lfvm","enemyId":"E001","count":3,"interval":2,"startTime":1},
+        {"id":"Bc9e6l3otzc","enemyId":"E003","count":1,"interval":2,"startTime":31.5}
+      ]
+    },
+    {
+      "id": "Lc6lcl3j3jw",
+      "name": "敌人线 2",
+      "color": "#4fb3a9",
+      "route": {
+        "mode": "manual",
+        "spawn": {"x":14,"y":0},
+        "target": null,
+        "path": [
+          {"x":14,"y":0},
+          {"x":14,"y":1},
+          {"x":14,"y":2},
+          {"x":14,"y":3},
+          {"x":14,"y":4},
+          {"x":14,"y":5},
+          {"x":13,"y":5},
+          {"x":12,"y":5},
+          {"x":11,"y":5},
+          {"x":11,"y":4},
+          {"x":11,"y":3},
+          {"x":11,"y":2},
+          {"x":10,"y":2},
+          {"x":9,"y":2},
+          {"x":8,"y":2},
+          {"x":7,"y":2},
+          {"x":6,"y":2},
+          {"x":5,"y":2},
+          {"x":5,"y":1},
+          {"x":4,"y":1},
+          {"x":3,"y":1},
+          {"x":2,"y":1},
+          {"x":1,"y":1}
+        ]
+      },
+      "blocks": [
+        {"id":"Bcb8kh3sb93","enemyId":"E001","count":3,"interval":2,"startTime":15},
+        {"id":"Bc9ihy3p2pp","enemyId":"E003","count":1,"interval":2,"startTime":41},
+        {"id":"Bc9qsa3q6ig","enemyId":"E004","count":1,"interval":2,"startTime":43.5}
+      ]
+    },
+    {
+      "id": "Lc71tj3kcrd",
+      "name": "敌人线 3",
+      "color": "#d1605e",
+      "route": {
+        "mode": "manual",
+        "spawn": {"x":14,"y":0},
+        "target": null,
+        "path": [
+          {"x":14,"y":0},
+          {"x":14,"y":1},
+          {"x":13,"y":1},
+          {"x":12,"y":1},
+          {"x":11,"y":1},
+          {"x":11,"y":2},
+          {"x":11,"y":3},
+          {"x":11,"y":4},
+          {"x":11,"y":5},
+          {"x":12,"y":5},
+          {"x":13,"y":5},
+          {"x":14,"y":5},
+          {"x":14,"y":6},
+          {"x":14,"y":7},
+          {"x":13,"y":7},
+          {"x":12,"y":7},
+          {"x":11,"y":7},
+          {"x":10,"y":7},
+          {"x":9,"y":7},
+          {"x":8,"y":7},
+          {"x":7,"y":7},
+          {"x":6,"y":7},
+          {"x":5,"y":7},
+          {"x":4,"y":7},
+          {"x":3,"y":7},
+          {"x":2,"y":7},
+          {"x":1,"y":7}
+        ]
+      },
+      "blocks": [
+        {"id":"Bc8qtt3mj9s","enemyId":"E002","count":3,"interval":0.2,"startTime":1},
+        {"id":"Bcaf013rn6z","enemyId":"E002","count":5,"interval":5,"startTime":26.5}
+      ]
+    }
+  ]
+}
