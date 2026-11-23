@@ -210,7 +210,8 @@
           {"stat":"def","mode":"percent","value":40},
           {"stat":"res","mode":"percent","value":40},
           {"stat":"maxHp","mode":"percent","value":2200},
-          {"stat":"atk","mode":"percent","value":40}
+          {"stat":"atk","mode":"percent","value":40},
+          {"stat":"attackInterval","mode":"percent","value":-20}
         ],
         "duration": 2
       }
