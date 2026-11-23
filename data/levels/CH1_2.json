@@ -21,7 +21,7 @@
     "initialHp": 10,
     "initialMoney": 20,
     "autoMoney": true,
-    "moneyPerMinute": 30,
+    "moneyPerMinute": 130,
     "availableCharacters": [],
     "battleMusic": "",
     "rewardCurrency": null,
