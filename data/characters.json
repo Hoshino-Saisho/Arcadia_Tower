@@ -60,7 +60,7 @@
       "attackTarget": "enemy",
       "targetCount": 1,
       "attackInterval": 2,
-      "range": 2.2,
+      "range": 2.5,
       "blockCount": 0,
       "maxDeploy": 0,
       "attackType": "area",
