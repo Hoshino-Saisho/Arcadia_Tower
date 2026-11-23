@@ -22,7 +22,28 @@ function targetText(e: SkillEffect): string {
   return `${where}${who}${limit}`;
 }
 
-export function describeEffect(e: SkillEffect, skillDuration: number): string {
+/** 金钱效果的说明；敌人释放时玩家失去金钱 */
+function describeMoney(e: SkillEffect, skillDuration: number, side: 'ally' | 'enemy'): string {
+  const sign = side === 'enemy' ? -1 : 1;
+  const who = side === 'enemy' ? '玩家' : '';
+  // 角色：获得 / 消耗；敌人：玩家获得 / 玩家失去
+  const verb = (v: number) => (v * sign >= 0 ? '获得' : side === 'enemy' ? '失去' : '消耗');
+  const parts: string[] = [];
+  if (e.money) parts.push(`${who}立即${verb(e.money)} ${formatNumber(Math.abs(e.money))} 金钱`);
+  if (e.moneyRate) {
+    const dur = e.duration > 0 ? e.duration : skillDuration;
+    parts.push(
+      dur > 0
+        ? `${who}每秒${verb(e.moneyRate)} ${formatNumber(Math.abs(e.moneyRate))} 金钱，持续 ${formatNumber(dur)} 秒（共 ${formatNumber(Math.abs(e.moneyRate) * dur)}）`
+        : `每秒金钱（无持续时间，不生效）`,
+    );
+  }
+  return parts.length ? `金钱：${parts.join('，')}` : '金钱：（未设置）';
+}
+
+/** side：释放者是角色还是敌人（敌人的金钱效果 = 玩家失去金钱） */
+export function describeEffect(e: SkillEffect, skillDuration: number, side: 'ally' | 'enemy' = 'ally'): string {
+  if (e.kind === 'money') return describeMoney(e, skillDuration, side);
   const t = targetText(e);
   if (e.kind === 'damage') {
     if (e.amount < 0) return `治疗${t}，治疗量为攻击力的 ${formatNumber(-e.amount)}%`;
@@ -34,8 +55,8 @@ export function describeEffect(e: SkillEffect, skillDuration: number): string {
   return `${t}：${e.modifiers.map(formatModifier).join('，')}${durText}`;
 }
 
-export function describeSkill(s: SkillDef): string[] {
-  return s.effects.length ? s.effects.map((e) => describeEffect(e, s.duration)) : ['（没有效果）'];
+export function describeSkill(s: SkillDef, side: 'ally' | 'enemy' = 'ally'): string[] {
+  return s.effects.length ? s.effects.map((e) => describeEffect(e, s.duration, side)) : ['（没有效果）'];
 }
 
 export function describeAttack(opts: {

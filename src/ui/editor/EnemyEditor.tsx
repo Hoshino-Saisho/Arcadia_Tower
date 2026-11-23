@@ -12,6 +12,7 @@ import { drawRangeTiles } from '../../game/renderer';
 import { drawEnemyToken, drawTile } from '../../game/shapes';
 import { listAttackTypes } from '../../game/attacks';
 import { Checkbox, ColorInput, Field, IconPicker, NumberInput, Segmented, TextInput } from '../common/fields';
+import { IconFramer } from '../common/iconFramer';
 import { RangeGrid } from '../common/rangeGrid';
 import { UnitToken } from '../common/tokens';
 import { DefListPanel, SaveBar } from './DefListPanel';
@@ -95,8 +96,9 @@ export function EnemyEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="体型" hint="0.5 ~ 2，影响显示大小">
                 <NumberInput value={e.size} min={0.5} max={2} step={0.05} onChange={(v) => set({ size: v })} />
               </Field>
-              <Field label="图标（可选）" hint="设置后优先显示图标" wide>
-                <IconPicker value={e.icon} baseName={e.id} onChange={(v) => set({ icon: v })} />
+              <Field label="图标（可选）" hint="设置后优先显示；上传后在图片上选择中心点" wide block>
+                <IconPicker value={e.icon} baseName={e.id} onChange={(v) => set({ icon: v, iconCenter: undefined, iconZoom: undefined })} />
+                <IconFramer kind="enemy" def={e} onChange={(p) => set(p)} />
               </Field>
             </div>
 

@@ -74,7 +74,7 @@ function Row({ k, v }: { k: string; v: ReactNode }) {
   );
 }
 
-function SkillList({ ids, slots, skills }: { ids: string[]; slots: number; skills: Map<string, SkillDef> }) {
+function SkillList({ ids, slots, skills, side = 'ally' }: { ids: string[]; slots: number; skills: Map<string, SkillDef>; side?: 'ally' | 'enemy' }) {
   const list = ids.map((id) => skills.get(id)).filter((s): s is SkillDef => !!s);
   return (
     <>
@@ -84,7 +84,7 @@ function SkillList({ ids, slots, skills }: { ids: string[]; slots: number; skill
       {list.length === 0 && <div className="muted small">没有技能</div>}
       <div className="skill-list">
         {list.map((s) => (
-          <SkillCard key={s.id} skill={s} />
+          <SkillCard key={s.id} skill={s} side={side} />
         ))}
       </div>
     </>
@@ -157,7 +157,7 @@ function EnemyDetail({ def, skills }: { def: EnemyDef; skills: Map<string, Skill
         </div>
       )}
       {describeOnHit(def.onHit) && <div className="codex-note">{describeOnHit(def.onHit)}</div>}
-      <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} />
+      <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} side="enemy" />
     </>
   );
 }

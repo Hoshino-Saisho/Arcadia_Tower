@@ -3,15 +3,17 @@ import { importIcon } from '../../core/storage/repository';
 import { iconStatus, useIcon } from '../../game/icons';
 import { toast } from './toast';
 
-export function Field({ label, hint, children, wide }: { label: string; hint?: string; children: ReactNode; wide?: boolean }) {
+/** block = 用 div 而不是 label 包裹（里面有可以点击的图片等多个控件时，避免点击被转发到第一个按钮） */
+export function Field({ label, hint, children, wide, block }: { label: string; hint?: string; children: ReactNode; wide?: boolean; block?: boolean }) {
+  const Tag = block ? 'div' : 'label';
   return (
-    <label className={`field${wide ? ' field-wide' : ''}`}>
+    <Tag className={`field${wide ? ' field-wide' : ''}`}>
       <span className="field-label">
         {label}
         {hint && <span className="field-hint">{hint}</span>}
       </span>
       {children}
-    </label>
+    </Tag>
   );
 }
 

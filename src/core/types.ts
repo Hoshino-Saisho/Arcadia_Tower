@@ -19,6 +19,12 @@ export interface GridPos {
   y: number;
 }
 
+/** 图标中心点：图片宽 / 高的比例（0~1），这一点会对齐到圆形 / 多边形的中心 */
+export interface IconPoint {
+  x: number;
+  y: number;
+}
+
 /** 角色可部署的位置 */
 export type PlacementType = 'ground' | 'high' | 'any';
 
@@ -58,9 +64,12 @@ export interface OnHitEffect {
 
 /** 技能效果 */
 export interface SkillEffect {
-  /** modify = 增益 / 减益（修改属性一段时间）；damage = 伤害 / 治疗（立即生效） */
-  kind: 'modify' | 'damage';
-  /** 作用对象：自身 / 友方 / 敌方 */
+  /**
+   * modify = 增益 / 减益（修改属性一段时间）；damage = 伤害 / 治疗（立即生效）；
+   * money = 金钱（释放时立即获得 + 持续期间每秒获得；敌人释放时玩家失去对应金钱）
+   */
+  kind: 'modify' | 'damage' | 'money';
+  /** 作用对象：自身 / 友方 / 敌方（money 不使用） */
   target: 'self' | 'allies' | 'enemies';
   /** range = 半径内；all = 全场 */
   scope: 'range' | 'all';
@@ -70,11 +79,15 @@ export interface SkillEffect {
   maxTargets: number;
   /** modify：属性修改列表（可同时有增益和减益） */
   modifiers: StatModifier[];
-  /** modify：持续时间（秒），0 = 跟随技能持续时间 */
+  /** modify / money：持续时间（秒），0 = 跟随技能持续时间 */
   duration: number;
   /** damage：数值为攻击力（绝对值）的百分比；正数 = 伤害，负数 = 治疗 */
   amount: number;
   damageType: SkillDamageType;
+  /** money：释放时立即获得的金钱（负数 = 消耗） */
+  money: number;
+  /** money：持续期间每秒获得的金钱（负数 = 每秒消耗）；施放者离场后停止 */
+  moneyRate: number;
 }
 
 /** 技能定义（技能库 data/skills.json） */
@@ -110,6 +123,10 @@ export interface CharacterDef {
   color: string;
   /** 可选图标：data 目录下的相对路径（如 "icons/C001.png"）或 data URL。设置后优先显示图标 */
   icon?: string;
+  /** 图标中心点（默认图片正中 0.5 / 0.5） */
+  iconCenter?: IconPoint;
+  /** 图标缩放：1 = 短边刚好铺满圆形，>1 放大，<1 缩小（默认 1） */
+  iconZoom?: number;
   placement: PlacementType;
   /** 部署费用 */
   cost: number;
@@ -154,6 +171,10 @@ export interface EnemyDef {
   name: string;
   color: string;
   icon?: string;
+  /** 图标中心点（默认图片正中 0.5 / 0.5） */
+  iconCenter?: IconPoint;
+  /** 图标缩放（默认 1） */
+  iconZoom?: number;
   /** 外形：3~6 边形 */
   sides: EnemySides;
   /** 体型缩放（0.5 ~ 2） */

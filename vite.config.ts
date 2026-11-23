@@ -18,7 +18,8 @@ const gitSync = createRequire(import.meta.url)('./electron/git-sync.cjs') as {
  *   POST   /__data-rename       {"from": rel, "to": rel}
  */
 function dataApiPlugin(): Plugin {
-  const dataRoot = path.resolve(__dirname, 'data');
+  // 和桌面版一样，可以用环境变量 ARCADIA_DATA_DIR 指定其他数据目录（例如测试用的副本）
+  const dataRoot = process.env.ARCADIA_DATA_DIR ? path.resolve(process.env.ARCADIA_DATA_DIR) : path.resolve(__dirname, 'data');
 
   const safePath = (rel: string): string | null => {
     const clean = decodeURIComponent(rel).replace(/^\/+/, '');

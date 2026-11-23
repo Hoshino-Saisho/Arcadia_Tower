@@ -11,6 +11,7 @@ import { useIcon } from '../../game/icons';
 import { drawRangeTiles } from '../../game/renderer';
 import { drawCharacterToken, drawTile } from '../../game/shapes';
 import { ColorInput, Field, IconPicker, NumberInput, Segmented, TextInput } from '../common/fields';
+import { IconFramer } from '../common/iconFramer';
 import { RangeGrid } from '../common/rangeGrid';
 import { UnitToken } from '../common/tokens';
 import { DefListPanel, SaveBar } from './DefListPanel';
@@ -81,8 +82,9 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="颜色" hint="没有图标时显示为该颜色的圆形" wide>
                 <ColorInput value={c.color} onChange={(v) => set({ color: v })} />
               </Field>
-              <Field label="图标（可选）" hint="以后绘制好的图标，设置后优先显示" wide>
-                <IconPicker value={c.icon} baseName={c.id} onChange={(v) => set({ icon: v })} />
+              <Field label="图标（可选）" hint="设置后优先显示；上传后在图片上选择中心点" wide block>
+                <IconPicker value={c.icon} baseName={c.id} onChange={(v) => set({ icon: v, iconCenter: undefined, iconZoom: undefined })} />
+                <IconFramer kind="character" def={c} onChange={(p) => set(p)} />
               </Field>
             </div>
 

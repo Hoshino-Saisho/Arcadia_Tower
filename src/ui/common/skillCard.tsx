@@ -8,8 +8,11 @@ export function SkillCard({
   onClick,
   disabled,
   badge,
+  side = 'ally',
 }: {
   skill: SkillDef;
+  /** 释放者：角色 / 敌人（影响金钱效果的说明） */
+  side?: 'ally' | 'enemy';
   selected?: boolean;
   onClick?: () => void;
   disabled?: boolean;
@@ -25,7 +28,7 @@ export function SkillCard({
       </div>
       <div className="skill-card-trigger">{describeSkillTrigger(skill)}</div>
       <ul className="skill-card-effects">
-        {describeSkill(skill).map((line, i) => (
+        {describeSkill(skill, side).map((line, i) => (
           <li key={i}>{line}</li>
         ))}
       </ul>

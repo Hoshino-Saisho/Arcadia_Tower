@@ -26,6 +26,19 @@ export type GameStatus = 'running' | 'won' | 'lost';
 export const FIXED_DT = 1 / 60;
 const PROJECTILE_SPEED = 9;
 
+/** 技能带来的持续金钱变化（施放者离场后停止） */
+export interface MoneyFlow {
+  key: string;
+  sourceUid: number;
+  sourceSide: 'ally' | 'enemy';
+  /** 每秒变化量（已按阵营换算：敌人释放 = 负数） */
+  rate: number;
+  remaining: number;
+  /** 飘字用：累计的变化量和计时 */
+  acc: number;
+  tick: number;
+}
+
 export interface EngineOptions {
   /** 技能库 */
   skills?: SkillDef[];
@@ -63,6 +76,7 @@ export class GameEngine {
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
   effects: Effect[] = [];
+  moneyFlows: MoneyFlow[] = [];
 
   private schedule: SpawnEvent[];
   private nextEvent = 0;
@@ -99,6 +113,7 @@ export class GameEngine {
     }
     this.time += dt;
     this.money += this.moneyPerSecond * dt;
+    this.updateMoneyFlows(dt);
 
     this.spawnDue();
     this.updateStatuses(dt);
@@ -172,13 +187,60 @@ export class GameEngine {
         for (const s of c.statuses) s.remaining -= dt;
         c.statuses = c.statuses.filter((s) => s.remaining > 0);
       }
-      c.stats = c.statuses.length ? applyModifiers(c.base, c.statuses.map((s) => s.modifiers)) : { ...c.base };
+      this.refreshStats(c);
       if (c.stats.hpRegen !== 0) {
         if (c.stats.hpRegen > 0) c.hp = Math.min(c.stats.maxHp, c.hp + c.stats.hpRegen * dt);
         else c.hp += c.stats.hpRegen * dt;
       }
       if (c.hp > c.stats.maxHp) c.hp = c.stats.maxHp;
     }
+  }
+
+  /**
+   * 按当前的增益 / 减益重算属性。
+   * 生命上限变化时，当前生命同步增加 / 减少同样的数值（例如 100 上限、40 生命，+20% → 120 上限、60 生命；
+   * 效果结束 → 100 上限、40 生命）。上限降低不会直接致死，最少保留 1 点生命。
+   */
+  private refreshStats(c: Combatant) {
+    const prevMax = c.stats.maxHp;
+    c.stats = c.statuses.length ? applyModifiers(c.base, c.statuses.map((s) => s.modifiers)) : { ...c.base };
+    const delta = c.stats.maxHp - prevMax;
+    if (c.hp > 0 && Math.abs(delta) > 1e-9) c.hp = Math.max(Math.min(1, c.hp), c.hp + delta);
+    if (c.hp > c.stats.maxHp) c.hp = c.stats.maxHp;
+  }
+
+  /** 技能的持续金钱：每秒结算，施放者离场（撤退 / 被击败）后停止 */
+  private updateMoneyFlows(dt: number) {
+    if (!this.moneyFlows.length) return;
+    for (const f of this.moneyFlows) {
+      const src = f.sourceSide === 'ally' ? this.unitByUid(f.sourceUid) : this.enemyByUid(f.sourceUid);
+      const t = Math.min(dt, Math.max(0, f.remaining));
+      f.remaining -= dt;
+      if (!src || src.hp <= 0) f.remaining = 0;
+      else {
+        f.acc += this.changeMoney(f.rate * t);
+        f.tick += dt;
+      }
+      if (src && (f.tick >= 1 || f.remaining <= 0)) {
+        if (Math.abs(f.acc) >= 0.5) this.moneyText(src, f.acc);
+        f.acc = 0;
+        f.tick = 0;
+      }
+    }
+    this.moneyFlows = this.moneyFlows.filter((f) => f.remaining > 0);
+  }
+
+  /** 改变玩家金钱（最少为 0），返回实际变化量 */
+  changeMoney(amount: number): number {
+    const before = this.money;
+    this.money = Math.max(0, this.money + amount);
+    return this.money - before;
+  }
+
+  private moneyText(at: { x: number; y: number }, amount: number) {
+    const v = Math.round(Math.abs(amount));
+    if (v < 1) return;
+    this.addEffect({ kind: 'text', x: at.x + 0.2, y: at.y - 0.55, duration: 1, color: amount > 0 ? '#ffd166' : '#ff9f6b', text: `${amount > 0 ? '+' : '−'}${v}` });
   }
 
   /** SP 自动积累、技能持续时间、自动释放 */
@@ -455,9 +517,8 @@ export class GameEngine {
     } else {
       target.statuses.push({ key: s.key, name: s.name, color: s.color, modifiers: s.modifiers, remaining: s.duration, total: s.duration, hasBuff, hasDebuff });
     }
-    // 立即重算属性，让本帧的攻击就能用上
-    target.stats = applyModifiers(target.base, target.statuses.map((x) => x.modifiers));
-    if (target.hp > target.stats.maxHp) target.hp = target.stats.maxHp;
+    // 立即重算属性，让本帧的攻击就能用上（生命上限变化时同步当前生命）
+    this.refreshStats(target);
   }
 
   /** 技能效果作用的目标 */
@@ -478,7 +539,7 @@ export class GameEngine {
 
   /** 自动释放前判断是否值得释放：攻击敌人的技能需要有敌人，治疗技能需要有受伤的队友 */
   private worthCasting(c: Combatant, skill: SkillDef): boolean {
-    const offensive = skill.effects.filter((e) => e.target === 'enemies');
+    const offensive = skill.effects.filter((e) => e.kind !== 'money' && e.target === 'enemies');
     if (offensive.length) return offensive.some((e) => this.effectTargets(c, e).length > 0);
     const heals = skill.effects.filter((e) => e.kind === 'damage' && e.amount < 0);
     if (heals.length) return heals.some((e) => this.effectTargets(c, e).some((t) => t.hp < t.stats.maxHp - 0.01));
@@ -493,6 +554,18 @@ export class GameEngine {
       s.remaining = skill.duration;
     }
     skill.effects.forEach((eff, i) => {
+      const key = `skill:${skill.id}:${c.uid}:${i}`;
+      if (eff.kind === 'money') {
+        // 角色释放 = 玩家获得金钱；敌人释放 = 玩家失去金钱
+        const sign = c.side === 'ally' ? 1 : -1;
+        if (eff.money) this.moneyText(c, this.changeMoney(sign * eff.money));
+        const duration = eff.duration > 0 ? eff.duration : skill.duration;
+        if (eff.moneyRate && duration > 0) {
+          this.moneyFlows = this.moneyFlows.filter((f) => f.key !== key);
+          this.moneyFlows.push({ key, sourceUid: c.uid, sourceSide: c.side, rate: sign * eff.moneyRate, remaining: duration, acc: 0, tick: 0 });
+        }
+        return;
+      }
       const targets = this.effectTargets(c, eff);
       if (eff.kind === 'damage') {
         const value = (Math.abs(c.stats.atk) * eff.amount) / 100;
@@ -506,7 +579,7 @@ export class GameEngine {
       } else {
         const duration = eff.duration > 0 ? eff.duration : skill.duration;
         for (const t of targets) {
-          this.addStatus(t, { key: `skill:${skill.id}:${c.uid}:${i}`, name: skill.name, color: skill.color, modifiers: eff.modifiers, duration });
+          this.addStatus(t, { key, name: skill.name, color: skill.color, modifiers: eff.modifiers, duration });
         }
       }
     });

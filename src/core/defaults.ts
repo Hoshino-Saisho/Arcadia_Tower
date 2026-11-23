@@ -9,6 +9,7 @@ import type {
   EnemySides,
   GameSettings,
   GridPos,
+  IconPoint,
   LevelDef,
   LevelSettings,
   OnHitEffect,
@@ -87,7 +88,7 @@ export function newEnemy(id: string): EnemyDef {
 export function newEffect(kind: SkillEffect['kind'] = 'modify'): SkillEffect {
   return {
     kind,
-    target: kind === 'modify' ? 'self' : 'enemies',
+    target: kind === 'damage' ? 'enemies' : 'self',
     scope: 'range',
     radius: 0,
     maxTargets: -1,
@@ -95,6 +96,8 @@ export function newEffect(kind: SkillEffect['kind'] = 'modify'): SkillEffect {
     duration: 0,
     amount: kind === 'damage' ? 150 : 0,
     damageType: 'physical',
+    money: kind === 'money' ? 10 : 0,
+    moneyRate: 0,
   };
 }
 
@@ -184,6 +187,20 @@ const num = (v: unknown, d: number, min = -Infinity, max = Infinity) => {
   return Math.min(max, Math.max(min, n));
 };
 const str = (v: unknown, d: string) => (typeof v === 'string' ? v : d);
+/** 图标中心点：0~1；默认值（正中）不保存，保持 JSON 简洁 */
+export function iconPoint(v: any): IconPoint | undefined {
+  if (!v || typeof v.x !== 'number' || typeof v.y !== 'number' || !Number.isFinite(v.x) || !Number.isFinite(v.y)) return undefined;
+  const p = { x: Math.round(Math.min(1, Math.max(0, v.x)) * 1000) / 1000, y: Math.round(Math.min(1, Math.max(0, v.y)) * 1000) / 1000 };
+  return p.x === 0.5 && p.y === 0.5 ? undefined : p;
+}
+/** 图标缩放：0.5~4；默认值 1 不保存 */
+export function iconZoom(v: unknown): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+  const z = Math.round(Math.min(ICON_ZOOM_MAX, Math.max(ICON_ZOOM_MIN, v)) * 100) / 100;
+  return z === 1 ? undefined : z;
+}
+export const ICON_ZOOM_MIN = 0.5;
+export const ICON_ZOOM_MAX = 4;
 const strList = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []);
 const pos = (v: any): GridPos | null =>
   v && Number.isFinite(v.x) && Number.isFinite(v.y) ? { x: Math.round(v.x), y: Math.round(v.y) } : null;
@@ -212,6 +229,8 @@ export function normalizeCharacter(raw: any): CharacterDef {
     name: str(raw?.name, d.name),
     color: str(raw?.color, d.color),
     icon: typeof raw?.icon === 'string' && raw.icon ? raw.icon : undefined,
+    iconCenter: iconPoint(raw?.iconCenter),
+    iconZoom: iconZoom(raw?.iconZoom),
     placement,
     cost: num(raw?.cost, d.cost, 0),
     maxHp: num(raw?.maxHp, d.maxHp, 1),
@@ -242,6 +261,8 @@ export function normalizeEnemy(raw: any): EnemyDef {
     name: str(raw?.name, d.name),
     color: str(raw?.color, d.color),
     icon: typeof raw?.icon === 'string' && raw.icon ? raw.icon : undefined,
+    iconCenter: iconPoint(raw?.iconCenter),
+    iconZoom: iconZoom(raw?.iconZoom),
     sides,
     size: num(raw?.size, 1, 0.5, 2),
     maxHp: num(raw?.maxHp, d.maxHp, 1),
@@ -265,7 +286,7 @@ export function normalizeEnemy(raw: any): EnemyDef {
 }
 
 export function normalizeEffect(raw: any): SkillEffect {
-  const kind = raw?.kind === 'damage' ? 'damage' : 'modify';
+  const kind: SkillEffect['kind'] = raw?.kind === 'damage' || raw?.kind === 'money' ? raw.kind : 'modify';
   const d = newEffect(kind);
   return {
     kind,
@@ -277,6 +298,8 @@ export function normalizeEffect(raw: any): SkillEffect {
     duration: num(raw?.duration, 0, 0, 3600),
     amount: num(raw?.amount, d.amount, -100000, 100000),
     damageType: raw?.damageType === 'magic' || raw?.damageType === 'true' ? raw.damageType : 'physical',
+    money: num(raw?.money, d.money, -100000, 100000),
+    moneyRate: num(raw?.moneyRate, 0, -100000, 100000),
   };
 }
 

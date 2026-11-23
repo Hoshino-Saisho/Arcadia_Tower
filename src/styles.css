@@ -422,6 +422,69 @@ select.input {
   white-space: nowrap;
 }
 
+.icon-framer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-2);
+  background: rgba(255, 255, 255, 0.02);
+}
+.icon-framer-main {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.icon-framer-box {
+  position: relative;
+  flex: none;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+  border-radius: 6px;
+  overflow: hidden;
+  background:
+    repeating-conic-gradient(rgba(255, 255, 255, 0.07) 0 25%, transparent 0 50%) 0 0 / 16px 16px,
+    #0d1118;
+  outline: none;
+}
+.icon-framer-box:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.icon-framer-box img,
+.icon-framer-box svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.icon-framer-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 150px;
+}
+.icon-framer-previews {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.icon-framer-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.icon-framer-zoom input {
+  width: 100%;
+}
+.icon-framer-loading {
+  margin-top: 8px;
+}
+
 .unit-token {
   display: block;
   flex: none;
@@ -917,6 +980,7 @@ select.input {
 
 /* ---------- 战斗 ---------- */
 .battle {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1135,8 +1199,10 @@ select.input {
   cursor: pointer;
   transition: transform 0.1s, border-color 0.1s;
 }
-.deploy-card:hover {
-  transform: translateY(-3px);
+@media (hover: hover) {
+  .deploy-card:hover {
+    transform: translateY(-3px);
+  }
 }
 .deploy-card.selected {
   border-color: var(--accent);
@@ -1145,6 +1211,59 @@ select.input {
 }
 .deploy-card.disabled {
   opacity: 0.55;
+}
+/* 卡片可以拖动：不让浏览器把拖动当成滚动 / 选择文字 / 长按菜单 */
+.deploy-card {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.deploy-card.dragging {
+  opacity: 0.45;
+  border-style: dashed;
+}
+.drag-ghost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.9;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55));
+}
+.deploy-confirm {
+  position: absolute;
+  z-index: 40;
+  width: 210px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+  background: rgba(20, 26, 37, 0.97);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: fade-in 0.12s ease-out;
+}
+.deploy-confirm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.deploy-confirm-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.deploy-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.deploy-confirm-actions .btn {
+  height: 38px;
+  justify-content: center;
+  font-size: 15px;
 }
 .card-key {
   position: absolute;
@@ -2485,6 +2604,9 @@ select.input {
 .effect-card.damage {
   border-left: 3px solid #e5484d;
 }
+.effect-card.money {
+  border-left: 3px solid #f2b544;
+}
 .effect-head {
   display: flex;
   align-items: center;
@@ -2633,4 +2755,98 @@ select.input {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* ---------- 手机版舞台（等比缩放 / 横屏） ---------- */
+.game-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+.game-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.game-stage.active {
+  transform-origin: 0 0;
+  touch-action: manipulation;
+  box-shadow: 0 0 0 1px var(--border);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.stage-rotate-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.stage-rotate-btn {
+  min-width: 150px;
+  height: 44px;
+  font-size: 16px;
+  border-radius: 22px;
+}
+.stage-exit-btn {
+  position: absolute;
+  z-index: 50;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+/* 舞台内不能用跟屏幕宽度相关的单位 */
+.game-stage.active .home-title {
+  font-size: 86px;
+}
+.game-stage.active .toast {
+  max-width: 640px;
+}
+/* 舞台内的战斗界面更紧凑 */
+.game-stage.active .battle-hud {
+  height: 48px;
+  padding: 0 10px;
+  gap: 8px;
+}
+.game-stage.active .hud-stat {
+  padding: 4px 8px;
+  font-size: 14px;
+}
+.game-stage.active .hud-stats {
+  gap: 6px;
+}
+.game-stage.active .hud-level {
+  min-width: 0;
+  font-size: 14px;
+}
+.game-stage.active .hud-level > span:not(.mono) {
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-stage.active .hud-level .badge,
+.game-stage.active .battle-hud .music-control input {
+  display: none;
+}
+.game-stage.active .battle-hud .btn {
+  white-space: nowrap;
+}
+.game-stage.active .deploy-bar {
+  height: 104px;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.game-stage.active .deploy-card {
+  width: 80px;
+  height: 88px;
+}
+.game-stage.active .deploy-help {
+  display: none;
 }

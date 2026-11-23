@@ -5,12 +5,13 @@ import { levelCode } from '../../core/ids';
 import { ProgressView } from '../../core/progress';
 import { DAMAGE_TYPE_LABEL, formatModifier, formatNumber } from '../../core/stats';
 import { loadDatabase, loadLevel, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
-import type { GridPos, LevelDef } from '../../core/types';
+import type { CharacterDef, GridPos, LevelDef } from '../../core/types';
 import { FIXED_DT, GameEngine } from '../../game/engine';
 import type { Unit } from '../../game/entities';
 import { preloadIcons } from '../../game/icons';
 import { music } from '../../game/music';
 import { BattleRenderer, screenToTile, type Viewport } from '../../game/renderer';
+import { clientToLocal } from '../common/stage';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
 import { navigate } from '../router';
@@ -68,8 +69,27 @@ interface Ctrl {
   paused: boolean;
   speed: number;
   placing: string | null;
+  pending: PendingDeploy | null;
   selectedUid: number | null;
   showRoutes: boolean;
+}
+
+/** 等待确认的部署：拖到方块上（或点卡片再点方块）后暂停，选择「部署」或「取消」 */
+interface PendingDeploy {
+  id: string;
+  tile: GridPos;
+}
+
+/** 部署卡片上的一次按下：轻点 = 选中；拖动 = 拖到地图上部署；手机上横向滑动 = 滚动卡片栏 */
+interface CardPress {
+  id: string;
+  pointerId: number;
+  sx: number;
+  sy: number;
+  lastX: number;
+  lastY: number;
+  touch: boolean;
+  mode: 'press' | 'drag' | 'pan' | 'blocked';
 }
 
 function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: LevelDef; test: boolean; onRestart: () => void }) {
@@ -89,22 +109,31 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [placing, setPlacing] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingDeploy | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
   const [showRoutes, setShowRoutes] = useState(true);
   const [, setTick] = useState(0);
   const [next, setNext] = useState<{ code: string; built: boolean } | null>(null);
 
-  const ctrl = useRef<Ctrl>({ started, paused, speed, placing, selectedUid, showRoutes });
-  ctrl.current = { started, paused, speed, placing, selectedUid, showRoutes };
-  /** 选中角色（部署卡片或场上的角色）时时间变慢 */
-  const slowed = started && !paused && engine.status === 'running' && (placing != null || selectedUid != null);
+  const ctrl = useRef<Ctrl>({ started, paused, speed, placing, pending, selectedUid, showRoutes });
+  ctrl.current = { started, paused, speed, placing, pending, selectedUid, showRoutes };
+  /** 选中角色（部署卡片或场上的角色）或拖动卡片时时间变慢；等待确认部署时暂停 */
+  const slowed = started && !paused && !pending && engine.status === 'running' && (placing != null || selectedUid != null);
+
+  const battleRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLElement>(null);
+  const pressRef = useRef<CardPress | null>(null);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const ghostPos = useRef({ x: -999, y: -999 });
 
   // 画布尺寸
   useEffect(() => {
     const wrap = wrapRef.current!;
     const canvas = canvasRef.current!;
     const ro = new ResizeObserver(() => {
-      const r = wrap.getBoundingClientRect();
+      // 用布局尺寸（不受手机版舞台的缩放 / 旋转影响）
+      const r = { width: wrap.clientWidth, height: wrap.clientHeight };
       const dpr = window.devicePixelRatio || 1;
       sizeRef.current = { w: r.width, h: r.height, dpr };
       canvas.width = Math.round(r.width * dpr);
@@ -128,7 +157,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       const c = ctrl.current;
-      if (c.started && !c.paused) {
+      if (c.started && !c.paused && !c.pending) {
         const slow = c.placing != null || c.selectedUid != null ? SELECT_SLOW_FACTOR : 1;
         acc += dt * c.speed * slow;
         let guard = 0;
@@ -140,7 +169,8 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
       const { w, h, dpr } = sizeRef.current;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const placingDef = c.placing ? engine.roster.find((r) => r.id === c.placing) ?? null : null;
-      vpRef.current = renderer.render(ctx, w, h, dpr, { hoverTile: hoverRef.current, placing: placingDef, selectedUid: c.selectedUid, showRoutes: c.showRoutes }, now / 1000);
+      const hoverTile = c.pending ? c.pending.tile : hoverRef.current;
+      vpRef.current = renderer.render(ctx, w, h, dpr, { hoverTile, placing: placingDef, selectedUid: c.selectedUid, showRoutes: c.showRoutes }, now / 1000);
       hud += dt;
       if (hud > 0.1) {
         hud = 0;
@@ -191,6 +221,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
     (id: string) => {
       const def = engine.roster.find((c) => c.id === id);
       if (!def) return;
+      setPending(null);
       if (ctrl.current.placing === id) return setPlacing(null);
       const st = engine.cardState(def);
       if (!st.ok) return toast(st.reason!, 'error', 1500);
@@ -200,10 +231,57 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
     [engine],
   );
 
+  /** 选好方块后：检查能否部署 → 暂停并显示「部署 / 取消」 */
+  const requestDeploy = useCallback(
+    (id: string, tile: GridPos, cancelOnError: boolean) => {
+      const def = engine.roster.find((c) => c.id === id);
+      const err = def ? engine.checkDeploy(def, tile) : '本关不能使用该角色';
+      if (err) {
+        toast(err, 'error', 1500);
+        if (cancelOnError) {
+          setPlacing(null);
+          setPending(null);
+          hoverRef.current = null;
+        }
+        return;
+      }
+      setSelectedUid(null);
+      setPlacing(id);
+      setPending({ id, tile: { ...tile } });
+    },
+    [engine],
+  );
+
+  const confirmPending = useCallback(() => {
+    const p = ctrl.current.pending;
+    if (!p) return;
+    ctrl.current.pending = null; // 防止同一帧内重复确认
+    const err = engine.deploy(p.id, p.tile);
+    if (err) toast(err, 'error', 1500);
+    setPending(null);
+    setPlacing(null);
+    hoverRef.current = null;
+  }, [engine]);
+
+  const cancelPending = useCallback(() => {
+    setPending(null);
+    setPlacing(null);
+    hoverRef.current = null;
+  }, []);
+
   // 键盘：Esc 取消、空格暂停、数字键选卡
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
+      if (ctrl.current.pending) {
+        // 等待确认部署：Enter = 部署，Esc = 取消
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmPending();
+        } else if (e.key === 'Escape') cancelPending();
+        else if (e.key === ' ') e.preventDefault();
+        return;
+      }
       if (e.key === 'Escape') {
         setPlacing(null);
         setSelectedUid(null);
@@ -218,23 +296,120 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [engine, selectCard]);
+  }, [engine, selectCard, confirmPending, cancelPending]);
 
-  const tileFromEvent = (e: React.MouseEvent) => {
-    const r = canvasRef.current!.getBoundingClientRect();
-    return screenToTile(vpRef.current, e.clientX - r.left, e.clientY - r.top);
+  /** 屏幕坐标 → 方块（手机版舞台缩放 / 旋转时也正确） */
+  const tileFromClient = (cx: number, cy: number) => {
+    const p = clientToLocal(canvasRef.current!, cx, cy);
+    return screenToTile(vpRef.current, p.x, p.y);
+  };
+  /** 指针在地图画布上时返回方块，否则返回 null */
+  const tileOnCanvas = (cx: number, cy: number): GridPos | null => {
+    const cv = canvasRef.current;
+    if (!cv) return null;
+    const p = clientToLocal(cv, cx, cy);
+    if (p.x < 0 || p.y < 0 || p.x >= cv.clientWidth || p.y >= cv.clientHeight) return null;
+    return screenToTile(vpRef.current, p.x, p.y);
   };
 
   const onCanvasClick = (e: React.MouseEvent) => {
-    const tile = tileFromEvent(e);
+    const tile = tileFromClient(e.clientX, e.clientY);
+    if (pending) {
+      // 等待确认时点击其他方块 = 换一个位置
+      if (tile.x !== pending.tile.x || tile.y !== pending.tile.y) requestDeploy(pending.id, tile, false);
+      return;
+    }
     if (placing) {
-      const err = engine.deploy(placing, tile);
-      if (err) toast(err, 'error', 1500);
-      else setPlacing(null);
+      requestDeploy(placing, tile, false);
       return;
     }
     const u = engine.unitAt(tile.x, tile.y);
     setSelectedUid(u ? u.uid : null);
+  };
+
+  /* ---------- 拖动部署 ---------- */
+  const placeGhost = (cx: number, cy: number) => {
+    const root = battleRef.current;
+    if (!root) return;
+    ghostPos.current = clientToLocal(root, cx, cy);
+    const g = ghostRef.current;
+    if (g) g.style.transform = `translate(${ghostPos.current.x}px, ${ghostPos.current.y}px) translate(-50%, -50%)`;
+  };
+  const endDrag = () => {
+    setDragging(null);
+    ghostPos.current = { x: -999, y: -999 };
+  };
+
+  const onCardPointerDown = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
+    if (e.button !== 0) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* 指针已经失效时忽略 */
+    }
+    pressRef.current = { id, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, lastX: e.clientX, lastY: e.clientY, touch: e.pointerType !== 'mouse', mode: 'press' };
+  };
+  const onCardPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = pressRef.current;
+    if (!d || d.pointerId !== e.pointerId || d.mode === 'blocked') return;
+    const bar = barRef.current;
+    if (d.mode === 'press') {
+      if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 8) return;
+      const a = bar ? clientToLocal(bar, d.sx, d.sy) : { x: d.sx, y: d.sy };
+      const b = bar ? clientToLocal(bar, e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
+      if (d.touch && bar && bar.scrollWidth > bar.clientWidth + 1 && Math.abs(b.x - a.x) > Math.abs(b.y - a.y)) {
+        d.mode = 'pan';
+      } else {
+        const def = engine.roster.find((c) => c.id === d.id);
+        const st = def ? engine.cardState(def) : { ok: false, reason: '本关不能使用该角色' };
+        if (!st.ok) {
+          toast(st.reason!, 'error', 1500);
+          d.mode = 'blocked';
+          return;
+        }
+        d.mode = 'drag';
+        setPending(null);
+        setSelectedUid(null);
+        setPlacing(d.id);
+        setDragging(d.id);
+      }
+    }
+    if (d.mode === 'pan' && bar) {
+      const a = clientToLocal(bar, d.lastX, d.lastY);
+      const b = clientToLocal(bar, e.clientX, e.clientY);
+      bar.scrollLeft -= b.x - a.x;
+    } else if (d.mode === 'drag') {
+      placeGhost(e.clientX, e.clientY);
+      hoverRef.current = tileOnCanvas(e.clientX, e.clientY);
+    }
+    d.lastX = e.clientX;
+    d.lastY = e.clientY;
+  };
+  const onCardPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = pressRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    pressRef.current = null;
+    if (d.mode === 'press') {
+      selectCard(d.id);
+    } else if (d.mode === 'drag') {
+      endDrag();
+      const tile = tileOnCanvas(e.clientX, e.clientY);
+      if (tile) requestDeploy(d.id, tile, true);
+      else {
+        // 拖到地图外面 = 取消
+        setPlacing(null);
+        hoverRef.current = null;
+      }
+    }
+  };
+  const onCardPointerCancel = () => {
+    const d = pressRef.current;
+    pressRef.current = null;
+    if (d?.mode === 'drag') {
+      endDrag();
+      setPlacing(null);
+      hoverRef.current = null;
+    }
   };
 
   const selected = selectedUid != null ? engine.unitByUid(selectedUid) : undefined;
@@ -243,7 +418,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
   const settings = level.settings;
 
   return (
-    <div className="battle">
+    <div className="battle" ref={battleRef}>
       <header className="battle-hud">
         <div className="row gap-s">
           <button className="btn btn-ghost" onClick={exit}>
@@ -295,12 +470,13 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
         <canvas
           ref={canvasRef}
           className={placing ? 'placing' : ''}
-          onMouseMove={(e) => (hoverRef.current = tileFromEvent(e))}
+          onMouseMove={(e) => (hoverRef.current = tileFromClient(e.clientX, e.clientY))}
           onMouseLeave={() => (hoverRef.current = null)}
           onClick={onCanvasClick}
           onContextMenu={(e) => {
             e.preventDefault();
             setPlacing(null);
+            setPending(null);
             setSelectedUid(null);
           }}
         />
@@ -327,6 +503,16 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
           <div className="battle-slow">
             缓速 ×{formatNumber(speed * SELECT_SLOW_FACTOR)}
           </div>
+        )}
+        {pending && engine.status === 'running' && (
+          <DeployConfirm
+            def={engine.roster.find((c) => c.id === pending.id)!}
+            tile={pending.tile}
+            vp={vpRef.current}
+            fieldW={wrapRef.current?.clientWidth ?? 800}
+            onConfirm={confirmPending}
+            onCancel={cancelPending}
+          />
         )}
 
         {selected && (
@@ -389,7 +575,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
         )}
       </div>
 
-      <footer className="deploy-bar">
+      <footer className="deploy-bar" ref={barRef}>
         {engine.roster.length === 0 && <div className="muted">本关没有可用角色</div>}
         {engine.roster.map((def, i) => {
           const st = engine.cardState(def);
@@ -398,8 +584,15 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
           return (
             <button
               key={def.id}
-              className={`deploy-card${placing === def.id ? ' selected' : ''}${st.ok ? '' : ' disabled'}`}
-              onClick={() => selectCard(def.id)}
+              className={`deploy-card${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}`}
+              onPointerDown={(e) => onCardPointerDown(e, def.id)}
+              onPointerMove={onCardPointerMove}
+              onPointerUp={onCardPointerUp}
+              onPointerCancel={onCardPointerCancel}
+              onLostPointerCapture={() => pressRef.current && onCardPointerCancel()}
+              // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
+              onClick={(e) => e.detail === 0 && selectCard(def.id)}
+              onContextMenu={(e) => e.preventDefault()}
               title={`${def.name}（${def.id}）\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${st.ok ? '' : '\n' + st.reason}`}
             >
               <span className="card-key">{i + 1}</span>
@@ -414,9 +607,66 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
           );
         })}
         <div className="deploy-help muted small">
-          选中角色时时间变慢（×{SELECT_SLOW_FACTOR}）· 点击绿色方块部署 · 右键/Esc 取消 · 点击场上角色释放技能或撤退
+          拖动角色到绿色方块 → 暂停后选择部署 / 取消 · 拿起时时间 ×{SELECT_SLOW_FACTOR} · 点击场上角色放技能或撤退 · 右键 / Esc 取消
         </div>
       </footer>
+      {dragging && (
+        <div
+          className="drag-ghost"
+          ref={(el) => {
+            ghostRef.current = el;
+            if (el) el.style.transform = `translate(${ghostPos.current.x}px, ${ghostPos.current.y}px) translate(-50%, -50%)`;
+          }}
+        >
+          <UnitToken kind="character" def={engine.roster.find((c) => c.id === dragging)!} size={56} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 部署确认：显示在目标方块旁边，此时战斗暂停 */
+function DeployConfirm({
+  def,
+  tile,
+  vp,
+  fieldW,
+  onConfirm,
+  onCancel,
+}: {
+  def: CharacterDef;
+  tile: GridPos;
+  vp: Viewport;
+  fieldW: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const half = 105;
+  const cx = Math.min(fieldW - half - 6, Math.max(half + 6, vp.ox + (tile.x + 0.5) * vp.scale));
+  const top = vp.oy + tile.y * vp.scale;
+  const above = top > 112;
+  const style: React.CSSProperties = above
+    ? { left: cx, top: top - 6, transform: 'translate(-50%, -100%)' }
+    : { left: cx, top: top + vp.scale + 6, transform: 'translate(-50%, 0)' };
+  return (
+    <div className={`deploy-confirm${above ? ' above' : ' below'}`} style={style} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="deploy-confirm-head">
+        <UnitToken kind="character" def={def} size={30} />
+        <div className="grow">
+          <div className="deploy-confirm-name">部署「{def.name}」？</div>
+          <div className="muted small">
+            费用 {def.cost} · 已暂停
+          </div>
+        </div>
+      </div>
+      <div className="deploy-confirm-actions">
+        <button className="btn btn-primary" onClick={onConfirm}>
+          部署
+        </button>
+        <button className="btn" onClick={onCancel}>
+          取消
+        </button>
+      </div>
     </div>
   );
 }

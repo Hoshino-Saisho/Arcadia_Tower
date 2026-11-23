@@ -130,8 +130,18 @@ export function SkillEditor({ onDirtyChange }: EditorTabProps) {
                       options={[
                         { value: 'modify', label: '增益 / 减益' },
                         { value: 'damage', label: '伤害 / 治疗' },
+                        { value: 'money', label: '金钱', title: '释放时获得金钱 / 持续期间每秒获得金钱（敌人释放时玩家失去金钱）' },
                       ]}
-                      onChange={(kind) => setEffect(i, kind === e.kind ? {} : { ...newEffect(kind), target: e.target, scope: e.scope, radius: e.radius, maxTargets: e.maxTargets })}
+                      onChange={(kind) =>
+                        setEffect(
+                          i,
+                          kind === e.kind
+                            ? {}
+                            : kind === 'money' || e.kind === 'money'
+                              ? newEffect(kind)
+                              : { ...newEffect(kind), target: e.target, scope: e.scope, radius: e.radius, maxTargets: e.maxTargets },
+                        )
+                      }
                     />
                     <span className="grow" />
                     <button className="icon-btn" disabled={i === 0} onClick={() => set({ effects: swapArr(sk.effects, i, i - 1) })} title="上移">
@@ -144,6 +154,7 @@ export function SkillEditor({ onDirtyChange }: EditorTabProps) {
                       ×
                     </button>
                   </div>
+                  {e.kind !== 'money' && (
                   <div className="form-grid cols-4">
                     <Field label="作用对象" wide>
                       <Segmented
@@ -177,7 +188,23 @@ export function SkillEditor({ onDirtyChange }: EditorTabProps) {
                       </>
                     )}
                   </div>
-                  {e.kind === 'modify' ? (
+                  )}
+                  {e.kind === 'money' ? (
+                    <>
+                      <div className="form-grid cols-4">
+                        <Field label="立即获得" hint="释放时，负数 = 消耗">
+                          <NumberInput value={e.money} min={-100000} max={100000} step={1} onChange={(money) => setEffect(i, { money })} />
+                        </Field>
+                        <Field label="每秒获得" hint="持续期间，负数 = 消耗">
+                          <NumberInput value={e.moneyRate} min={-100000} max={100000} step={0.5} onChange={(moneyRate) => setEffect(i, { moneyRate })} />
+                        </Field>
+                        <Field label="持续时间" hint="秒，0 = 跟随技能">
+                          <NumberInput value={e.duration} min={0} max={3600} step={0.5} onChange={(duration) => setEffect(i, { duration })} />
+                        </Field>
+                      </div>
+                      <div className="muted small effect-sub">金钱直接加到玩家身上；持续获得在施放者撤退 / 被击败后停止。敌人释放这个技能时，玩家失去对应的金钱（最少为 0）。</div>
+                    </>
+                  ) : e.kind === 'modify' ? (
                     <>
                       <div className="form-grid cols-4">
                         <Field label="持续时间" hint="秒，0 = 跟随技能">
@@ -214,6 +241,9 @@ export function SkillEditor({ onDirtyChange }: EditorTabProps) {
                 </button>
                 <button className="btn btn-s" onClick={() => set({ effects: [...sk.effects, newEffect('damage')] })}>
                   + 伤害 / 治疗效果
+                </button>
+                <button className="btn btn-s" onClick={() => set({ effects: [...sk.effects, newEffect('money')] })}>
+                  + 金钱效果
                 </button>
               </div>
             </div>

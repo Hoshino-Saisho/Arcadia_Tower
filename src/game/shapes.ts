@@ -1,5 +1,5 @@
 import type { TileInfo } from '../core/tiles';
-import type { CharacterDef, EnemyDef } from '../core/types';
+import type { CharacterDef, EnemyDef, IconPoint } from '../core/types';
 
 /**
  * 共用的绘制函数：游戏画面与编辑器预览都调用这里，
@@ -44,12 +44,26 @@ export function polygonPath(ctx: CanvasRenderingContext2D, cx: number, cy: numbe
   ctx.closePath();
 }
 
-function drawImageCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cx: number, cy: number, r: number) {
+/**
+ * 把图标画进半径 r 的圆形 / 多边形：
+ * 缩放 1 = 图片短边刚好等于直径；图片上的中心点 center（宽 / 高比例）对齐到 (cx, cy)。
+ */
+export function drawImageCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  cx: number,
+  cy: number,
+  r: number,
+  center?: IconPoint | null,
+  zoom?: number | null,
+) {
   const w = img.naturalWidth || img.width;
   const h = img.naturalHeight || img.height;
   if (!w || !h) return;
-  const s = (2 * r) / Math.min(w, h);
-  ctx.drawImage(img, cx - (w * s) / 2, cy - (h * s) / 2, w * s, h * s);
+  const s = ((2 * r) / Math.min(w, h)) * (zoom && zoom > 0 ? zoom : 1);
+  const fx = (center?.x ?? 0.5) * w;
+  const fy = (center?.y ?? 0.5) * h;
+  ctx.drawImage(img, cx - fx * s, cy - fy * s, w * s, h * s);
 }
 
 export interface TokenOptions {
@@ -63,7 +77,7 @@ export interface TokenOptions {
 /** 角色：彩色圆形（或图标） */
 export function drawCharacterToken(
   ctx: CanvasRenderingContext2D,
-  def: Pick<CharacterDef, 'color'>,
+  def: Pick<CharacterDef, 'color' | 'iconCenter' | 'iconZoom'>,
   cx: number,
   cy: number,
   r: number,
@@ -84,7 +98,7 @@ export function drawCharacterToken(
     ctx.clip();
     ctx.fillStyle = shade(def.color, -0.5);
     ctx.fill();
-    drawImageCover(ctx, opt.icon, cx, cy, r);
+    drawImageCover(ctx, opt.icon, cx, cy, r, def.iconCenter, def.iconZoom);
     ctx.restore();
   } else {
     const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
@@ -119,7 +133,7 @@ export function drawCharacterToken(
 /** 敌人：3~6 边形（或图标），一个顶点朝向前进方向 */
 export function drawEnemyToken(
   ctx: CanvasRenderingContext2D,
-  def: Pick<EnemyDef, 'color' | 'sides'>,
+  def: Pick<EnemyDef, 'color' | 'sides' | 'iconCenter' | 'iconZoom'>,
   cx: number,
   cy: number,
   r: number,
@@ -140,7 +154,7 @@ export function drawEnemyToken(
     ctx.clip();
     ctx.fillStyle = shade(def.color, -0.5);
     ctx.fill();
-    drawImageCover(ctx, opt.icon, cx, cy, r);
+    drawImageCover(ctx, opt.icon, cx, cy, r, def.iconCenter, def.iconZoom);
     ctx.restore();
     polygonPath(ctx, cx, cy, r * 1.08, def.sides, -Math.PI / 2);
   } else {
