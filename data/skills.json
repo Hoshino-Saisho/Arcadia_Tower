@@ -31,7 +31,7 @@
       "id": "S017",
       "name": "跑路了兄弟",
       "color": "#f2b544",
-      "spMax": 20,
+      "spMax": 5,
       "spInitial": 0,
       "spGain": "auto",
       "spRate": 1,
