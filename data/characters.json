@@ -235,7 +235,8 @@
         ],
         "duration": 2
       },
-      "growth": {"maxHp":50,"atk":-5,"def":3,"res":3}
+      "growth": {"maxHp":50,"atk":-5,"def":3,"res":3},
+      "description": "等我100级就让你看看什么叫做神辅助！"
     },
     {
       "id": "C012",
