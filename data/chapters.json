@@ -14,7 +14,13 @@
       "description": "通关主线第一章后解锁",
       "battleMusic": "sample_battle.wav"
     },
-    {"id":"CH1","name":"杨永信","levelCount":3,"description":"电死你","battleMusic":"sample_battle.wav"},
+    {
+      "id": "CH1",
+      "name": "杨永信",
+      "levelCount": 3,
+      "description": "电死你",
+      "battleMusic": "[DLBunny.com][bilibili]【原创歌曲】粛聖!! ロリ神レクイエム☆ _ 时雨羽衣（9岁）.mp3"
+    },
     {
       "id": "CH2",
       "name": "张雪峰土木",
