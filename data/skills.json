@@ -36,7 +36,7 @@
       "spGain": "auto",
       "spRate": 1,
       "trigger": "auto",
-      "duration": 10,
+      "duration": 0,
       "effects": [
         {
           "kind": "modify",
