@@ -63,6 +63,19 @@
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
+        },
+        {
+          "kind": "modify",
+          "target": "enemies",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [{"stat":"speed","mode":"percent","value":-50}],
+          "duration": 0,
+          "amount": 0,
+          "damageType": "physical",
+          "money": 0,
+          "moneyRate": 0
         }
       ]
     },
