@@ -158,7 +158,7 @@
           "maxTargets": 1,
           "modifiers": [],
           "duration": 5,
-          "amount": -350,
+          "amount": -150,
           "regenMode": "atk",
           "damageType": "true",
           "money": 0,
