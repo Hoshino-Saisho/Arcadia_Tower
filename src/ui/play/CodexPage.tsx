@@ -155,6 +155,7 @@ function EnemyDetail({ def, skills }: { def: EnemyDef; skills: Map<string, Skill
         <Row k="攻击范围" v={def.canAttack ? (def.attackRange > 0 ? `${def.attackRange} 格` : '只攻击阻挡者') : '—'} />
         <Row k="击杀奖励" v={def.reward} />
         <Row k="外形" v={`${def.sides} 边形`} />
+        <Row k="无尽模式" v={`分数 ${def.endlessScore} · 难度 ${def.endlessDifficulty} · 出现位列 ${def.endlessRank}`} />
       </dl>
       {def.canAttack && def.attackRange > 0 && (
         <div className="codex-range">

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RETREAT_REFUND_RATIO, SELECT_SLOW_FACTOR } from '../../core/defaults';
+import { SELECT_SLOW_FACTOR, retreatRefund } from '../../core/defaults';
 import { describeSkill, describeSkillTrigger } from '../../core/describe';
 import { levelCode } from '../../core/ids';
-import { grantRewards, levelMap, rollRewards, type RolledRewards } from '../../core/leveling';
+import { endlessRewards, grantRewards, levelMap, rollRewards, type RolledRewards } from '../../core/leveling';
 import { ProgressView } from '../../core/progress';
 import { DAMAGE_TYPE_LABEL, formatModifier, formatNumber } from '../../core/stats';
 import { loadDatabase, loadLevel, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
@@ -24,22 +24,26 @@ type LoadState =
   | { status: 'error'; message: string }
   | { status: 'ready'; db: GameDatabase; level: LevelDef };
 
-/** 战斗页面：加载数据 → 创建引擎 */
-export function BattlePage({ code, test }: { code: string; test: boolean }) {
+/** 战斗页面：加载数据 → 创建引擎。endless = 无尽模式（地图在 data/endless.json 中） */
+export function BattlePage({ code, test, endless = false }: { code: string; test: boolean; endless?: boolean }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [db, level] = await Promise.all([loadDatabase(), loadLevel(code)]);
+      const [db, loaded] = await Promise.all([loadDatabase(), endless ? Promise.resolve(null) : loadLevel(code)]);
       if (cancelled) return;
+      const level = endless ? db.endless.map : loaded;
       if (!level) return setState({ status: 'error', message: `关卡 ${code} 尚未制作` });
-      if (!test) {
-        const view = new ProgressView(db.chapters, db.progress, db.levelCodes);
-        if (!view.isLevelUnlocked(level.chapterId, level.index)) {
-          return setState({ status: 'error', message: `关卡 ${code} 尚未解锁` });
+      const view = new ProgressView(db.chapters, db.progress, db.levelCodes);
+      if (endless) {
+        if (!test && !db.endless.enabled) return setState({ status: 'error', message: '无尽模式还没有开放' });
+        if (!test && db.endless.unlockAfter && !view.isCleared(db.endless.unlockAfter)) {
+          return setState({ status: 'error', message: `通关 ${db.endless.unlockAfter} 后解锁${db.endless.name}` });
         }
+      } else if (!test && !view.isLevelUnlocked(level.chapterId, level.index)) {
+        return setState({ status: 'error', message: `关卡 ${code} 尚未解锁` });
       }
       preloadIcons([...db.characters.map((c) => c.icon), ...db.enemies.map((e) => e.icon)]);
       // 战斗音乐：关卡单独设置的优先，否则用章节的
@@ -50,20 +54,20 @@ export function BattlePage({ code, test }: { code: string; test: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [code, test]);
+  }, [code, test, endless]);
 
-  if (state.status === 'loading') return <div className="page-msg">加载关卡 {code}…</div>;
+  if (state.status === 'loading') return <div className="page-msg">{endless ? '加载无尽模式…' : `加载关卡 ${code}…`}</div>;
   if (state.status === 'error') {
     return (
       <div className="page-msg">
         {state.message}
-        <button className="btn" onClick={() => navigate('/game/chapters')}>
-          返回章节选择
+        <button className="btn" onClick={() => navigate(endless ? '/game' : '/game/chapters')}>
+          {endless ? '返回主页' : '返回章节选择'}
         </button>
       </div>
     );
   }
-  return <Battle key={attempt} db={state.db} level={state.level} test={test} onRestart={() => setAttempt((a) => a + 1)} />;
+  return <Battle key={attempt} db={state.db} level={state.level} test={test} endless={endless} onRestart={() => setAttempt((a) => a + 1)} />;
 }
 
 interface Ctrl {
@@ -94,7 +98,7 @@ interface CardPress {
   mode: 'press' | 'drag' | 'pan' | 'blocked';
 }
 
-function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: LevelDef; test: boolean; onRestart: () => void }) {
+function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; level: LevelDef; test: boolean; endless: boolean; onRestart: () => void }) {
   const engineRef = useRef<GameEngine>(null as unknown as GameEngine);
   if (!engineRef.current) {
     engineRef.current = new GameEngine(level, db.characters, db.enemies, {
@@ -102,6 +106,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
       loadouts: db.progress.loadouts,
       // 角色等级（玩家用经验书升级）提高基础数值
       levels: levelMap(db.currency, db.progress),
+      endless: endless ? db.endless : undefined,
     });
   }
   const engine = engineRef.current;
@@ -122,8 +127,10 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
   const [showRoutes, setShowRoutes] = useState(true);
   const [, setTick] = useState(0);
   const [next, setNext] = useState<{ code: string; built: boolean } | null>(null);
-  /** 这次通关获得的奖励（试玩模式没有） */
+  /** 这次通关（无尽模式：这次挑战）获得的奖励（试玩模式没有） */
   const [rewards, setRewards] = useState<RolledRewards | null>(null);
+  /** 无尽模式：这次是否刷新了最好成绩 */
+  const [newBest, setNewBest] = useState(false);
 
   const ctrl = useRef<Ctrl>({ started, paused, speed, placing, pending, selectedUid, showRoutes });
   ctrl.current = { started, paused, speed, placing, pending, selectedUid, showRoutes };
@@ -195,6 +202,25 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
   const status = engine.status;
   const savedRef = useRef(false);
   useEffect(() => {
+    // 无尽模式：结束时把分数换成奖励，并记录最好成绩
+    if (endless) {
+      if (status === 'running' || savedRef.current) return;
+      savedRef.current = true;
+      if (test) return;
+      (async () => {
+        let progress = await loadProgress();
+        const r = endlessRewards(db.endless, db.currency, engine.score);
+        progress = grantRewards(progress, r);
+        const best = progress.endlessBest;
+        if (!best || engine.score > best.score) {
+          progress = { ...progress, endlessBest: { score: engine.score, wave: engine.wave, time: Math.round(engine.time * 10) / 10 } };
+          setNewBest(true);
+        }
+        await saveProgress(progress);
+        setRewards(r);
+      })().catch((err) => toast(`保存失败：${String(err)}`, 'error'));
+      return;
+    }
     if (status !== 'won' || savedRef.current) return;
     savedRef.current = true;
     (async () => {
@@ -214,7 +240,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
         setNext({ code: nc, built: db.levelCodes.has(nc) });
       }
     })().catch((err) => toast(`保存进度失败：${String(err)}`, 'error'));
-  }, [status, test, level, db]);
+  }, [status, test, level, db, endless, engine]);
 
   // 选中的角色被击倒时取消选择
   useEffect(() => {
@@ -225,10 +251,12 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
     if (test) {
       window.close();
       window.setTimeout(() => navigate('/game'), 150);
+    } else if (endless) {
+      navigate('/game/endless');
     } else {
       navigate(`/game/chapter/${encodeURIComponent(level.chapterId)}`);
     }
-  }, [test, level.chapterId]);
+  }, [test, endless, level.chapterId]);
 
   const selectCard = useCallback(
     (id: string) => {
@@ -438,8 +466,8 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
             ← 退出
           </button>
           <div className="hud-level">
-            <span className="mono accent">{level.id}</span>
-            <span>{settings.name}</span>
+            <span className="mono accent">{endless ? '∞' : level.id}</span>
+            <span>{endless ? db.endless.name : settings.name}</span>
             {test && <span className="badge badge-warn">试玩模式 · 不计进度</span>}
           </div>
         </div>
@@ -448,15 +476,33 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
             <span className="hud-icon">❤</span>
             {engine.hp}/{engine.maxHp}
           </div>
-          <div className="hud-stat money" title={settings.autoMoney ? `每分钟自动回复 ${rate}` : '不自动回复'}>
+          <div className="hud-stat money" title={settings.autoMoney && rate ? `每分钟${rate > 0 ? '自动回复' : '减少'} ${Math.abs(rate)}` : '不自动回复'}>
             <span className="hud-icon">◆</span>
             {Math.floor(engine.money)}
-            {settings.autoMoney && <small>+{Number(rate.toFixed(1))}/分</small>}
+            {settings.autoMoney && rate !== 0 && (
+              <small>
+                {rate > 0 ? '+' : '−'}
+                {Number(Math.abs(rate).toFixed(1))}/分
+              </small>
+            )}
           </div>
-          <div className="hud-stat" title="已处理敌人 / 敌人总数">
-            <span className="hud-icon">☠</span>
-            {done}/{engine.totalEnemies}
-          </div>
+          {endless ? (
+            <>
+              <div className="hud-stat" title="当前波次（下一波的倒计时）">
+                <span className="hud-icon">≋</span>第 {engine.wave} 波
+                {engine.status === 'running' && Number.isFinite(engine.nextWaveAt) && <small>{Math.max(0, Math.ceil(engine.nextWaveAt - engine.time))}s</small>}
+              </div>
+              <div className="hud-stat score" title="分数（击败敌人获得）">
+                <span className="hud-icon">★</span>
+                {formatNumber(Math.round(engine.score * 100) / 100)}
+              </div>
+            </>
+          ) : (
+            <div className="hud-stat" title="已处理敌人 / 敌人总数">
+              <span className="hud-icon">☠</span>
+              {done}/{engine.totalEnemies}
+            </div>
+          )}
           <div className="hud-stat mono" title="战斗时间">
             {formatTime(engine.time)}
           </div>
@@ -476,6 +522,16 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
           <button className="btn btn-s" disabled={!started} onClick={() => setPaused((p) => !p)}>
             {paused ? '▶ 继续' : '❚❚ 暂停'}
           </button>
+          {endless && (
+            <button
+              className="btn btn-s btn-danger"
+              disabled={engine.status !== 'running'}
+              onClick={() => window.confirm('结束这次挑战？会按当前分数结算奖励。') && engine.finish()}
+              title="结束挑战，按当前分数结算"
+            >
+              结束挑战
+            </button>
+          )}
         </div>
       </header>
 
@@ -497,7 +553,15 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
         {!started && engine.status === 'running' && (
           <div className="battle-banner">
             <div>
-              <strong>准备阶段</strong>：可以先部署角色。敌人共 {engine.totalEnemies} 个，基地血量 {engine.maxHp}。
+              {endless ? (
+                <>
+                  <strong>{db.endless.name}</strong>：敌人会一波一波不断出现，越来越多、越来越强。击败敌人得分，基地血量 {engine.maxHp}，血量归零时按分数结算奖励。
+                </>
+              ) : (
+                <>
+                  <strong>准备阶段</strong>：可以先部署角色。敌人共 {engine.totalEnemies} 个，基地血量 {engine.maxHp}。
+                </>
+              )}
             </div>
             {engine.warnings.length > 0 && (
               <ul className="warn-list">
@@ -532,8 +596,8 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
           <UnitPanel
             unit={selected}
             onRetreat={() => {
-              const refund = engine.retreat(selected.uid);
-              toast(`已撤退，返还 ${refund}`, 'info', 1500);
+              const change = engine.retreat(selected.uid);
+              toast(change >= 0 ? `已撤退，返还 ${change}` : `已撤退，扣除 ${-change}`, 'info', 1500);
               setSelectedUid(null);
             }}
             onSkill={(i) => {
@@ -546,6 +610,52 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
 
         {engine.status !== 'running' && (
           <div className="result-overlay">
+            {endless ? (
+              <div className="result-card endless">
+                <div className="result-title">挑战结束</div>
+                <div className="result-sub">
+                  {db.endless.name}
+                  {engine.finishedByPlayer ? ' · 主动结束' : ' · 基地被突破'}
+                </div>
+                <div className="result-score">
+                  <span className="muted small">分数</span>
+                  <strong className="mono">{formatNumber(Math.round(engine.score * 100) / 100)}</strong>
+                  {newBest && <span className="badge new-best">新纪录！</span>}
+                </div>
+                <dl className="stat-grid result-stats">
+                  <dt>坚持到</dt>
+                  <dd>第 {engine.wave} 波</dd>
+                  <dt>击败敌人</dt>
+                  <dd>{engine.killed}</dd>
+                  <dt>用时</dt>
+                  <dd>{formatTime(engine.time)}</dd>
+                  {!test && db.progress.endlessBest && !newBest && (
+                    <>
+                      <dt>最好成绩</dt>
+                      <dd>
+                        {formatNumber(db.progress.endlessBest.score)} 分（第 {db.progress.endlessBest.wave} 波）
+                      </dd>
+                    </>
+                  )}
+                </dl>
+                {test ? (
+                  <div className="muted small">试玩模式：不记录成绩，没有奖励</div>
+                ) : (
+                  <div className="result-rewards">
+                    <div className="result-rewards-title">分数兑换</div>
+                    {rewards ? <RewardList cfg={db.currency} rewards={rewards} /> : <span className="muted small">结算中…</span>}
+                  </div>
+                )}
+                <div className="row gap-s center">
+                  <button className="btn btn-primary" onClick={onRestart}>
+                    再来一次
+                  </button>
+                  <button className="btn btn-ghost" onClick={exit}>
+                    {test ? '关闭' : '返回'}
+                  </button>
+                </div>
+              </div>
+            ) : (
             <div className={`result-card ${engine.status}`}>
               <div className="result-title">{engine.status === 'won' ? '作战胜利' : '作战失败'}</div>
               <div className="result-sub">
@@ -591,6 +701,7 @@ function Battle({ db, level, test, onRestart }: { db: GameDatabase; level: Level
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
       </div>
@@ -684,7 +795,7 @@ function DeployConfirm({
         <div className="grow">
           <div className="deploy-confirm-name">部署「{def.name}」？</div>
           <div className="muted small">
-            费用 {def.cost} · 已暂停
+            {def.cost >= 0 ? `费用 ${def.cost}` : `部署获得 ${-def.cost} 金钱`} · 已暂停
           </div>
         </div>
       </div>
@@ -805,7 +916,7 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
         </div>
       )}
       <button className="btn btn-danger" onClick={onRetreat}>
-        撤退（返还 {Math.floor(unit.def.cost * RETREAT_REFUND_RATIO)}）
+        撤退（{retreatRefund(unit.def.cost) >= 0 ? `返还 ${retreatRefund(unit.def.cost)}` : `扣除 ${-retreatRefund(unit.def.cost)}`}）
       </button>
     </div>
   );

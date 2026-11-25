@@ -1,9 +1,10 @@
-import { LEAK_DAMAGE, RETREAT_REFUND_RATIO, resolveLoadout } from '../core/defaults';
+import { LEAK_DAMAGE, resolveLoadout, retreatRefund } from '../core/defaults';
+import { planWave } from '../core/endless';
 import { leveledCharacter } from '../core/leveling';
 import { tileInRange, tileOf } from '../core/range';
 import { applyModifiers, computeDamage, isBuff } from '../core/stats';
 import { TileGrid } from '../core/tiles';
-import type { CharacterDef, EnemyDef, GridPos, LevelDef, SkillDamageType, SkillDef, SkillEffect, StatModifier } from '../core/types';
+import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, SkillDamageType, SkillDef, SkillEffect, StatModifier } from '../core/types';
 import { attackBehavior, tileOfCombatant } from './attacks';
 import {
   BLOCK_DISTANCE,
@@ -20,12 +21,14 @@ import {
   type SkillState,
   type Unit,
 } from './entities';
-import { buildSchedule, type RouteInfo, type SpawnEvent } from './spawn';
+import { buildSchedule, type LineRoute, type RouteInfo, type SpawnEvent } from './spawn';
 
 export type GameStatus = 'running' | 'won' | 'lost';
 
 export const FIXED_DT = 1 / 60;
 const PROJECTILE_SPEED = 9;
+/** 场上敌人的上限（无尽模式后期太多时暂缓出现，避免卡顿） */
+const MAX_ENEMIES = 300;
 
 /** 技能带来的持续金钱变化（施放者离场后停止） */
 export interface MoneyFlow {
@@ -47,6 +50,10 @@ export interface EngineOptions {
   loadouts?: Record<string, string[]>;
   /** 角色等级：角色 ID → 等级（没有 = 1 级），按升级成长提高基础数值 */
   levels?: Record<string, number>;
+  /** 无尽模式：敌人按波次规则不断出现，没有胜利，血量归零（或玩家结束挑战）时结束 */
+  endless?: EndlessConfig;
+  /** 随机数（无尽模式选敌人 / 路线；测试时传入可重复的随机数） */
+  rng?: () => number;
 }
 
 /** 卡片状态：能否部署；冷却中时附带剩余时间 */
@@ -75,6 +82,8 @@ export class GameEngine {
   readonly warnings: string[];
   readonly totalEnemies: number;
   readonly lastSpawnTime: number;
+  /** 无尽模式设置（普通关卡为 null） */
+  readonly endless: EndlessConfig | null;
 
   time = 0;
   hp: number;
@@ -84,6 +93,11 @@ export class GameEngine {
   killed = 0;
   leaked = 0;
   spawned = 0;
+  /** 无尽模式：当前波次、分数、下一波的时间、是否由玩家结束 */
+  wave = 0;
+  score = 0;
+  nextWaveAt = Infinity;
+  finishedByPlayer = false;
 
   units: Unit[] = [];
   enemies: Enemy[] = [];
@@ -93,6 +107,10 @@ export class GameEngine {
 
   private schedule: SpawnEvent[];
   private nextEvent = 0;
+  /** 无尽模式生成的敌人（按时间排序） */
+  private queue: SpawnEvent[] = [];
+  private lineRoutes: LineRoute[];
+  private rng: () => number;
   private seq = 1;
   /** 部署冷却：角色 ID → 可以再次部署的时间 */
   private readyAt = new Map<string, number>();
@@ -106,14 +124,22 @@ export class GameEngine {
     this.enemyDefs = new Map(enemies.map((e) => [e.id, e]));
     this.skillDefs = new Map((opts.skills ?? []).map((s) => [s.id, s]));
     this.loadouts = opts.loadouts ?? {};
-    const sched = buildSchedule(level, this.grid, this.enemyDefs);
+    this.endless = opts.endless ?? null;
+    this.rng = opts.rng ?? Math.random;
+    const sched = buildSchedule(level, this.grid, this.enemyDefs, !!this.endless);
     this.schedule = sched.events;
     this.routes = sched.routes;
+    this.lineRoutes = sched.lineRoutes;
     this.warnings = sched.warnings;
     this.totalEnemies = sched.events.length;
     this.lastSpawnTime = sched.duration;
     this.hp = this.maxHp = level.settings.initialHp;
     this.money = level.settings.initialMoney;
+    if (this.endless) {
+      this.nextWaveAt = this.endless.firstWave;
+      if (!this.lineRoutes.length) this.warnings.push('无尽模式的地图没有可以使用的敌人路线，敌人不会出现');
+      if (!this.enemyDefs.size) this.warnings.push('还没有任何敌人');
+    }
   }
 
   /** 角色等级（没有记录 = 1 级） */
@@ -133,9 +159,11 @@ export class GameEngine {
       return;
     }
     this.time += dt;
-    this.money += this.moneyPerSecond * dt;
+    // 每分钟回复可以是负数（金钱随时间减少，最少为 0）
+    if (this.moneyPerSecond) this.changeMoney(this.moneyPerSecond * dt);
     this.updateMoneyFlows(dt);
 
+    if (this.endless) this.updateEndless();
     this.spawnDue();
     this.updateStatuses(dt);
     this.updateSkills(dt);
@@ -158,50 +186,88 @@ export class GameEngine {
     return out;
   }
 
+  /** 无尽模式：到时间就安排下一波（组与组依次出现，见 core/endless.ts） */
+  private updateEndless() {
+    const cfg = this.endless!;
+    let guard = 0;
+    while (this.time + 1e-9 >= this.nextWaveAt && guard++ < 10) {
+      const start = this.nextWaveAt;
+      this.wave++;
+      this.nextWaveAt += cfg.waveInterval;
+      if (!this.lineRoutes.length) continue;
+      const plan = planWave(cfg, [...this.enemyDefs.values()], this.lineRoutes.length, this.wave, this.rng);
+      for (const g of plan.groups) {
+        const r = this.lineRoutes[g.routeIndex];
+        for (let i = 0; i < g.count; i++) {
+          this.queue.push({
+            time: start + g.offset + i * g.interval,
+            enemyId: g.enemyId,
+            lineId: r.info.lineId,
+            path: r.info.path,
+            waits: r.perStep,
+            hpScale: plan.hpScale,
+            atkScale: plan.atkScale,
+          });
+        }
+      }
+      this.queue.sort((a, b) => a.time - b.time);
+    }
+  }
+
   private spawnDue() {
     while (this.nextEvent < this.schedule.length && this.schedule[this.nextEvent].time <= this.time + 1e-9) {
-      const ev = this.schedule[this.nextEvent++];
-      const def = this.enemyDefs.get(ev.enemyId);
-      if (!def) continue;
-      const start = tileCenter(ev.path[0]);
-      const base = enemyBaseStats(def);
-      const e: Enemy = {
-        uid: this.seq++,
-        side: 'enemy',
-        def,
-        lineId: ev.lineId,
-        path: ev.path,
-        waypoint: 1,
-        waits: ev.waits,
-        // 停留点设在出现点上：出现后先停留
-        waitLeft: ev.waits[0] ?? 0,
-        waitTotal: ev.waits[0] ?? 0,
-        x: start.x,
-        y: start.y,
-        hp: def.maxHp,
-        base,
-        stats: { ...base },
-        statuses: [],
-        skills: this.makeSkillStates(def.skills.slice(0, def.skillSlots)),
-        attackCd: def.attackInterval * 0.5,
-        blockedBy: null,
-        distLeft: pathLength(ev.path),
-        angle: 0,
-        flash: 0,
-        healFlash: 0,
-        attackAnim: 0,
-        spawnedAt: this.time,
-      };
-      if (ev.path.length > 1) {
-        const n = tileCenter(ev.path[1]);
-        e.angle = Math.atan2(n.y - e.y, n.x - e.x);
-      }
-      this.enemies.push(e);
-      this.spawned++;
-      this.addEffect({ kind: 'spawn', x: e.x, y: e.y, duration: 0.45, color: def.color });
-      // 出现点本身就是基地的极端情况
-      if (ev.path.length === 1) this.leak(e);
+      this.spawnEnemy(this.schedule[this.nextEvent++]);
     }
+    // 无尽模式：场上敌人太多时暂缓出现
+    while (this.queue.length && this.queue[0].time <= this.time + 1e-9 && this.enemies.length < MAX_ENEMIES) {
+      this.spawnEnemy(this.queue.shift()!);
+    }
+  }
+
+  private spawnEnemy(ev: SpawnEvent) {
+    const def = this.enemyDefs.get(ev.enemyId);
+    if (!def) return;
+    const start = tileCenter(ev.path[0]);
+    const base = enemyBaseStats(def);
+    // 无尽模式：每一波的敌人更强（生命 / 攻击按百分比增加）
+    if (ev.hpScale && ev.hpScale !== 1) base.maxHp = Math.max(1, Math.round(base.maxHp * ev.hpScale));
+    if (ev.atkScale && ev.atkScale !== 1) base.atk = Math.round(base.atk * ev.atkScale * 100) / 100;
+    const e: Enemy = {
+      uid: this.seq++,
+      side: 'enemy',
+      def,
+      lineId: ev.lineId,
+      path: ev.path,
+      waypoint: 1,
+      waits: ev.waits,
+      // 停留点设在出现点上：出现后先停留
+      waitLeft: ev.waits[0] ?? 0,
+      waitTotal: ev.waits[0] ?? 0,
+      x: start.x,
+      y: start.y,
+      hp: base.maxHp,
+      base,
+      stats: { ...base },
+      statuses: [],
+      skills: this.makeSkillStates(def.skills.slice(0, def.skillSlots)),
+      attackCd: def.attackInterval * 0.5,
+      blockedBy: null,
+      distLeft: pathLength(ev.path),
+      angle: 0,
+      flash: 0,
+      healFlash: 0,
+      attackAnim: 0,
+      spawnedAt: this.time,
+    };
+    if (ev.path.length > 1) {
+      const n = tileCenter(ev.path[1]);
+      e.angle = Math.atan2(n.y - e.y, n.x - e.x);
+    }
+    this.enemies.push(e);
+    this.spawned++;
+    this.addEffect({ kind: 'spawn', x: e.x, y: e.y, duration: 0.45, color: def.color });
+    // 出现点本身就是基地的极端情况
+    if (ev.path.length === 1) this.leak(e);
   }
 
   /** 增益 / 减益计时、属性重算、持续回复 / 持续伤害 */
@@ -423,10 +489,9 @@ export class GameEngine {
         }
         if (!e.leaked) {
           this.killed++;
-          if (e.def.reward > 0) {
-            this.money += e.def.reward;
-            this.addEffect({ kind: 'text', x: e.x, y: e.y - 0.35, duration: 0.9, color: '#ffd166', text: `+${e.def.reward}` });
-          }
+          if (this.endless) this.score += e.def.endlessScore;
+          // 击杀奖励可以是负数（击败时扣除金钱）
+          if (e.def.reward) this.moneyText({ x: e.x - 0.2, y: e.y + 0.2 }, this.changeMoney(e.def.reward));
           this.addEffect({ kind: 'death', x: e.x, y: e.y, duration: 0.4, color: e.def.color, size: enemyRadius(e.def) });
         }
       }
@@ -453,9 +518,17 @@ export class GameEngine {
       this.status = 'lost';
       return;
     }
-    if (this.nextEvent >= this.schedule.length && this.enemies.length === 0) {
+    // 无尽模式没有胜利，只会在血量归零或玩家结束挑战时结束
+    if (!this.endless && this.nextEvent >= this.schedule.length && this.enemies.length === 0) {
       this.status = 'won';
     }
+  }
+
+  /** 无尽模式：玩家主动结束挑战（按当前分数结算） */
+  finish() {
+    if (!this.endless || this.status !== 'running') return;
+    this.status = 'lost';
+    this.finishedByPlayer = true;
   }
 
   /* ================= 战斗规则（攻击方式 / 技能调用） ================= */
@@ -693,7 +766,8 @@ export class GameEngine {
     if (!def) return '本关不能使用该角色';
     const err = this.checkDeploy(def, tile);
     if (err) return err;
-    this.money -= def.cost;
+    // 费用可以是负数：部署时获得金钱
+    this.changeMoney(-def.cost);
     // 部署冷却：同一个角色在冷却结束前不能再次部署
     if (def.deployCooldown > 0) this.readyAt.set(def.id, this.time + def.deployCooldown);
     const c = tileCenter(tile);
@@ -725,16 +799,15 @@ export class GameEngine {
     return null;
   }
 
-  /** 撤退：返还部分费用 */
+  /** 撤退：返还一半费用（费用是负数时扣回一半），返回实际的金钱变化 */
   retreat(uid: number): number {
     const u = this.unitByUid(uid);
     if (!u || this.status !== 'running') return 0;
-    const refund = Math.floor(u.def.cost * RETREAT_REFUND_RATIO);
-    this.money += refund;
+    const change = this.changeMoney(retreatRefund(u.def.cost));
     this.releaseBlocked(u);
     this.units = this.units.filter((x) => x !== u);
-    this.addEffect({ kind: 'text', x: u.x, y: u.y - 0.4, duration: 0.9, color: '#ffd166', text: `+${refund}` });
-    return refund;
+    this.moneyText({ x: u.x - 0.2, y: u.y + 0.15 }, change);
+    return change;
   }
 
   private releaseBlocked(u: Unit) {
@@ -742,14 +815,17 @@ export class GameEngine {
     u.blocked = [];
   }
 
-  /** 剩余尚未出现的敌人数 */
+  /** 剩余尚未出现的敌人数（无尽模式只算已经安排好的） */
   get pendingSpawns(): number {
-    return this.schedule.length - this.nextEvent;
+    return this.schedule.length - this.nextEvent + this.queue.length;
   }
 
   /** 下一个敌人出现的时间（没有则为 null） */
   get nextSpawnTime(): number | null {
-    return this.nextEvent < this.schedule.length ? this.schedule[this.nextEvent].time : null;
+    const a = this.nextEvent < this.schedule.length ? this.schedule[this.nextEvent].time : Infinity;
+    const b = this.queue.length ? this.queue[0].time : Infinity;
+    const t = Math.min(a, b);
+    return Number.isFinite(t) ? t : null;
   }
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getBridge } from '../../core/storage/backend';
-import { loadCurrency, loadProgress, saveProgress } from '../../core/storage/repository';
-import type { CurrencyConfig, ProgressData } from '../../core/types';
+import { loadCurrency, loadEndless, loadProgress, saveProgress } from '../../core/storage/repository';
+import type { CurrencyConfig, EndlessConfig, ProgressData } from '../../core/types';
 import { music, useMusicState } from '../../game/music';
 import { GAME_VERSION, IS_WEB_PLAY } from '../../version';
 import { toast } from '../common/toast';
@@ -12,9 +12,12 @@ import { navigate } from '../router';
 export function HomePage() {
   const bridge = getBridge();
   const [wallet, setWallet] = useState<{ cfg: CurrencyConfig; progress: ProgressData } | null>(null);
+  const [endless, setEndless] = useState<EndlessConfig | null>(null);
   useEffect(() => {
     void Promise.all([loadCurrency(), loadProgress()]).then(([cfg, progress]) => setWallet({ cfg, progress }));
+    void loadEndless().then(setEndless);
   }, []);
+  const endlessLocked = !!endless?.unlockAfter && !wallet?.progress.cleared.includes(endless.unlockAfter);
   return (
     <div className="home">
       <div className="home-bg" />
@@ -42,6 +45,18 @@ export function HomePage() {
             <strong>角色设定</strong>
             <span>用经验书升级 · 选择携带的技能</span>
           </button>
+          {endless?.enabled && (
+            <button className={`home-menu-btn endless${endlessLocked ? ' locked' : ''}`} onClick={() => navigate('/game/endless')}>
+              <strong>∞ {endless.name}</strong>
+              <span>
+                {endlessLocked
+                  ? `通关 ${endless.unlockAfter} 后解锁`
+                  : wallet?.progress.endlessBest
+                    ? `最好成绩 ${Math.round(wallet.progress.endlessBest.score)} 分`
+                    : '一波一波，坚持越久分数越高'}
+              </span>
+            </button>
+          )}
         </div>
         <div className="home-links">
           <MusicControl />
@@ -49,9 +64,9 @@ export function HomePage() {
             className="btn btn-s btn-ghost"
             onClick={async () => {
               const name = wallet?.cfg.name ?? '货币';
-              if (!window.confirm(`确定要重置全部进度吗？\n通关记录、${name}、经验书和角色等级都会清空（携带的技能设定会保留）。`)) return;
+              if (!window.confirm(`确定要重置全部进度吗？\n通关记录、${name}、经验书、角色等级和无尽模式成绩都会清空（携带的技能设定会保留）。`)) return;
               const p = await loadProgress();
-              const next: ProgressData = { ...p, cleared: [], currency: 0, books: {}, levels: {} };
+              const next: ProgressData = { ...p, cleared: [], currency: 0, books: {}, levels: {}, endlessBest: null };
               await saveProgress(next);
               setWallet((w) => (w ? { ...w, progress: next } : w));
               toast('进度已重置', 'ok');

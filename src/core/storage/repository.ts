@@ -2,6 +2,7 @@ import {
   normalizeChapter,
   normalizeCharacter,
   normalizeCurrency,
+  normalizeEndless,
   normalizeEnemy,
   normalizeLevel,
   normalizeProgress,
@@ -9,7 +10,7 @@ import {
   normalizeSkill,
 } from '../defaults';
 import { parseLevelCode } from '../ids';
-import type { ChapterDef, CharacterDef, CurrencyConfig, EnemyDef, GameSettings, LevelDef, ProgressData, SkillDef } from '../types';
+import type { ChapterDef, CharacterDef, CurrencyConfig, EndlessConfig, EnemyDef, GameSettings, LevelDef, ProgressData, SkillDef } from '../types';
 import { getBackend } from './backend';
 
 /**
@@ -24,6 +25,7 @@ export const FILES = {
   chapters: 'chapters.json',
   settings: 'settings.json',
   currency: 'currency.json',
+  endless: 'endless.json',
   progress: 'progress.json',
   levelsDir: 'levels',
   iconsDir: 'icons',
@@ -84,6 +86,12 @@ export async function saveCharacters(list: CharacterDef[], renames: Map<string, 
     const levels: ProgressData['levels'] = {};
     for (const [k, v] of Object.entries(prog.levels)) levels[renames.get(k) ?? k] = v;
     await saveProgress({ ...prog, loadouts, levels });
+    const endless = await loadEndless();
+    const avail = endless.map.settings.availableCharacters;
+    if (avail.some((id) => renames.has(id))) {
+      endless.map.settings.availableCharacters = avail.map((id) => renames.get(id) ?? id);
+      await saveEndless(endless);
+    }
     await updateAllLevels((lv) => {
       let changed = false;
       lv.settings.availableCharacters = lv.settings.availableCharacters.map((id) => {
@@ -107,6 +115,18 @@ export async function loadEnemies(): Promise<EnemyDef[]> {
 export async function saveEnemies(list: EnemyDef[], renames: Map<string, string> = new Map()) {
   await writeJson(FILES.enemies, { enemies: list });
   if (renames.size) {
+    const endless = await loadEndless();
+    let endlessChanged = false;
+    for (const line of endless.map.lines) {
+      for (const b of line.blocks) {
+        const n = renames.get(b.enemyId);
+        if (n) {
+          b.enemyId = n;
+          endlessChanged = true;
+        }
+      }
+    }
+    if (endlessChanged) await saveEndless(endless);
     await updateAllLevels((lv) => {
       let changed = false;
       for (const line of lv.lines) {
@@ -172,6 +192,20 @@ export async function loadCurrency(): Promise<CurrencyConfig> {
 
 export async function saveCurrency(c: CurrencyConfig): Promise<void> {
   await writeJson(FILES.currency, c);
+}
+
+/* ---------- 无尽模式 ---------- */
+
+export async function loadEndless(): Promise<EndlessConfig> {
+  try {
+    return normalizeEndless(await readJson(FILES.endless));
+  } catch {
+    return normalizeEndless(null);
+  }
+}
+
+export async function saveEndless(c: EndlessConfig): Promise<void> {
+  await writeJson(FILES.endless, c);
 }
 
 /* ---------- 音乐 ---------- */
@@ -314,20 +348,22 @@ export interface GameDatabase {
   chapters: ChapterDef[];
   settings: GameSettings;
   currency: CurrencyConfig;
+  endless: EndlessConfig;
   levelCodes: Set<string>;
   progress: ProgressData;
 }
 
 export async function loadDatabase(): Promise<GameDatabase> {
-  const [characters, enemies, skills, chapters, settings, currency, codes, progress] = await Promise.all([
+  const [characters, enemies, skills, chapters, settings, currency, endless, codes, progress] = await Promise.all([
     loadCharacters(),
     loadEnemies(),
     loadSkills(),
     loadChapters(),
     loadSettings(),
     loadCurrency(),
+    loadEndless(),
     listLevelCodes(),
     loadProgress(),
   ]);
-  return { characters, enemies, skills, chapters, settings, currency, levelCodes: new Set(codes), progress };
+  return { characters, enemies, skills, chapters, settings, currency, endless, levelCodes: new Set(codes), progress };
 }

@@ -1,11 +1,12 @@
-import type { BookDrop, CharacterDef, CharacterProgress, CurrencyConfig, DropDisplay, ExpBookDef, LevelSettings, ProgressData } from './types';
+import { RES_MIN } from './defaults';
+import type { BookDrop, CharacterDef, CharacterProgress, CurrencyConfig, DropDisplay, EndlessConfig, ExpBookDef, LevelSettings, ProgressData } from './types';
 
 /**
  * 角色升级与通关奖励（数值都在「货币编辑」中设置）：
  *  - 升级经验：1 级升 2 级需要「基础升级经验」（全部角色通用），之后每一级 = 上一级 × (1 + 增长)，默认增长 0.75
  *  - 经验书：每本增加固定的经验值，使用时每本消耗一定的游戏外货币
- *  - 每升 1 级，角色的基础数值增加角色编辑中设置的「升级成长」
- *  - 通关奖励：固定的游戏外货币 + 按概率掉落的经验书（关卡可以单独设置，否则用默认值）
+ *  - 每升 1 级，角色的基础数值增加角色编辑中设置的「升级成长」（负数 = 减少）
+ *  - 通关奖励：货币编辑中的基础奖励（固定货币 + 按概率掉落的经验书）× 关卡的「奖励倍数」
  */
 
 const MAX_EXP = 1e15;
@@ -96,7 +97,11 @@ export function usefulBooks(cfg: CurrencyConfig, p: CharacterProgress, book: Exp
   return Math.ceil(expToMax(cfg, p) / Math.max(1, book.exp));
 }
 
-/** 角色在某个等级时的数值：基础数值 + 升级成长 × (等级 − 1)；治疗角色的攻击力成长 = 治疗量增加 */
+/**
+ * 角色在某个等级时的数值：基础数值 + 升级成长 × (等级 − 1)。
+ * 成长可以是负数；生命至少 1；攻击力按绝对值成长（治疗角色 = 治疗量），不会因为负数成长从攻击变成治疗；
+ * 物抗 / 法抗可以降到负数（受到额外伤害），法抗最高 100。
+ */
 export function leveledCharacter(def: CharacterDef, level: number): CharacterDef {
   const n = Math.max(0, Math.floor(level) - 1);
   if (n === 0) return def;
@@ -105,9 +110,9 @@ export function leveledCharacter(def: CharacterDef, level: number): CharacterDef
   return {
     ...def,
     maxHp: r(Math.max(1, def.maxHp + g.maxHp * n)),
-    atk: r(def.atk < 0 ? def.atk - g.atk * n : def.atk + g.atk * n),
-    def: r(Math.max(0, def.def + g.def * n)),
-    res: r(Math.min(100, Math.max(0, def.res + g.res * n))),
+    atk: r(def.atk < 0 ? Math.min(0, def.atk - g.atk * n) : Math.max(0, def.atk + g.atk * n)),
+    def: r(def.def + g.def * n),
+    res: r(Math.min(100, Math.max(RES_MIN, def.res + g.res * n))),
   };
 }
 
@@ -145,21 +150,26 @@ export function applyBooks(cfg: CurrencyConfig, progress: ProgressData, charId: 
 /* ---------- 通关奖励 ---------- */
 
 export interface LevelRewardInfo {
+  /** 关卡的奖励倍数 */
+  multiplier: number;
+  /** 获得的货币（基础 × 倍数，取整） */
   currency: number;
-  /** 有效的掉落（经验书存在、概率和数量大于 0） */
+  /** 有效的掉落；数量范围已经乘以倍数（可能是小数，实际数量按概率取整） */
   books: BookDrop[];
-  /** 是否使用默认奖励 */
-  defaultCurrency: boolean;
-  defaultBooks: boolean;
 }
 
-export function levelRewardInfo(cfg: CurrencyConfig, settings: Pick<LevelSettings, 'rewardCurrency' | 'rewardBooks'>): LevelRewardInfo {
-  const drops = settings.rewardBooks ?? cfg.defaultBooks;
+const mult = (settings: Pick<LevelSettings, 'rewardMultiplier'>) => Math.max(0, settings.rewardMultiplier ?? 1);
+const validDrops = (cfg: CurrencyConfig) => cfg.defaultBooks.filter((d) => d.chance > 0 && d.max > 0 && cfg.books.some((b) => b.id === d.bookId));
+
+/** 关卡的通关奖励 = 货币编辑中的基础奖励 × 关卡的奖励倍数 */
+export function levelRewardInfo(cfg: CurrencyConfig, settings: Pick<LevelSettings, 'rewardMultiplier'>): LevelRewardInfo {
+  const m = mult(settings);
   return {
-    currency: settings.rewardCurrency ?? cfg.defaultCurrency,
-    books: drops.filter((d) => d.chance > 0 && d.max > 0 && cfg.books.some((b) => b.id === d.bookId)),
-    defaultCurrency: settings.rewardCurrency == null,
-    defaultBooks: settings.rewardBooks == null,
+    multiplier: m,
+    currency: Math.round(cfg.defaultCurrency * m),
+    books: validDrops(cfg)
+      .map((d) => ({ ...d, min: d.min * m, max: d.max * m }))
+      .filter((d) => d.max > 0),
   };
 }
 
@@ -169,16 +179,39 @@ export interface RolledRewards {
   books: Record<string, number>;
 }
 
-/** 通关时抽取奖励：货币固定获得；每项经验书按概率掉落，数量在 min ~ max 之间随机 */
-export function rollRewards(cfg: CurrencyConfig, settings: Pick<LevelSettings, 'rewardCurrency' | 'rewardBooks'>, rng: () => number = Math.random): RolledRewards {
-  const info = levelRewardInfo(cfg, settings);
+/** 小数数量按概率取整，期望值不变（例如 2.4 → 40% 概率为 3，否则为 2） */
+function randomRound(v: number, rng: () => number): number {
+  const x = Math.round(Math.max(0, v) * 1e6) / 1e6;
+  const f = Math.floor(x);
+  return f + (rng() < x - f ? 1 : 0);
+}
+
+/**
+ * 通关时抽取奖励：货币 = 基础 × 倍数；每项经验书按概率掉落，
+ * 数量先在基础的 min ~ max 之间随机，再乘以倍数（小数按概率取整）。
+ */
+export function rollRewards(cfg: CurrencyConfig, settings: Pick<LevelSettings, 'rewardMultiplier'>, rng: () => number = Math.random): RolledRewards {
+  const m = mult(settings);
   const books: Record<string, number> = {};
-  for (const d of info.books) {
+  for (const d of validDrops(cfg)) {
     if (rng() * 100 >= d.chance) continue;
-    const n = d.min + Math.floor(rng() * (d.max - d.min + 1));
+    const base = d.min + Math.floor(rng() * (d.max - d.min + 1));
+    const n = randomRound(base * m, rng);
     if (n > 0) books[d.bookId] = (books[d.bookId] ?? 0) + n;
   }
-  return { currency: info.currency, books };
+  return { currency: Math.round(cfg.defaultCurrency * m), books };
+}
+
+/** 无尽模式结束时：分数按兑换比例换成货币和经验书（每满 N 分换 M 个） */
+export function endlessRewards(endless: EndlessConfig, cfg: CurrencyConfig, score: number): RolledRewards {
+  const s = Math.max(0, Math.floor(score));
+  const books: Record<string, number> = {};
+  for (const r of endless.bookRates) {
+    if (!cfg.books.some((b) => b.id === r.bookId)) continue;
+    const n = Math.floor(Math.floor(s / r.score) * r.amount);
+    if (n > 0) books[r.bookId] = (books[r.bookId] ?? 0) + n;
+  }
+  return { currency: Math.floor(Math.floor(s / endless.currencyRate.score) * endless.currencyRate.amount), books };
 }
 
 /** 把奖励加进玩家进度 */
@@ -196,8 +229,11 @@ export function dropTier(chance: number): string {
   return '罕见';
 }
 
+/** 数量范围（乘以倍数后可能是小数：显示可能的最少 ~ 最多数量） */
 export function dropCountText(d: Pick<BookDrop, 'min' | 'max'>): string {
-  return d.min === d.max ? `×${d.min}` : `×${d.min}~${d.max}`;
+  const lo = Math.floor(d.min + 1e-9);
+  const hi = Math.ceil(d.max - 1e-9);
+  return lo === hi ? `×${lo}` : `×${lo}~${hi}`;
 }
 
 /** 掉落的说明文字，例如「初级经验书 ×2~3（60%）」或「初级经验书 ×2~3 · 大概率」 */

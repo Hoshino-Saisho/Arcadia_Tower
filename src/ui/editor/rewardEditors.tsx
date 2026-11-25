@@ -1,10 +1,9 @@
 import { newDrop } from '../../core/defaults';
-import { formatDrop } from '../../core/leveling';
-import type { BookDrop, CurrencyConfig, ExpBookDef } from '../../core/types';
+import type { BookDrop, ExpBookDef } from '../../core/types';
 import { NumberInput } from '../common/fields';
 
 /**
- * 经验书掉落列表（货币编辑的默认掉落、关卡设置的单独掉落共用）：
+ * 经验书掉落列表（货币编辑中的基础掉落）：
  * 每一项 = 经验书 + 掉落概率 + 数量范围
  */
 export function DropListEditor({ value, books, onChange }: { value: BookDrop[]; books: ExpBookDef[]; onChange: (v: BookDrop[]) => void }) {
@@ -59,23 +58,4 @@ export function DropListEditor({ value, books, onChange }: { value: BookDrop[]; 
 function fixRange(d: BookDrop, patch: Partial<BookDrop>): BookDrop {
   if (d.min <= d.max) return d;
   return patch.min !== undefined ? { ...d, max: d.min } : { ...d, min: d.max };
-}
-
-/** 一行掉落说明（「使用默认」时显示默认掉落的内容） */
-export function DropSummary({ drops, currency }: { drops: BookDrop[]; currency: CurrencyConfig }) {
-  const items = drops.flatMap((d) => {
-    const b = currency.books.find((x) => x.id === d.bookId);
-    return b && d.chance > 0 && d.max > 0 ? [{ d, b }] : [];
-  });
-  if (!items.length) return <span className="muted small">没有经验书掉落</span>;
-  return (
-    <span className="drop-summary">
-      {items.map(({ d, b }, i) => (
-        <span key={i} className="book-chip" style={{ borderColor: b.color }}>
-          <span className="color-dot" style={{ background: b.color }} />
-          {formatDrop(d, b, 'exact')}
-        </span>
-      ))}
-    </span>
-  );
 }

@@ -1,0 +1,90 @@
+{
+  "enabled": true,
+  "name": "无尽模式",
+  "unlockAfter": "",
+  "map": {
+    "id": "ENDLESS_1",
+    "chapterId": "ENDLESS",
+    "index": 1,
+    "version": 2,
+    "width": 14,
+    "height": 6,
+    "grid": [
+      ".HHHHH........",
+      "SGGGGGGGGHH...",
+      ".GHHHHHHGGH...",
+      ".G.....HHGHHH.",
+      ".G......HGGGGB",
+      ".GGGGGGGGGHHH."
+    ],
+    "settings": {
+      "name": "无尽模式",
+      "initialHp": 20,
+      "initialMoney": 30,
+      "autoMoney": true,
+      "moneyPerMinute": 40,
+      "availableCharacters": [],
+      "battleMusic": "",
+      "rewardMultiplier": 1
+    },
+    "lines": [
+      {
+        "id": "L1",
+        "name": "主路",
+        "color": "#e8a33d",
+        "route": {"mode":"auto","spawn":{"x":0,"y":1},"target":null,"path":[],"waits":[]},
+        "blocks": []
+      },
+      {
+        "id": "L7p1z4269od",
+        "name": "敌人线 2",
+        "color": "#4fb3a9",
+        "route": {
+          "mode": "manual",
+          "spawn": {"x":0,"y":1},
+          "target": null,
+          "path": [
+            {"x":0,"y":1},
+            {"x":1,"y":1},
+            {"x":1,"y":2},
+            {"x":1,"y":3},
+            {"x":1,"y":4},
+            {"x":1,"y":5},
+            {"x":2,"y":5},
+            {"x":3,"y":5},
+            {"x":4,"y":5},
+            {"x":5,"y":5},
+            {"x":6,"y":5},
+            {"x":7,"y":5},
+            {"x":8,"y":5},
+            {"x":9,"y":5},
+            {"x":9,"y":4},
+            {"x":10,"y":4},
+            {"x":11,"y":4},
+            {"x":12,"y":4},
+            {"x":13,"y":4}
+          ],
+          "waits": []
+        },
+        "blocks": []
+      }
+    ]
+  },
+  "firstWave": 5,
+  "waveInterval": 30,
+  "startDifficulty": 1,
+  "difficultyPerWave": 0.5,
+  "groupsPerWave": 2,
+  "groupsGrowth": 0.5,
+  "countPerRank": 1,
+  "intervalPerRank": 0.6,
+  "countGrowth": 5,
+  "hpGrowth": 8,
+  "atkGrowth": 3,
+  "currencyRate": {"score":10,"amount":50},
+  "bookRates": [
+    {"bookId":"B001","score":20,"amount":1},
+    {"bookId":"B002","score":100,"amount":1},
+    {"bookId":"B003","score":500,"amount":1}
+  ]
+}

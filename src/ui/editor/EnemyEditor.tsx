@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { newEnemy } from '../../core/defaults';
+import { RES_MIN, newEndlessConfig, newEnemy } from '../../core/defaults';
+import { firstWaveOf, groupSize } from '../../core/endless';
 import { describeAttack, describeOnHit } from '../../core/describe';
 import { notifySaved } from '../../core/github/sync';
 import { nextId, validateUnitId } from '../../core/ids';
-import { loadEnemies, loadSkills, saveEnemies } from '../../core/storage/repository';
+import { loadEndless, loadEnemies, loadSkills, saveEnemies } from '../../core/storage/repository';
 import { tileInfo } from '../../core/tiles';
-import type { EnemyDef, EnemySides, SkillDef } from '../../core/types';
+import type { EndlessConfig, EnemyDef, EnemySides, SkillDef } from '../../core/types';
 import { enemyRadius } from '../../game/entities';
 import { useIcon } from '../../game/icons';
 import { drawRangeTiles } from '../../game/renderer';
@@ -35,8 +36,10 @@ export function EnemyEditor({ onDirtyChange }: EditorTabProps) {
     label: '敌人',
   });
   const [skills, setSkills] = useState<SkillDef[]>([]);
+  const [endless, setEndless] = useState<EndlessConfig>(newEndlessConfig);
   useEffect(() => {
     void loadSkills().then(setSkills);
+    void loadEndless().then(setEndless);
   }, []);
   useSaveShortcut(() => void draft.saveAll());
 
@@ -110,18 +113,38 @@ export function EnemyEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="攻击力" hint={e.attackTarget === 'ally' ? '负数 = 治疗量' : undefined}>
                 <NumberInput value={e.atk} min={-99999} max={99999} integer onChange={(v) => set({ atk: v })} />
               </Field>
-              <Field label="物抗" hint="减免物伤（固定值）">
-                <NumberInput value={e.def} min={0} max={99999} integer onChange={(v) => set({ def: v })} />
+              <Field label="物抗" hint="负数 = 受到更多物伤">
+                <NumberInput value={e.def} min={-99999} max={99999} integer onChange={(v) => set({ def: v })} />
               </Field>
-              <Field label="法抗" hint="减免法伤（%）">
-                <NumberInput value={e.res} min={0} max={100} onChange={(v) => set({ res: v })} />
+              <Field label="法抗" hint="%，负数 = 受到更多法伤">
+                <NumberInput value={e.res} min={RES_MIN} max={100} onChange={(v) => set({ res: v })} />
               </Field>
               <Field label="移动速度" hint="格/秒">
                 <NumberInput value={e.speed} min={0.05} max={20} step={0.05} onChange={(v) => set({ speed: v })} />
               </Field>
-              <Field label="击杀奖励" hint="金钱">
-                <NumberInput value={e.reward} min={0} max={9999} integer onChange={(v) => set({ reward: v })} />
+              <Field label="击杀奖励" hint="负数 = 扣除金钱">
+                <NumberInput value={e.reward} min={-9999} max={9999} integer onChange={(v) => set({ reward: v })} />
               </Field>
+            </div>
+
+            <h3 className="form-title">无尽模式</h3>
+            <div className="form-grid cols-4">
+              <Field label="分数" hint="被击败时获得，负数 = 扣分">
+                <NumberInput value={e.endlessScore} min={-99999} max={99999} step={1} onChange={(v) => set({ endlessScore: v })} />
+              </Field>
+              <Field label="敌人难度" hint="越低越早出现">
+                <NumberInput value={e.endlessDifficulty} min={-99999} max={99999} step={0.5} onChange={(v) => set({ endlessDifficulty: v })} />
+              </Field>
+              <Field label="出现位列" hint="越低每组越少、间隔越短">
+                <NumberInput value={e.endlessRank} min={1} max={50} integer onChange={(v) => set({ endlessRank: v })} />
+              </Field>
+              <Field label="预览">
+                <EndlessPreview def={e} endless={endless} />
+              </Field>
+            </div>
+            <div className="muted small help-text">
+              无尽模式中，当前难度 = 起始难度 + (波次 − 1) × 每波增加；只有「敌人难度」不超过当前难度的敌人会出现，越接近当前难度出现得越多。
+              每组的数量 = 出现位列 × 每位列数量（每波还会增加），组内出现间隔 = 出现位列 × 每位列间隔。这些系数在「无尽模式」编辑器中设置。
             </div>
 
             <h3 className="form-title">攻击方式</h3>
@@ -295,5 +318,16 @@ function EnemyPreview({ def }: { def: EnemyDef }) {
         ))}
       </div>
     </aside>
+  );
+}
+
+/** 无尽模式中这个敌人第一次出现的波次，以及第 1 波 / 第 10 波时每组的数量和间隔 */
+function EndlessPreview({ def, endless }: { def: EnemyDef; endless: EndlessConfig }) {
+  const first = firstWaveOf(endless, def.endlessDifficulty);
+  const g1 = groupSize(endless, def.endlessRank, Math.max(1, first ?? 1));
+  return (
+    <div className="static-value small">
+      {first == null ? '不会出现（难度太高）' : `第 ${first} 波起出现`} · 每组 {g1.count} 个{g1.count > 1 ? `，间隔 ${g1.interval} 秒` : ''}
+    </div>
   );
 }

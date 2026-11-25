@@ -5,12 +5,13 @@ import { navigate, openApp } from '../router';
 import { ChapterEditor } from './ChapterEditor';
 import { CharacterEditor } from './CharacterEditor';
 import { CurrencyEditor } from './CurrencyEditor';
+import { EndlessEditor } from './EndlessEditor';
 import { EnemyEditor } from './EnemyEditor';
 import { GitHubBar } from './GitHubBar';
 import { LevelEditor } from './LevelEditor';
 import { SkillEditor } from './SkillEditor';
 
-type Tab = 'characters' | 'enemies' | 'skills' | 'chapters' | 'levels' | 'currency';
+type Tab = 'characters' | 'enemies' | 'skills' | 'chapters' | 'levels' | 'currency' | 'endless';
 
 const TABS: { id: Tab; label: string; desc: string }[] = [
   { id: 'characters', label: '角色编辑', desc: '数值 · 攻击方式 · 技能' },
@@ -19,13 +20,14 @@ const TABS: { id: Tab; label: string; desc: string }[] = [
   { id: 'chapters', label: '章节规划', desc: '顺序 · 关卡数 · 音乐' },
   { id: 'levels', label: '地图规划', desc: '地图积木 · 敌人路线' },
   { id: 'currency', label: '货币编辑', desc: '货币 · 经验书 · 升级' },
+  { id: 'endless', label: '无尽模式', desc: '波次 · 地图 · 分数兑换' },
 ];
 
 export interface EditorTabProps {
   onDirtyChange: (dirty: boolean) => void;
 }
 
-/** 关卡编辑器外壳：六个模块，切换时检查未保存的修改 */
+/** 关卡编辑器外壳：七个模块，切换时检查未保存的修改 */
 export function EditorApp({ initialLevel }: { initialLevel?: string }) {
   const [tab, setTab] = useState<Tab>(initialLevel ? 'levels' : 'characters');
   const dirtyRef = useRef(false);
@@ -124,6 +126,7 @@ export function EditorApp({ initialLevel }: { initialLevel?: string }) {
         {tab === 'chapters' && <ChapterEditor key={key} onDirtyChange={onDirtyChange} />}
         {tab === 'levels' && <LevelEditor key={key} onDirtyChange={onDirtyChange} initialLevel={initialLevel} />}
         {tab === 'currency' && <CurrencyEditor key={key} onDirtyChange={onDirtyChange} />}
+        {tab === 'endless' && <EndlessEditor key={key} onDirtyChange={onDirtyChange} />}
       </main>
     </div>
   );

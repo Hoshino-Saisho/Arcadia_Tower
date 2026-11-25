@@ -20,7 +20,8 @@ import { UnitToken } from '../common/tokens';
 import { MusicSelect, useMusicTracks } from './effectEditors';
 import { GridCanvas, type GridPointer } from './GridCanvas';
 import type { ApplyFn } from './LevelEditor';
-import { DropListEditor, DropSummary } from './rewardEditors';
+import { levelRewardInfo } from '../../core/leveling';
+import { RewardPreview } from '../common/wallet';
 
 type Tool = 'brush' | 'rect';
 
@@ -66,12 +67,15 @@ export function MapStep({
   currency,
   apply,
   onConfirm,
+  variant = 'level',
 }: {
   level: LevelDef;
   characters: CharacterDef[];
   currency: CurrencyConfig;
   apply: ApplyFn;
   onConfirm: () => void;
+  /** endless = 无尽模式的地图（没有关卡名称和通关奖励） */
+  variant?: 'level' | 'endless';
 }) {
   const [tool, setTool] = useState<Tool>('brush');
   const [brush, setBrush] = useState<string>('G');
@@ -269,11 +273,13 @@ export function MapStep({
       </section>
 
       <aside className="level-settings">
-        <div className="panel-head">关卡设置</div>
+        <div className="panel-head">{variant === 'endless' ? '战斗设置' : '关卡设置'}</div>
         <div className="form-grid single">
-          <Field label="关卡名称">
-            <TextInput value={s.name} maxLength={30} onChange={(v) => setSettings({ name: v })} />
-          </Field>
+          {variant === 'level' && (
+            <Field label="关卡名称">
+              <TextInput value={s.name} maxLength={30} onChange={(v) => setSettings({ name: v })} />
+            </Field>
+          )}
           <Field label="玩家初始血量" hint="每个敌人进入基地扣 1 点">
             <NumberInput value={s.initialHp} min={1} max={9999} integer onChange={(v) => setSettings({ initialHp: v })} />
           </Field>
@@ -283,31 +289,23 @@ export function MapStep({
           <Field label="金钱回复">
             <Checkbox checked={s.autoMoney} onChange={(v) => setSettings({ autoMoney: v })} label="自动回复金钱" />
           </Field>
-          <Field label="每分钟恢复数量">
-            <NumberInput value={s.moneyPerMinute} min={0} max={99999} step={1} disabled={!s.autoMoney} onChange={(v) => setSettings({ moneyPerMinute: v })} />
+          <Field label="每分钟恢复数量" hint="负数 = 金钱随时间减少">
+            <NumberInput value={s.moneyPerMinute} min={-99999} max={99999} step={1} disabled={!s.autoMoney} onChange={(v) => setSettings({ moneyPerMinute: v })} />
           </Field>
-          <Field label={`通关奖励 · ${currency.name}`} hint="每次通关固定获得" block>
-            <Checkbox
-              checked={s.rewardCurrency == null}
-              onChange={(v) => setSettings({ rewardCurrency: v ? null : currency.defaultCurrency })}
-              label={`使用默认（${currency.defaultCurrency}）`}
+          {variant === 'level' && (
+            <Field label="通关奖励倍数" hint="× 货币编辑中的基础奖励" block>
+              <NumberInput value={s.rewardMultiplier} min={0} max={1000} step={0.5} onChange={(v) => setSettings({ rewardMultiplier: v })} />
+              <RewardPreview cfg={currency} info={levelRewardInfo(currency, s)} display="exact" />
+            </Field>
+          )}
+          <Field label="战斗音乐" hint={variant === 'endless' ? undefined : '默认跟随章节'}>
+            <MusicSelect
+              kind="battle"
+              value={s.battleMusic}
+              tracks={tracks.battle}
+              emptyLabel={variant === 'endless' ? '无' : '跟随章节设置'}
+              onChange={(v) => setSettings({ battleMusic: v })}
             />
-            {s.rewardCurrency != null && <NumberInput value={s.rewardCurrency} min={0} max={1e9} integer onChange={(v) => setSettings({ rewardCurrency: v })} />}
-          </Field>
-          <Field label="通关奖励 · 经验书" hint="按概率掉落" block>
-            <Checkbox
-              checked={s.rewardBooks == null}
-              onChange={(v) => setSettings({ rewardBooks: v ? null : structuredClone(currency.defaultBooks) })}
-              label="使用默认掉落"
-            />
-            {s.rewardBooks == null ? (
-              <DropSummary drops={currency.defaultBooks} currency={currency} />
-            ) : (
-              <DropListEditor value={s.rewardBooks} books={currency.books} onChange={(v) => setSettings({ rewardBooks: v })} />
-            )}
-          </Field>
-          <Field label="战斗音乐" hint="默认跟随章节">
-            <MusicSelect kind="battle" value={s.battleMusic} tracks={tracks.battle} emptyLabel="跟随章节设置" onChange={(v) => setSettings({ battleMusic: v })} />
           </Field>
           <Field label="可用角色">
             <Checkbox

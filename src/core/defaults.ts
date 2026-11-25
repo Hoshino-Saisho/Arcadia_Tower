@@ -3,11 +3,14 @@ import { STATS } from './stats';
 import { makeEmptyGrid, resizeGrid } from './tiles';
 import type {
   BookDrop,
+  BookScoreRate,
   ChapterDef,
   CharacterDef,
   CharacterGrowth,
   CharacterProgress,
   CurrencyConfig,
+  EndlessConfig,
+  EndlessRecord,
   EnemyDef,
   EnemyLine,
   EnemySides,
@@ -31,6 +34,10 @@ import type {
 export const LEVEL_FORMAT_VERSION = 2;
 /** 撤退角色时返还的费用比例 */
 export const RETREAT_REFUND_RATIO = 0.5;
+/** 撤退返还的金钱（费用是负数时 = 扣回一半） */
+export function retreatRefund(cost: number): number {
+  return Math.sign(cost) * Math.floor(Math.abs(cost) * RETREAT_REFUND_RATIO);
+}
 /** 敌人到达基地时扣除的血量 */
 export const LEAK_DAMAGE = 1;
 /** 选中角色（部署卡片或场上角色）时的时间流速倍率 */
@@ -39,6 +46,10 @@ export const SELECT_SLOW_FACTOR = 0.2;
 export const DEFAULT_WAIT = 2;
 /** 没有设置升级成长的角色：每级增加基础数值的 5% */
 export const DEFAULT_GROWTH_RATIO = 0.05;
+/** 法抗的下限（负数 = 受到额外的法伤，−100 = 两倍法伤） */
+export const RES_MIN = -1000;
+/** 无尽模式地图的编号 */
+export const ENDLESS_MAP_ID = 'ENDLESS_1';
 
 export const LINE_COLORS = ['#e8a33d', '#4fb3a9', '#d1605e', '#8f7ad6', '#6aa84f', '#d98cc0', '#5b9bd5', '#c9b458'];
 
@@ -98,6 +109,20 @@ export function newEnemy(id: string): EnemyDef {
     skills: [],
     skillSlots: 1,
     onHit: null,
+    ...endlessDefaults(500),
+  };
+}
+
+/**
+ * 无尽模式的默认值（没有设置时按生命值估算，可以在敌人编辑中修改）：
+ * 分数 = 生命 / 100；难度 = 生命 / 500（至少 1）；出现位列 = 1000 / 生命（1~5，越弱的敌人一组越多）
+ */
+export function endlessDefaults(maxHp: number): Pick<EnemyDef, 'endlessScore' | 'endlessDifficulty' | 'endlessRank'> {
+  const hp = Math.max(1, maxHp);
+  return {
+    endlessScore: Math.max(1, Math.round(hp / 100)),
+    endlessDifficulty: Math.max(1, Math.round(hp / 500)),
+    endlessRank: Math.min(5, Math.max(1, Math.round(1000 / hp))),
   };
 }
 
@@ -145,8 +170,7 @@ export function defaultLevelSettings(code: string): LevelSettings {
     moneyPerMinute: 30,
     availableCharacters: [],
     battleMusic: '',
-    rewardCurrency: null,
-    rewardBooks: null,
+    rewardMultiplier: 1,
   };
 }
 
@@ -283,11 +307,11 @@ export function normalizeCharacter(raw: any): CharacterDef {
     iconCenter: iconPoint(raw?.iconCenter),
     iconZoom: iconZoom(raw?.iconZoom),
     placement,
-    cost: num(raw?.cost, d.cost, 0),
+    cost: num(raw?.cost, d.cost, -99999, 99999),
     maxHp: num(raw?.maxHp, d.maxHp, 1),
     atk: num(raw?.atk, d.atk, -99999, 99999),
-    def: num(raw?.def, d.def, 0),
-    res: num(raw?.res, 0, 0, 100),
+    def: num(raw?.def, d.def, -99999, 99999),
+    res: num(raw?.res, 0, RES_MIN, 100),
     damageType: raw?.damageType === 'magic' || raw?.damageType === 'true' ? raw.damageType : 'physical',
     attackTarget: raw?.attackTarget === 'ally' ? 'ally' : 'enemy',
     targetCount: Math.round(num(raw?.targetCount, 1, -1, 99)) || 1,
@@ -303,20 +327,20 @@ export function normalizeCharacter(raw: any): CharacterDef {
     growth: normalizeGrowth(raw?.growth, {
       maxHp: num(raw?.maxHp, d.maxHp, 1),
       atk: num(raw?.atk, d.atk, -99999, 99999),
-      def: num(raw?.def, d.def, 0),
+      def: num(raw?.def, d.def, -99999, 99999),
     }),
     description: typeof raw?.description === 'string' ? raw.description : undefined,
   };
 }
 
-/** 升级成长：没有设置时按基础数值的 5% 生成；不允许负数 */
+/** 升级成长：没有设置时按基础数值的 5% 生成；可以是负数（每升 1 级减少） */
 function normalizeGrowth(raw: any, base: { maxHp: number; atk: number; def: number }): CharacterGrowth {
   if (!raw || typeof raw !== 'object') return defaultGrowth(base);
   return {
-    maxHp: num(raw.maxHp, 0, 0, 99999),
-    atk: num(raw.atk, 0, 0, 99999),
-    def: num(raw.def, 0, 0, 99999),
-    res: num(raw.res, 0, 0, 100),
+    maxHp: num(raw.maxHp, 0, -99999, 99999),
+    atk: num(raw.atk, 0, -99999, 99999),
+    def: num(raw.def, 0, -99999, 99999),
+    res: num(raw.res, 0, -100, 100),
   };
 }
 
@@ -335,8 +359,8 @@ export function normalizeEnemy(raw: any): EnemyDef {
     size: num(raw?.size, 1, 0.5, 2),
     maxHp: num(raw?.maxHp, d.maxHp, 1),
     atk: num(raw?.atk, d.atk, -99999, 99999),
-    def: num(raw?.def, d.def, 0),
-    res: num(raw?.res, 0, 0, 100),
+    def: num(raw?.def, d.def, -99999, 99999),
+    res: num(raw?.res, 0, RES_MIN, 100),
     speed: num(raw?.speed, d.speed, 0.05, 20),
     canAttack: typeof raw?.canAttack === 'boolean' ? raw.canAttack : d.canAttack,
     damageType: raw?.damageType === 'magic' || raw?.damageType === 'true' ? raw.damageType : 'physical',
@@ -344,12 +368,23 @@ export function normalizeEnemy(raw: any): EnemyDef {
     targetCount: Math.round(num(raw?.targetCount, 1, -1, 99)) || 1,
     attackInterval: num(raw?.attackInterval, d.attackInterval, 0.05),
     attackRange: num(raw?.attackRange, d.attackRange, 0),
-    reward: num(raw?.reward, d.reward, 0),
+    reward: num(raw?.reward, d.reward, -99999, 99999),
     attackType: str(raw?.attackType, 'basic'),
     skills: strList(raw?.skills),
     skillSlots: Math.round(num(raw?.skillSlots, 1, 0, 9)),
     onHit: normalizeOnHit(raw?.onHit),
+    ...normalizeEndlessEnemy(raw, num(raw?.maxHp, d.maxHp, 1)),
     description: typeof raw?.description === 'string' ? raw.description : undefined,
+  };
+}
+
+/** 敌人的无尽模式数值：没有设置的按生命值估算 */
+function normalizeEndlessEnemy(raw: any, maxHp: number): Pick<EnemyDef, 'endlessScore' | 'endlessDifficulty' | 'endlessRank'> {
+  const d = endlessDefaults(maxHp);
+  return {
+    endlessScore: num(raw?.endlessScore, d.endlessScore, -99999, 99999),
+    endlessDifficulty: num(raw?.endlessDifficulty, d.endlessDifficulty, -99999, 99999),
+    endlessRank: Math.round(num(raw?.endlessRank, d.endlessRank, 1, 50)),
   };
 }
 
@@ -463,11 +498,10 @@ export function normalizeLevel(raw: any, fallbackCode?: string): LevelDef {
       initialHp: Math.round(num(s.initialHp, ds.initialHp, 1, 9999)),
       initialMoney: Math.round(num(s.initialMoney, ds.initialMoney, 0, 999999)),
       autoMoney: typeof s.autoMoney === 'boolean' ? s.autoMoney : ds.autoMoney,
-      moneyPerMinute: num(s.moneyPerMinute, ds.moneyPerMinute, 0, 99999),
+      moneyPerMinute: num(s.moneyPerMinute, ds.moneyPerMinute, -99999, 99999),
       availableCharacters: strList(s.availableCharacters),
       battleMusic: str(s.battleMusic, ''),
-      rewardCurrency: typeof s.rewardCurrency === 'number' && Number.isFinite(s.rewardCurrency) ? Math.round(num(s.rewardCurrency, 0, 0, 1e9)) : null,
-      rewardBooks: Array.isArray(s.rewardBooks) ? normalizeDrops(s.rewardBooks) : null,
+      rewardMultiplier: Math.round(num(s.rewardMultiplier, 1, 0, 1000) * 1000) / 1000,
     },
     lines: Array.isArray(raw?.lines) ? raw.lines.map(normalizeLine) : [],
   };
@@ -545,5 +579,79 @@ export function normalizeProgress(raw: any): ProgressData {
       if (level > 1 || exp > 0) levels[k] = { level, exp };
     }
   }
-  return { cleared: strList(raw?.cleared), loadouts, currency: Math.floor(num(raw?.currency, 0, 0, 1e15)), books, levels };
+  return {
+    cleared: strList(raw?.cleared),
+    loadouts,
+    currency: Math.floor(num(raw?.currency, 0, 0, 1e15)),
+    books,
+    levels,
+    endlessBest: normalizeRecord(raw?.endlessBest),
+  };
+}
+
+function normalizeRecord(raw: any): EndlessRecord | null {
+  if (!raw || typeof raw !== 'object' || typeof raw.score !== 'number' || !Number.isFinite(raw.score)) return null;
+  return { score: raw.score, wave: Math.max(0, Math.round(num(raw.wave, 0, 0, 1e9))), time: num(raw.time, 0, 0, 1e9) };
+}
+
+/* ---------- 无尽模式 ---------- */
+
+export function newEndlessConfig(): EndlessConfig {
+  const map = newLevel('ENDLESS', 1);
+  return {
+    enabled: false,
+    name: '无尽模式',
+    unlockAfter: '',
+    map,
+    firstWave: 5,
+    waveInterval: 30,
+    startDifficulty: 1,
+    difficultyPerWave: 0.5,
+    groupsPerWave: 2,
+    groupsGrowth: 0.5,
+    countPerRank: 1,
+    intervalPerRank: 0.6,
+    countGrowth: 5,
+    hpGrowth: 8,
+    atkGrowth: 3,
+    currencyRate: { score: 10, amount: 50 },
+    bookRates: [
+      { bookId: 'B001', score: 20, amount: 1 },
+      { bookId: 'B002', score: 100, amount: 1 },
+      { bookId: 'B003', score: 500, amount: 1 },
+    ],
+  };
+}
+
+function normalizeRate(raw: any, d: { score: number; amount: number }) {
+  return { score: num(raw?.score, d.score, 1, 1e9), amount: num(raw?.amount, d.amount, 0, 1e9) };
+}
+
+export function normalizeEndless(raw: any): EndlessConfig {
+  const d = newEndlessConfig();
+  if (!raw || typeof raw !== 'object') return d;
+  // 无尽模式的地图不属于任何章节（战斗音乐只用地图自己设置的）
+  const map = raw.map && typeof raw.map === 'object' ? normalizeLevel({ ...raw.map, id: ENDLESS_MAP_ID, chapterId: 'ENDLESS', index: 1 }, ENDLESS_MAP_ID) : d.map;
+  const bookRates: BookScoreRate[] = Array.isArray(raw.bookRates)
+    ? raw.bookRates.filter((r: any) => r && typeof r.bookId === 'string' && r.bookId).map((r: any) => ({ bookId: r.bookId, ...normalizeRate(r, { score: 100, amount: 1 }) }))
+    : d.bookRates;
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : d.enabled,
+    name: str(raw.name, d.name).trim() || d.name,
+    unlockAfter: str(raw.unlockAfter, ''),
+    map,
+    firstWave: num(raw.firstWave, d.firstWave, 0, 3600),
+    waveInterval: num(raw.waveInterval, d.waveInterval, 1, 3600),
+    startDifficulty: num(raw.startDifficulty, d.startDifficulty, -99999, 99999),
+    difficultyPerWave: num(raw.difficultyPerWave, d.difficultyPerWave, -1000, 1000),
+    groupsPerWave: num(raw.groupsPerWave, d.groupsPerWave, 1, 50),
+    groupsGrowth: num(raw.groupsGrowth, d.groupsGrowth, -50, 50),
+    countPerRank: num(raw.countPerRank, d.countPerRank, 0.1, 50),
+    intervalPerRank: num(raw.intervalPerRank, d.intervalPerRank, 0.05, 60),
+    countGrowth: num(raw.countGrowth, d.countGrowth, -100, 1000),
+    hpGrowth: num(raw.hpGrowth, d.hpGrowth, -100, 1000),
+    atkGrowth: num(raw.atkGrowth, d.atkGrowth, -100, 1000),
+    currencyRate: normalizeRate(raw.currencyRate, d.currencyRate),
+    bookRates,
+  };
 }

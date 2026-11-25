@@ -19,7 +19,7 @@ const BOOK_COLORS = ['#6aa84f', '#5b9bd5', '#b07ad9', '#e8a33d', '#d1605e', '#4f
  * 货币编辑：游戏外货币、经验书、角色升级经验、关卡默认的通关奖励（data/currency.json）。
  *  - 升级经验：基础升级经验（1 → 2 级，全部角色通用），之后每一级 = 上一级 × (1 + 增长)
  *  - 经验书：每本增加固定经验，使用时每本消耗一定的货币
- *  - 通关奖励：每关固定获得的货币 + 按概率掉落的经验书（关卡可以在「地图规划 → 关卡设置」中单独设置）
+ *  - 基础通关奖励（1 倍）：固定获得的货币 + 按概率掉落的经验书；每个关卡在「地图规划 → 关卡设置」中设置倍数
  */
 export function CurrencyEditor({ onDirtyChange }: EditorTabProps) {
   const [cfg, setCfg] = useState<CurrencyConfig | null>(null);
@@ -49,7 +49,7 @@ export function CurrencyEditor({ onDirtyChange }: EditorTabProps) {
     if (!cfg.name.trim()) out.push('货币名称不能为空');
     cfg.books.forEach((b) => !b.name.trim() && out.push(`经验书 ${b.id} 没有名称`));
     const ids = new Set(cfg.books.map((b) => b.id));
-    if (cfg.defaultBooks.some((d) => !ids.has(d.bookId))) out.push('默认掉落中有已删除的经验书');
+    if (cfg.defaultBooks.some((d) => !ids.has(d.bookId))) out.push('基础掉落中有已删除的经验书');
     return out;
   }, [cfg]);
 
@@ -148,10 +148,12 @@ export function CurrencyEditor({ onDirtyChange }: EditorTabProps) {
             + 新建经验书
           </button>
 
-          <h3 className="form-title">默认通关奖励</h3>
-          <div className="muted small help-text">每次通关关卡都会获得。关卡可以在「地图规划 → 关卡设置」中单独设置，没有单独设置的关卡使用这里的默认值。</div>
+          <h3 className="form-title">基础通关奖励（1 倍）</h3>
+          <div className="muted small help-text">
+            这里是奖励的基础单位。每个关卡在「地图规划 → 关卡设置」中设置「通关奖励倍数」：本关奖励 = 基础奖励 × 倍数（货币和经验书的数量都乘以倍数，掉落概率不变）。每次通关都会获得。
+          </div>
           <div className="form-grid">
-            <Field label={`每关获得的${cfg.name}`} hint="固定数量">
+            <Field label={`基础${cfg.name}`} hint="1 倍时每次通关固定获得">
               <NumberInput value={cfg.defaultCurrency} min={0} max={1e9} integer onChange={(v) => set({ defaultCurrency: v })} />
             </Field>
             <Field label="关卡选择中的掉落显示" hint="玩家看到的掉落信息">
@@ -165,7 +167,7 @@ export function CurrencyEditor({ onDirtyChange }: EditorTabProps) {
                 onChange={(v) => set({ dropDisplay: v })}
               />
             </Field>
-            <Field label="默认经验书掉落" hint="每一项按概率掉落，数量在范围内随机" wide block>
+            <Field label="基础经验书掉落" hint="每一项按概率掉落，数量在范围内随机（再乘以关卡倍数）" wide block>
               <DropListEditor value={cfg.defaultBooks} books={cfg.books} onChange={(v) => set({ defaultBooks: v })} />
             </Field>
           </div>
@@ -232,7 +234,7 @@ function CurrencyPreview({ cfg }: { cfg: CurrencyConfig }) {
           </ul>
         </>
       )}
-      <div className="panel-head">关卡选择中的显示</div>
+      <div className="panel-head">关卡选择中的显示（1 倍）</div>
       <div className="small">
         {cfg.dropDisplay === 'hidden' ? (
           <span className="muted">不显示掉落</span>

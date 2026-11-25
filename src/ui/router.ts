@@ -8,6 +8,8 @@ import { getBridge } from '../core/storage/backend';
  *   #/game/chapters        章节选择
  *   #/game/chapter/ZH      关卡选择
  *   #/game/play/ZH_1       战斗（?test=1 为编辑器试玩）
+ *   #/game/endless         无尽模式（说明、最好成绩）
+ *   #/game/endless/play    无尽模式战斗（?test=1 为编辑器试玩）
  *   #/editor               关卡编辑器（?level=ZH_1 直接打开关卡）
  */
 export interface Route {

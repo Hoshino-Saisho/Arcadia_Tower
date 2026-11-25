@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { DEFAULT_WAIT, LINE_COLORS, blockDuration, newLine } from '../../core/defaults';
 import { shortUid } from '../../core/ids';
 import { connectTiles, findPath, isAdjacent, resolveRoute, stepOfVisit, type ResolvedRoute } from '../../core/pathfinding';
@@ -29,12 +29,15 @@ export function RouteStep({
   apply,
   onBack,
   routeHistory,
+  timelineNote,
 }: {
   level: LevelDef;
   enemies: EnemyDef[];
   apply: ApplyFn;
   onBack: () => void;
   routeHistory: RouteHistory;
+  /** 时间线上方的说明（无尽模式用） */
+  timelineNote?: ReactNode;
 }) {
   const grid = useMemo(() => TileGrid.fromLevel(level), [level.grid, level.width, level.height]);
   const spawns = useMemo(() => grid.find('spawn'), [grid]);
@@ -463,6 +466,7 @@ export function RouteStep({
         </aside>
       </div>
 
+      {timelineNote && <div className="timeline-note small">{timelineNote}</div>}
       <Timeline
         lines={level.lines}
         enemies={enemies}

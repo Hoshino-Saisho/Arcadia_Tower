@@ -39,6 +39,8 @@ export function isBuff(m: StatModifier): boolean {
 /**
  * 计算修改后的属性：(基础值 + 固定值之和) × (1 + 百分比之和 / 100)
  * 再限制在合理范围内。攻击目标数为 -1（射程内全部）时不受修改影响。
+ * 物抗 / 法抗可以是负数（受到额外伤害）：百分比按绝对值计算（+30% 总是让抗性变高），
+ * 减益最多降到 0；基础值本身是负数时不会低于基础值。
  */
 export function applyModifiers(base: Stats, modifierLists: StatModifier[][]): Stats {
   const add: Partial<Record<StatKey, number>> = {};
@@ -53,11 +55,12 @@ export function applyModifiers(base: Stats, modifierLists: StatModifier[][]): St
   for (const k of Object.keys(base) as StatKey[]) {
     if (add[k] === undefined && pct[k] === undefined) continue;
     if (k === 'targetCount' && base.targetCount < 0) continue;
-    out[k] = (base[k] + (add[k] ?? 0)) * (1 + (pct[k] ?? 0) / 100);
+    const v = base[k] + (add[k] ?? 0);
+    out[k] = (k === 'def' || k === 'res') && v < 0 ? v + (Math.abs(v) * (pct[k] ?? 0)) / 100 : v * (1 + (pct[k] ?? 0) / 100);
   }
   out.maxHp = Math.max(1, out.maxHp);
-  out.def = Math.max(0, out.def);
-  out.res = Math.min(100, Math.max(0, out.res));
+  out.def = Math.max(Math.min(0, base.def), out.def);
+  out.res = Math.min(100, Math.max(Math.min(0, base.res), out.res));
   out.attackInterval = Math.max(0.1, out.attackInterval);
   out.range = Math.max(0, out.range);
   if (out.targetCount >= 0) out.targetCount = Math.max(1, Math.round(out.targetCount));
@@ -68,14 +71,14 @@ export function applyModifiers(base: Stats, modifierLists: StatModifier[][]): St
 
 /**
  * 伤害公式：
- *  - 物伤：攻击 − 物抗，至少为攻击力的 5%（无视法抗）
- *  - 法伤：攻击 × (1 − 法抗%)，至少为攻击力的 5%（无视物抗）
+ *  - 物伤：攻击 − 物抗，至少为攻击力的 5%（无视法抗）；物抗是负数时伤害更高
+ *  - 法伤：攻击 × (1 − 法抗%)，至少为攻击力的 5%（无视物抗）；法抗是负数时伤害更高（−100 = 两倍）
  *  - 真伤：无视物抗和法抗，不被减免
  */
 export function computeDamage(atk: number, type: DamageType | SkillDamageType, def: number, res: number): number {
   if (atk <= 0) return 0;
   if (type === 'true') return atk;
-  if (type === 'magic') return Math.max(atk * (1 - Math.min(100, Math.max(0, res)) / 100), atk * 0.05);
+  if (type === 'magic') return Math.max(atk * (1 - Math.min(100, res) / 100), atk * 0.05);
   return Math.max(atk - def, atk * 0.05);
 }
 

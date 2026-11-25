@@ -7,14 +7,18 @@
  *     停留点、转圈路线、部署冷却、角色等级
  *  5. 用简单的自动部署策略把每个关卡模拟打一遍
  *  6. 手机版舞台的坐标换算（缩放 / 旋转 90°）
- *  7. 升级与通关奖励：升级经验表、经验书、升级成长、掉落
+ *  7. 升级与通关奖励：升级经验表、经验书、升级成长、掉落（基础奖励 × 关卡倍数）
+ *  8. 负数数值：负数物抗 / 法抗、负数成长、负数费用 / 击杀奖励 / 金钱回复
+ *  9. 无尽模式：难度、出现位列、波次、敌人强化、分数和兑换
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  newEndlessConfig,
   normalizeCharacter,
   normalizeChapter,
   normalizeCurrency,
+  normalizeEndless,
   normalizeEnemy,
   normalizeLevel,
   normalizeProgress,
@@ -28,11 +32,14 @@ import {
   grantRewards,
   leveledCharacter,
   levelMap,
+  dropCountText,
+  endlessRewards,
   levelRewardInfo,
   rollRewards,
   usefulBooks,
 } from '../src/core/leveling';
 import { checkManualPath, findPath, resolveRoute, resolveWaits, visitNumbers } from '../src/core/pathfinding';
+import { eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount } from '../src/core/endless';
 import { ProgressView } from '../src/core/progress';
 import { rangeOffsets, tileInRange } from '../src/core/range';
 import { applyModifiers, computeDamage } from '../src/core/stats';
@@ -70,6 +77,7 @@ const chapters = readJson('chapters.json').chapters.map(normalizeChapter);
 const levelFiles = fs.readdirSync(path.join(dataDir, 'levels')).filter((f) => f.endsWith('.json'));
 const levels: LevelDef[] = levelFiles.map((f) => normalizeLevel(readJson(`levels/${f}`), f.slice(0, -5)));
 const currency = normalizeCurrency(fs.existsSync(path.join(dataDir, 'currency.json')) ? readJson('currency.json') : null);
+const endlessCfg = normalizeEndless(fs.existsSync(path.join(dataDir, 'endless.json')) ? readJson('endless.json') : null);
 const charById = new Map(characters.map((c) => [c.id, c]));
 const enemyById = new Map(enemies.map((e) => [e.id, e]));
 
@@ -121,13 +129,18 @@ for (const lv of levels) {
     if (r.waits?.invalid.length) warn(false, `${lv.id}「${line.name}」有 ${r.waits.invalid.length} 个停留点不在路线上`);
     for (const b of line.blocks) if (!enemyById.has(b.enemyId)) check(false, `${lv.id} 敌人 ${b.enemyId} 不存在`);
   }
-  for (const d of lv.settings.rewardBooks ?? []) if (!currency.books.some((b) => b.id === d.bookId)) check(false, `${lv.id} 通关奖励中的经验书 ${d.bookId} 不存在`);
 }
 check(currency.books.length > 0 && currency.maxLevel >= 1, `货币设置：${currency.name}，经验书 ${currency.books.length} 种，等级上限 ${currency.maxLevel}`);
 check(
   currency.defaultBooks.every((d) => currency.books.some((b) => b.id === d.bookId)),
-  '默认通关掉落引用的经验书都存在',
+  '基础通关掉落引用的经验书都存在',
 );
+{
+  const g = TileGrid.fromLevel(endlessCfg.map);
+  const valid = endlessCfg.map.lines.filter((l) => resolveRoute(g, l.route).path).length;
+  if (endlessCfg.enabled) check(valid > 0, `无尽模式已启用：地图有 ${valid} 条有效路线`);
+  check(endlessCfg.bookRates.every((r) => currency.books.some((b) => b.id === r.bookId)), '无尽模式兑换引用的经验书都存在');
+}
 
 console.log('\n[3] 进度解锁规则');
 {
@@ -508,17 +521,128 @@ console.log('\n[7] 升级与通关奖励');
     let i = 0;
     return () => vals[i++ % vals.length];
   };
-  const settings = { rewardCurrency: null, rewardBooks: [{ bookId: 'B1', chance: 100, min: 2, max: 3 }, { bookId: 'B2', chance: 50, min: 1, max: 1 }, { bookId: 'XX', chance: 100, min: 1, max: 1 }] };
-  const cfg2 = { ...cfg, defaultCurrency: 80 };
-  const rolled = rollRewards(cfg2, settings, seq([0.1, 0.99, 0.6]));
-  check(rolled.currency === 80 && rolled.books.B1 === 3 && !rolled.books.B2 && !rolled.books.XX, `掉落：B1 ×${rolled.books.B1}，B2 没掉（60% ≥ 50%），不存在的经验书被忽略`);
-  const rolled2 = rollRewards(cfg2, settings, seq([0.1, 0, 0.3, 0]));
-  check(rolled2.books.B1 === 2 && rolled2.books.B2 === 1, 'B2 在 30% < 50% 时掉落');
-  check(levelRewardInfo(cfg2, { rewardCurrency: 7, rewardBooks: [] }).currency === 7 && levelRewardInfo(cfg2, { rewardCurrency: 7, rewardBooks: [] }).books.length === 0, '关卡单独设置的奖励优先于默认值');
+  // 关卡奖励 = 基础奖励（货币编辑）× 关卡的奖励倍数
+  const cfg2 = {
+    ...cfg,
+    defaultCurrency: 80,
+    defaultBooks: [
+      { bookId: 'B1', chance: 100, min: 2, max: 3 },
+      { bookId: 'B2', chance: 50, min: 1, max: 1 },
+      { bookId: 'XX', chance: 100, min: 1, max: 1 },
+    ],
+  };
+  const rolled = rollRewards(cfg2, { rewardMultiplier: 1 }, seq([0.1, 0.99, 0.5, 0.6]));
+  check(rolled.currency === 80 && rolled.books.B1 === 3 && !rolled.books.B2 && !rolled.books.XX, `1 倍：80 金币，B1 ×${rolled.books.B1}，B2 没掉（60% ≥ 50%），不存在的经验书被忽略`);
+  const rolled2 = rollRewards(cfg2, { rewardMultiplier: 2 }, seq([0.1, 0, 0.5, 0.3, 0, 0.5]));
+  check(rolled2.currency === 160 && rolled2.books.B1 === 4 && rolled2.books.B2 === 2, `2 倍：160 金币，B1 ×${rolled2.books.B1}（2 × 2），B2 ×${rolled2.books.B2}`);
+  const r15a = rollRewards(cfg2, { rewardMultiplier: 1.5 }, seq([0.1, 0.99, 0.4, 0.99]));
+  const r15b = rollRewards(cfg2, { rewardMultiplier: 1.5 }, seq([0.1, 0.99, 0.6, 0.99]));
+  check(r15a.currency === 120 && r15a.books.B1 === 5 && r15b.books.B1 === 4, '1.5 倍：3 × 1.5 = 4.5 本 → 按概率得到 4 或 5 本（期望值不变）');
+  const info15 = levelRewardInfo(cfg2, { rewardMultiplier: 1.5 });
+  check(info15.currency === 120 && dropCountText(info15.books[0]) === '×3~5' && info15.books.length === 2, `关卡选择显示：120 金币，初级 ${dropCountText(info15.books[0])}`);
+  const info0 = levelRewardInfo(cfg2, { rewardMultiplier: 0 });
+  check(info0.currency === 0 && info0.books.length === 0, '0 倍 = 没有通关奖励');
+  check(normalizeLevel({ id: 'Z_1', settings: { rewardCurrency: 5, rewardBooks: [] } }).settings.rewardMultiplier === 1, '旧的关卡数据默认 1 倍');
   const after = grantRewards(normalizeProgress({ currency: 5, books: { B1: 1 } }), rolled);
   check(after.currency === 85 && after.books.B1 === 4, '奖励加进玩家进度');
   const np = normalizeProgress({ currency: -5, books: { B1: 2.7, B2: -1 }, levels: { C1: { level: 0, exp: -3 }, C2: { level: 3, exp: 12 } } });
   check(np.currency === 0 && np.books.B1 === 2 && !('B2' in np.books) && !('C1' in np.levels) && np.levels.C2.level === 3, '读取进度时修正非法的数值');
+}
+
+console.log('\n[8] 负数数值');
+{
+  const base = { maxHp: 1000, atk: 100, def: -50, res: -100, attackInterval: 1, range: 1, targetCount: 1, blockCount: 1, speed: 1, hpRegen: 0 };
+  check(computeDamage(100, 'physical', -50, 0) === 150, '物抗 −50：100 物伤 → 150');
+  check(computeDamage(100, 'magic', 0, -100) === 200, '法抗 −100：100 法伤 → 200（两倍）');
+  const up = applyModifiers(base, [[{ stat: 'def', mode: 'percent', value: 30 }]]);
+  check(up.def === -35, `负数物抗 +30%：−50 → ${up.def}（百分比按绝对值，总是变高）`);
+  const pos = applyModifiers({ ...base, def: 20, res: 10 }, [[{ stat: 'def', mode: 'add', value: -40 }, { stat: 'res', mode: 'add', value: -30 }]]);
+  check(pos.def === 0 && pos.res === 0, '原来是正数的物抗 / 法抗，减益最多降到 0（和以前一样）');
+  check(applyModifiers(base, [[{ stat: 'def', mode: 'add', value: -40 }]]).def === -50, '基础物抗是负数时，减益不会让它更低');
+
+  const neg = normalizeCharacter({ id: 'NG', maxHp: 300, atk: 50, def: 10, res: 5, cost: -6, placement: 'high', range: 0, growth: { maxHp: -100, atk: -20, def: -10, res: -5 } });
+  check(neg.cost === -6 && neg.growth.maxHp === -100 && neg.growth.res === -5, '费用和升级成长可以保存为负数');
+  const lv4 = leveledCharacter(neg, 4);
+  check(lv4.maxHp === 1 && lv4.atk === 0 && lv4.def === -20 && lv4.res === -10, `负数成长 4 级：生命 ${lv4.maxHp}（最少 1）· 攻击 ${lv4.atk}（最少 0）· 物抗 ${lv4.def} · 法抗 ${lv4.res}`);
+  const healer = normalizeCharacter({ id: 'NH', atk: -100, attackTarget: 'ally', growth: { maxHp: 0, atk: -30, def: 0, res: 0 } });
+  check(leveledCharacter(healer, 3).atk === -40 && leveledCharacter(healer, 6).atk === 0, '治疗角色的负数成长减少治疗量，最多减到 0（不会变成攻击）');
+
+  // 负数费用 / 击杀奖励 / 每分钟回复
+  const lvM = normalizeLevel({
+    id: 'T_3',
+    width: 6,
+    height: 2,
+    grid: ['SGGGGB', 'HHHHHH'],
+    settings: { initialHp: 99, initialMoney: 10, autoMoney: true, moneyPerMinute: -60 },
+    lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [{ id: 'b', enemyId: 'NE', count: 2, interval: 1, startTime: 0 }] }],
+  });
+  const hostage = normalizeEnemy({ id: 'NE', maxHp: 1, speed: 0.05, canAttack: false, reward: -4 });
+  const engN = new GameEngine(lvM, [neg], [hostage], { skills: [] });
+  check(engN.deploy('NG', { x: 0, y: 1 }) === null && engN.money === 16, `费用 −6：部署后金钱 10 → ${engN.money}`);
+  const back = engN.retreat(engN.units[0].uid);
+  check(back === -3 && engN.money === 13, `撤退时扣回一半：${back}，金钱 → ${engN.money}`);
+  for (let t = 0; t < 2; t += FIXED_DT) engN.step(FIXED_DT);
+  check(engN.money > 10.9 && engN.money < 11.1, `每分钟回复 −60：2 秒后金钱 13 → ${engN.money.toFixed(2)}`);
+  engN.enemies[0].hp = 0;
+  engN.step(FIXED_DT);
+  check(engN.money < 7.1 && engN.money > 6.8, `击杀奖励 −4：击败后金钱 → ${engN.money.toFixed(2)}`);
+  for (let t = 0; t < 10; t += FIXED_DT) engN.step(FIXED_DT);
+  check(engN.money === 0, '金钱减少到 0 为止');
+}
+
+console.log('\n[9] 无尽模式');
+{
+  const cfg = { ...newEndlessConfig(), startDifficulty: 1, difficultyPerWave: 1, groupsPerWave: 2, groupsGrowth: 0.5, countPerRank: 1, intervalPerRank: 0.5, countGrowth: 0, hpGrowth: 10, atkGrowth: 0, firstWave: 2, waveInterval: 10 };
+  const mk = (id: string, d: number, rank: number, score: number) => normalizeEnemy({ id, name: id, maxHp: 100, speed: 0.2, canAttack: false, endlessDifficulty: d, endlessRank: rank, endlessScore: score });
+  const easy = mk('EA', 1, 1, 5);
+  const mid = mk('EM', 3, 3, 10);
+  const hard = mk('EH', 5, 2, 30);
+  const all = [easy, mid, hard];
+  check(eligibleEnemies(cfg, all, 1).map((p) => p.def.id).join() === 'EA', '第 1 波（难度 1）只出现难度 1 的敌人');
+  const w3 = eligibleEnemies(cfg, all, 3);
+  check(w3.length === 2 && w3[0].weight < w3[1].weight, `第 3 波：难度 1 和 3 的敌人都会出现，越接近当前难度权重越高（${w3.map((p) => p.weight.toFixed(2)).join(' / ')}）`);
+  check(firstWaveOf(cfg, 5) === 5 && firstWaveOf({ ...cfg, difficultyPerWave: 0 }, 5) === null, '难度 5 的敌人从第 5 波开始出现；难度不增加时永远不出现');
+  const g1 = groupSize(cfg, 1, 1);
+  const g3 = groupSize(cfg, 3, 1);
+  check(g1.count === 1 && g3.count === 3 && g3.interval > g1.interval, `出现位列越低，每组越少、间隔越短（位列 1：${g1.count} 个；位列 3：${g3.count} 个，间隔 ${g3.interval} 秒）`);
+  check(groupSize({ ...cfg, countGrowth: 50 }, 2, 3).count === 4, '每波数量增加 50%：第 3 波位列 2 → 4 个');
+  check(waveGroupCount(cfg, 1) === 2 && waveGroupCount(cfg, 5) === 4, '组数：第 1 波 2 组，每波 +0.5 → 第 5 波 4 组');
+  const plan = planWave(cfg, all, 2, 7, seededRng(3));
+  check(plan.groups.length === 5 && plan.groups.every((g) => g.routeIndex >= 0 && g.routeIndex < 2), `第 7 波：${plan.groups.length} 组，每组随机选路线`);
+  check(Math.abs(plan.hpScale - 1.6) < 1e-9, '每波生命 +10%：第 7 波 ×1.6');
+  check(eligibleEnemies({ ...cfg, startDifficulty: -10, difficultyPerWave: 0 }, all, 1).map((p) => p.def.id).join() === 'EA', '没有敌人够格时使用难度最低的敌人（每波都有敌人）');
+
+  // 战斗：用固定的随机数跑 33 秒 → 第 1 波在 2 秒，之后每 10 秒一波 → 4 波
+  const lvE = normalizeLevel({
+    id: 'ENDLESS_1',
+    width: 6,
+    height: 2,
+    grid: ['SGGGGB', 'HHHHHH'],
+    settings: { initialHp: 999, initialMoney: 0, autoMoney: false },
+    lines: [{ id: 'L', name: '路线', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [] }],
+  });
+  const engE = new GameEngine(lvE, [], all, { skills: [], endless: cfg, rng: seededRng(11) });
+  check(engE.routes.length === 1 && engE.warnings.length === 0, '没有积木的敌人线也可以作为无尽模式的路线');
+  for (let t = 0; t < 33; t += FIXED_DT) engE.step(FIXED_DT);
+  check(engE.wave === 4 && engE.status === 'running', `33 秒：第 ${engE.wave} 波，战斗继续（无尽模式没有胜利）`);
+  const strongest = Math.max(...engE.enemies.map((e) => e.base.maxHp));
+  check(strongest === 130, `第 4 波的敌人生命 ×1.3：100 → ${strongest}`);
+  const before = engE.score;
+  const target = engE.enemies[0];
+  target.hp = 0;
+  engE.step(FIXED_DT);
+  check(engE.score === before + target.def.endlessScore, `击败敌人获得分数：+${target.def.endlessScore}`);
+  engE.finish();
+  check(engE.status === 'lost' && engE.finishedByPlayer, '主动结束挑战');
+  const ecfg = { ...cfg, currencyRate: { score: 10, amount: 50 }, bookRates: [{ bookId: 'B1', score: 20, amount: 1 }, { bookId: 'XX', score: 1, amount: 1 }] };
+  const curCfg = normalizeCurrency({ books: [{ id: 'B1', name: '初级', exp: 100, cost: 10 }] });
+  const er = endlessRewards(ecfg, curCfg, 95);
+  check(er.currency === 450 && er.books.B1 === 4 && !er.books.XX, `95 分 → ${er.currency} 金币（每 10 分 50）+ 初级经验书 ×${er.books.B1}（每 20 分 1 本）`);
+  check(endlessRewards(ecfg, curCfg, -30).currency === 0, '负分不会扣奖励');
+  const ne = normalizeEndless({ waveInterval: -5, hpGrowth: -20, bookRates: [{ bookId: '' }], map: { grid: ['SB'] } });
+  check(ne.waveInterval === 1 && ne.hpGrowth === -20 && ne.bookRates.length === 0 && ne.map.id === 'ENDLESS_1' && ne.map.chapterId === 'ENDLESS', '读取无尽模式设置时修正非法的数值（每波生命可以是负数）');
+  const de = normalizeEnemy({ id: 'D', maxHp: 1400 });
+  check(de.endlessScore === 14 && de.endlessDifficulty === 3 && de.endlessRank === 1, `没有设置的敌人按生命值估算：分数 ${de.endlessScore} · 难度 ${de.endlessDifficulty} · 位列 ${de.endlessRank}`);
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

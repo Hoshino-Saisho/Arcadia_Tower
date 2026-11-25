@@ -7,6 +7,7 @@ import { BattlePage } from './ui/play/BattlePage';
 import { ChapterSelectPage } from './ui/play/ChapterSelectPage';
 import { CharactersPage } from './ui/play/CharactersPage';
 import { CodexPage } from './ui/play/CodexPage';
+import { EndlessPage } from './ui/play/EndlessPage';
 import { GameStage } from './ui/play/GameStage';
 import { HomePage } from './ui/play/HomePage';
 import { LevelSelectPage } from './ui/play/LevelSelectPage';
@@ -21,7 +22,8 @@ export function App() {
     if (redirect) navigate('/game');
   }, [redirect]);
   const [top, sub, arg] = redirect ? ['game'] : route.segments;
-  const inBattle = top === 'game' && sub === 'play' && !!arg;
+  const endlessBattle = top === 'game' && sub === 'endless' && arg === 'play';
+  const inBattle = (top === 'game' && sub === 'play' && !!arg) || endlessBattle;
 
   useEffect(() => {
     document.title = top === 'editor' ? 'Arcadia Tower · 关卡编辑器' : top === 'game' ? 'Arcadia Tower' : 'Arcadia Tower 启动器';
@@ -38,6 +40,8 @@ export function App() {
     else if (sub === 'chapter' && arg) page = <LevelSelectPage chapterId={arg} />;
     else if (sub === 'codex') page = <CodexPage />;
     else if (sub === 'characters') page = <CharactersPage />;
+    else if (endlessBattle) page = <BattlePage key={'endless' + route.query.toString()} code="" endless test={route.query.get('test') === '1'} />;
+    else if (sub === 'endless') page = <EndlessPage />;
     else if (inBattle) page = <BattlePage key={arg + route.query.toString()} code={arg} test={route.query.get('test') === '1'} />;
     else page = <HomePage />;
   } else {

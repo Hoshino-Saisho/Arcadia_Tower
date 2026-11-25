@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RETREAT_REFUND_RATIO, newCharacter } from '../../core/defaults';
+import { RES_MIN, newCharacter, retreatRefund } from '../../core/defaults';
 import { describeAttack, describeOnHit } from '../../core/describe';
 import { notifySaved } from '../../core/github/sync';
 import { nextId, validateUnitId } from '../../core/ids';
@@ -94,8 +94,8 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
 
             <h3 className="form-title">数值</h3>
             <div className="form-grid cols-4">
-              <Field label="费用">
-                <NumberInput value={c.cost} min={0} max={9999} integer onChange={(v) => set({ cost: v })} />
+              <Field label="费用" hint="负数 = 部署时获得金钱">
+                <NumberInput value={c.cost} min={-9999} max={9999} integer onChange={(v) => set({ cost: v })} />
               </Field>
               <Field label="生命值">
                 <NumberInput value={c.maxHp} min={1} max={999999} integer onChange={(v) => set({ maxHp: v })} />
@@ -103,11 +103,11 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="攻击力" hint={c.attackTarget === 'ally' ? '负数 = 治疗量' : undefined}>
                 <NumberInput value={c.atk} min={-99999} max={99999} integer onChange={(v) => set({ atk: v })} />
               </Field>
-              <Field label="物抗" hint="减免物伤（固定值）">
-                <NumberInput value={c.def} min={0} max={99999} integer onChange={(v) => set({ def: v })} />
+              <Field label="物抗" hint="负数 = 受到更多物伤">
+                <NumberInput value={c.def} min={-99999} max={99999} integer onChange={(v) => set({ def: v })} />
               </Field>
-              <Field label="法抗" hint="减免法伤（%）">
-                <NumberInput value={c.res} min={0} max={100} onChange={(v) => set({ res: v })} />
+              <Field label="法抗" hint="%，负数 = 受到更多法伤">
+                <NumberInput value={c.res} min={RES_MIN} max={100} onChange={(v) => set({ res: v })} />
               </Field>
               <Field label="攻击间隔" hint="秒">
                 <NumberInput value={c.attackInterval} min={0.05} max={60} step={0.1} onChange={(v) => set({ attackInterval: v })} />
@@ -121,7 +121,7 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
               <Field label="同时部署上限" hint="0 = 不限">
                 <NumberInput value={c.maxDeploy} min={0} max={99} integer onChange={(v) => set({ maxDeploy: v })} />
               </Field>
-              <Field label="部署冷却" hint="秒，部署后多久才能再部署这个角色；0 = 无">
+              <Field label="部署冷却" hint="秒，0 = 无">
                 <NumberInput value={c.deployCooldown} min={0} max={3600} step={1} onChange={(v) => set({ deployCooldown: v })} />
               </Field>
             </div>
@@ -174,24 +174,24 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
 
             <h3 className="form-title">升级成长</h3>
             <div className="form-grid cols-4">
-              <Field label="每级生命值" hint="+">
-                <NumberInput value={c.growth.maxHp} min={0} max={99999} integer onChange={(v) => setGrowth({ maxHp: v })} />
+              <Field label="每级生命值" hint="负数 = 减少">
+                <NumberInput value={c.growth.maxHp} min={-99999} max={99999} integer onChange={(v) => setGrowth({ maxHp: v })} />
               </Field>
-              <Field label={healer ? '每级治疗量' : '每级攻击力'} hint="+">
-                <NumberInput value={c.growth.atk} min={0} max={99999} integer onChange={(v) => setGrowth({ atk: v })} />
+              <Field label={healer ? '每级治疗量' : '每级攻击力'} hint="负数 = 减少">
+                <NumberInput value={c.growth.atk} min={-99999} max={99999} integer onChange={(v) => setGrowth({ atk: v })} />
               </Field>
-              <Field label="每级物抗" hint="+">
-                <NumberInput value={c.growth.def} min={0} max={99999} integer onChange={(v) => setGrowth({ def: v })} />
+              <Field label="每级物抗" hint="负数 = 减少">
+                <NumberInput value={c.growth.def} min={-99999} max={99999} integer onChange={(v) => setGrowth({ def: v })} />
               </Field>
-              <Field label="每级法抗" hint="+%">
-                <NumberInput value={c.growth.res} min={0} max={100} step={0.5} onChange={(v) => setGrowth({ res: v })} />
+              <Field label="每级法抗" hint="%，负数 = 减少">
+                <NumberInput value={c.growth.res} min={-100} max={100} step={0.5} onChange={(v) => setGrowth({ res: v })} />
               </Field>
               <Field label="成长预览" wide>
                 <GrowthPreview def={c} maxLevel={maxLevel} />
               </Field>
             </div>
             <div className="muted small help-text">
-              玩家用经验书给角色升级，每升 1 级基础数值增加上面的数值（{healer ? '治疗角色的攻击力成长 = 治疗量增加' : '对治疗角色来说是治疗量'}）。等级上限、升级经验和经验书在「货币编辑」中设置。
+              玩家用经验书给角色升级，每升 1 级基础数值增加上面的数值（负数 = 减少；生命最少 1，攻击力 / 治疗量最少减到 0，物抗 / 法抗可以减到负数）。等级上限、升级经验和经验书在「货币编辑」中设置。
             </div>
 
             <h3 className="form-title">技能</h3>
@@ -293,7 +293,7 @@ function CharacterPreview({ def, healer, skills }: { def: CharacterDef; healer: 
         <dt>阻挡</dt>
         <dd>{def.placement === 'high' ? '高台不阻挡' : `${def.blockCount} 个`}</dd>
         <dt>撤退返还</dt>
-        <dd>{Math.floor(def.cost * RETREAT_REFUND_RATIO)}</dd>
+        <dd>{retreatRefund(def.cost)}</dd>
         <dt>部署冷却</dt>
         <dd>{def.deployCooldown > 0 ? `${def.deployCooldown} 秒` : '无'}</dd>
         <dt>技能</dt>

@@ -6,7 +6,8 @@
  *   data/skills.json       技能库（角色和敌人通过技能 ID 引用）
  *   data/chapters.json     章节顺序
  *   data/settings.json     全局设置（主页音乐等）
- *   data/currency.json     货币编辑：游戏外货币、经验书、升级经验、默认通关奖励
+ *   data/currency.json     货币编辑：游戏外货币、经验书、升级经验、基础通关奖励
+ *   data/endless.json      无尽模式：地图、波次规则、分数兑换
  *   data/levels/<章节>_<关卡>.json   关卡（地图 + 敌人线 + 数值设置）
  *   data/icons/            以后绘制好的图标（png/jpg/webp）
  *   data/music/home/       主页音乐（未进入战斗时播放）
@@ -115,7 +116,7 @@ export interface SkillDef {
   effects: SkillEffect[];
 }
 
-/** 升级成长：每升 1 级增加的数值（攻击力对治疗角色 = 治疗量） */
+/** 升级成长：每升 1 级增加的数值（负数 = 减少；攻击力对治疗角色 = 治疗量） */
 export interface CharacterGrowth {
   maxHp: number;
   atk: number;
@@ -137,14 +138,14 @@ export interface CharacterDef {
   /** 图标缩放：1 = 短边刚好铺满圆形，>1 放大，<1 缩小（默认 1） */
   iconZoom?: number;
   placement: PlacementType;
-  /** 部署费用 */
+  /** 部署费用（负数 = 部署时获得金钱，撤退时扣回一半） */
   cost: number;
   maxHp: number;
   /** 攻击力；攻击队友时为负数表示治疗量 */
   atk: number;
-  /** 物抗（物理防御，固定值减免物伤） */
+  /** 物抗（物理防御，固定值减免物伤；负数 = 受到额外的物伤） */
   def: number;
-  /** 法抗（0~100，按百分比减免法伤） */
+  /** 法抗（最高 100，按百分比减免法伤；负数 = 受到额外的法伤） */
   res: number;
   /** 攻击的伤害类型 */
   damageType: DamageType;
@@ -209,12 +210,18 @@ export interface EnemyDef {
   attackInterval: number;
   /** 攻击范围（格）。0 = 只攻击正在阻挡它的角色（近战） */
   attackRange: number;
-  /** 击杀奖励金钱 */
+  /** 击杀奖励金钱（负数 = 击败时扣除金钱） */
   reward: number;
   attackType: string;
   skills: string[];
   skillSlots: number;
   onHit: OnHitEffect | null;
+  /** 无尽模式：被击败时获得的分数（负数 = 扣分） */
+  endlessScore: number;
+  /** 无尽模式：敌人难度，越低越早出现（当前难度 ≥ 敌人难度时才会出现） */
+  endlessDifficulty: number;
+  /** 无尽模式：出现位列，越低每组出现的数量越少、组内的出现间隔越短 */
+  endlessRank: number;
   description?: string;
 }
 
@@ -287,16 +294,14 @@ export interface LevelSettings {
   initialMoney: number;
   /** 是否自动回复金钱 */
   autoMoney: boolean;
-  /** 每分钟回复数量 */
+  /** 每分钟回复数量（负数 = 金钱随时间减少） */
   moneyPerMinute: number;
   /** 本关可用角色 ID；空数组 = 全部角色可用 */
   availableCharacters: string[];
   /** 本关战斗音乐；空 = 跟随章节设置 */
   battleMusic: string;
-  /** 通关奖励：固定获得的游戏外货币；null = 使用「货币编辑」中的默认值 */
-  rewardCurrency: number | null;
-  /** 通关奖励：经验书掉落；null = 使用「货币编辑」中的默认掉落 */
-  rewardBooks: BookDrop[] | null;
+  /** 通关奖励倍数：本关奖励 = 「货币编辑」中的基础奖励（货币和经验书数量）× 倍数 */
+  rewardMultiplier: number;
 }
 
 /** 关卡：编号为 "<章节编号>_<关卡序号>"，例如 "ZH_1" */
@@ -356,10 +361,70 @@ export interface CurrencyConfig {
   /** 等级上限 */
   maxLevel: number;
   books: ExpBookDef[];
-  /** 关卡默认的通关奖励（关卡可以在关卡设置中单独设置） */
+  /** 基础通关奖励（1 倍）：每个关卡按自己的「奖励倍数」放大 */
   defaultCurrency: number;
   defaultBooks: BookDrop[];
   dropDisplay: DropDisplay;
+}
+
+/** 无尽模式的分数兑换：每 score 分换 amount 个（货币或某种经验书） */
+export interface ScoreRate {
+  score: number;
+  amount: number;
+}
+
+export interface BookScoreRate extends ScoreRate {
+  bookId: string;
+}
+
+/**
+ * 无尽模式（data/endless.json）：
+ *  - 地图和路线在无尽模式编辑器里搭建（时间线里的积木 = 额外固定出现的敌人）
+ *  - 敌人一波一波自动出现：当前难度 = 起始难度 + (波次 − 1) × 每波增加，只出现难度不超过当前难度的敌人
+ *  - 每组敌人的数量和组内间隔由敌人的「出现位列」决定；每波敌人越来越多、越来越强
+ *  - 击败敌人获得分数，结束时按兑换比例换成游戏外货币和经验书
+ */
+export interface EndlessConfig {
+  /** 在游戏主页显示无尽模式 */
+  enabled: boolean;
+  name: string;
+  /** 通关这个关卡后解锁；空 = 一开始就可以玩 */
+  unlockAfter: string;
+  /** 地图、路线和战斗设置（初始血量、金钱、可用角色、音乐） */
+  map: LevelDef;
+  /** 第 1 波开始的时间（秒，按「开始作战」后计算） */
+  firstWave: number;
+  /** 每一波的间隔（秒） */
+  waveInterval: number;
+  /** 第 1 波的难度 */
+  startDifficulty: number;
+  /** 每波难度增加 */
+  difficultyPerWave: number;
+  /** 第 1 波的敌人组数 */
+  groupsPerWave: number;
+  /** 每波增加的组数（可以是小数：0.5 = 每 2 波多 1 组） */
+  groupsGrowth: number;
+  /** 每组数量 = 出现位列 × 这个值 */
+  countPerRank: number;
+  /** 组内出现间隔 = 出现位列 × 这个值（秒） */
+  intervalPerRank: number;
+  /** 每波每组数量增加（%） */
+  countGrowth: number;
+  /** 每波敌人生命增加（%） */
+  hpGrowth: number;
+  /** 每波敌人攻击增加（%） */
+  atkGrowth: number;
+  /** 分数兑换货币 */
+  currencyRate: ScoreRate;
+  /** 分数兑换经验书 */
+  bookRates: BookScoreRate[];
+}
+
+/** 无尽模式的最好成绩 */
+export interface EndlessRecord {
+  score: number;
+  wave: number;
+  time: number;
 }
 
 /** 角色的等级和当前等级已经积累的经验 */
@@ -379,4 +444,6 @@ export interface ProgressData {
   books: Record<string, number>;
   /** 角色等级：角色 ID → 等级与经验（没有记录的角色为 1 级） */
   levels: Record<string, CharacterProgress>;
+  /** 无尽模式的最好成绩（没有玩过 = null） */
+  endlessBest: EndlessRecord | null;
 }
