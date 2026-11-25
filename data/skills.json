@@ -135,6 +135,20 @@
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
+        },
+        {
+          "kind": "regen",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": 30,
+          "regenMode": "flat",
+          "damageType": "true",
+          "money": 0,
+          "moneyRate": 0
         }
       ]
     },
