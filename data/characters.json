@@ -169,7 +169,7 @@
       "maxDeploy": 1,
       "deployCooldown": 30,
       "attackType": "area",
-      "skills": [],
+      "skills": ["S020"],
       "skillSlots": 0,
       "onHit": {
         "modifiers": [{"stat":"speed","mode":"percent","value":-50},{"stat":"def","mode":"add","value":-30}],
