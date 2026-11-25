@@ -123,7 +123,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":40,"atk":3,"def":1,"res":0},
-      "description": "费用低，适合开局快速部署"
+      "description": "人如其名"
     },
     {
       "id": "C006",
