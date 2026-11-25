@@ -127,8 +127,8 @@
   "countPerRank": 1,
   "intervalPerRank": 0.6,
   "countGrowth": 5,
-  "hpGrowth": 8,
-  "atkGrowth": 3,
+  "hpGrowth": 5,
+  "atkGrowth": 5,
   "currencyRate": {"score":10,"amount":50},
   "bookRates": [
     {"bookId":"B001","score":20,"amount":1},
