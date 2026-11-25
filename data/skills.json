@@ -88,8 +88,8 @@
       "spInitial": 0,
       "spGain": "auto",
       "spRate": 2,
-      "trigger": "auto",
-      "duration": 999,
+      "trigger": "manual",
+      "duration": 15,
       "effects": [
         {
           "kind": "modify",
