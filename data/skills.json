@@ -123,7 +123,7 @@
           "scope": "range",
           "radius": 0,
           "maxTargets": -1,
-          "modifiers": [{"stat":"atk","mode":"percent","value":30}],
+          "modifiers": [{"stat":"hpRegen","mode":"percent","value":-30}],
           "duration": 0,
           "amount": 0,
           "damageType": "physical",
