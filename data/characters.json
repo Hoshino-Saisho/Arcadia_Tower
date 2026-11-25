@@ -168,7 +168,7 @@
       "placement": "high",
       "cost": 10,
       "maxHp": 600,
-      "atk": -80,
+      "atk": -100,
       "def": 30,
       "res": 20,
       "damageType": "true",
