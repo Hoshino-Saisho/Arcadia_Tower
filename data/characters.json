@@ -253,7 +253,7 @@
       "targetCount": 1,
       "attackInterval": 3,
       "range": 2.5,
-      "blockCount": 0,
+      "blockCount": 2,
       "maxDeploy": 1,
       "deployCooldown": 0,
       "attackType": "basic",
