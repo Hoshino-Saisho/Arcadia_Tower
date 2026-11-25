@@ -32,12 +32,13 @@
       "id": "S023",
       "name": "无敌",
       "color": "#f2b544",
+      "description": "无敌是多么...多么的寂寞",
       "spMax": 70,
       "spInitial": 0,
       "spGain": "attack",
       "spRate": 1,
       "trigger": "auto",
-      "duration": 10,
+      "duration": 2,
       "effects": [
         {
           "kind": "modify",
@@ -56,8 +57,7 @@
           "money": 0,
           "moneyRate": 0
         }
-      ],
-      "description": "无敌是多么...多么的寂寞"
+      ]
     },
     {
       "id": "S022",
