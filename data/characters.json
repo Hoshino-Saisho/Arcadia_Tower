@@ -98,7 +98,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":130,"atk":3,"def":12,"res":0},
-      "description": "高生命高防御，可阻挡 3 个敌人，最多同时部署 2 名"
+      "description": "我很硬，只要你不是法师"
     },
     {
       "id": "C005",
