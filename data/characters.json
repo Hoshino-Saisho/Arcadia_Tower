@@ -232,7 +232,7 @@
         ],
         "duration": 2
       },
-      "growth": {"maxHp":50,"atk":15,"def":3,"res":3}
+      "growth": {"maxHp":50,"atk":0,"def":3,"res":3}
     },
     {
       "id": "C010",
@@ -257,6 +257,30 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":50,"atk":0,"def":3,"res":0}
+    },
+    {
+      "id": "C011",
+      "name": "核弹",
+      "color": "#cfd8dc",
+      "placement": "ground",
+      "cost": 10,
+      "maxHp": 1000,
+      "atk": 0,
+      "def": 50,
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 1,
+      "range": 0,
+      "blockCount": 0,
+      "maxDeploy": 0,
+      "deployCooldown": 0,
+      "attackType": "area",
+      "skills": [],
+      "skillSlots": 1,
+      "onHit": null,
+      "growth": {"maxHp":50,"atk":3,"def":3,"res":0}
     }
   ]
 }
