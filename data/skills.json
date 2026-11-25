@@ -89,7 +89,7 @@
       "spGain": "auto",
       "spRate": 2,
       "trigger": "manual",
-      "duration": 15,
+      "duration": 10,
       "effects": [
         {
           "kind": "modify",
