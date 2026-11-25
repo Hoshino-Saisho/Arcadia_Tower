@@ -37,6 +37,10 @@ export function HomePage() {
           Play
         </button>
         <div className="home-menu">
+          <button className="home-menu-btn" onClick={() => navigate('/game/squad')}>
+            <strong>编队</strong>
+            <span>{wallet?.progress.squad.length ? `已选择 ${wallet.progress.squad.length} / 12 个角色` : '选择出战的角色（最多 12 个）'}</span>
+          </button>
           <button className="home-menu-btn" onClick={() => navigate('/game/codex')}>
             <strong>图鉴</strong>
             <span>角色与敌人的数值和技能</span>

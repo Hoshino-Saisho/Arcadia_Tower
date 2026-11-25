@@ -89,7 +89,8 @@ export async function saveCharacters(list: CharacterDef[], renames: Map<string, 
     for (const [k, v] of Object.entries(prog.levels)) levels[renames.get(k) ?? k] = v;
     const summonChoice: Record<string, string> = {};
     for (const [k, v] of Object.entries(prog.summonChoice)) summonChoice[renames.get(k) ?? k] = v;
-    await saveProgress({ ...prog, loadouts, levels, summonChoice });
+    const squad = prog.squad.map((id) => renames.get(id) ?? id);
+    await saveProgress({ ...prog, loadouts, levels, summonChoice, squad });
     const endless = await loadEndless();
     const avail = endless.map.settings.availableCharacters;
     if (avail.some((id) => renames.has(id))) {

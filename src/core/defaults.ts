@@ -639,6 +639,10 @@ export function normalizeProgress(raw: any): ProgressData {
     levels,
     endlessBest: normalizeRecord(raw?.endlessBest),
     summonChoice: strMap(raw?.summonChoice),
+    // 编队：去掉重复的，最多 12 个
+    squad: strList(raw?.squad)
+      .filter((id, i, arr) => arr.indexOf(id) === i)
+      .slice(0, 12),
   };
 }
 

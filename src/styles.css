@@ -1176,12 +1176,63 @@ select.input {
   flex: none;
   height: 118px;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 0 10px 0 12px;
   border-top: 1px solid var(--border);
   background: rgba(16, 21, 31, 0.97);
+  overflow: hidden;
+}
+/* 部署栏分成两块：召唤物（固定在左边）+ 角色（卡片自动变窄，放不下时左右滚动） */
+.deploy-zone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 2px;
+  min-width: 0;
+}
+.deploy-zone.chars {
+  flex: 1;
   overflow-x: auto;
+  overflow-y: hidden;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.deploy-zone.chars .deploy-card {
+  flex: 1 1 0;
+  min-width: 64px;
+  max-width: 86px;
+}
+.deploy-zone.summons {
+  flex: none;
+  margin: 6px 0;
+  padding: 0 10px 0 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(139, 195, 74, 0.45);
+  background: rgba(139, 195, 74, 0.08);
+  animation: fade-in 0.2s ease-out;
+}
+.deploy-zone-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: #a5d66f;
+  font-weight: 700;
+}
+.deploy-help-btn {
+  flex: none;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 700;
+  cursor: help;
+}
+.deploy-help-btn:hover {
+  color: var(--text);
 }
 .deploy-card {
   position: relative;
@@ -1289,6 +1340,15 @@ select.input {
 .card-name {
   font-size: 13px;
   font-weight: 600;
+}
+/* 卡片变窄时名字 / 说明不换行，放不下用省略号 */
+.card-name,
+.card-meta {
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card-meta {
   font-size: 10px;
@@ -2848,11 +2908,14 @@ select.input {
 .game-stage.active .deploy-bar {
   height: 104px;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 0 8px 0 10px;
 }
 .game-stage.active .deploy-card {
-  width: 80px;
   height: 88px;
+}
+.game-stage.active .deploy-zone.chars .deploy-card {
+  min-width: 62px;
+  max-width: 80px;
 }
 .game-stage.active .deploy-help {
   display: none;
@@ -3587,4 +3650,97 @@ select.input {
     padding: 0 8px;
     gap: 6px;
   }
+}
+
+/* ---------- 编队 ---------- */
+.squad-count {
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--accent-2);
+}
+.squad-count.full {
+  color: var(--accent);
+}
+.squad-slots {
+  max-width: 1200px;
+  margin: 4px auto 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.squad-slot {
+  position: relative;
+  min-height: 112px;
+  border-radius: 12px;
+  border: 1px dashed var(--border-2);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.squad-slot.filled {
+  border-style: solid;
+  border-color: rgba(242, 181, 68, 0.5);
+  background: linear-gradient(180deg, rgba(242, 181, 68, 0.08), var(--panel));
+}
+.squad-slot-no {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 700;
+}
+.squad-slot-body {
+  border: 0;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 6px 4px 0;
+}
+.squad-slot-name {
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.squad-slot-move {
+  display: flex;
+  gap: 2px;
+}
+.squad-hint {
+  max-width: 1200px;
+  margin: 10px auto 14px;
+}
+.squad-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.squad-mark {
+  position: absolute;
+  right: 6px;
+  top: 5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #1b1405;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.game-stage.active .squad-slots {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.game-stage.active .squad-slot {
+  min-height: 96px;
 }

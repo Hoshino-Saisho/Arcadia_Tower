@@ -174,6 +174,10 @@ export class GameEngine {
       if (!this.enemyDefs.size) this.warnings.push('还没有任何敌人');
     }
     if (this.training) this.spawnTraining();
+    // 攻击方式是「召唤」但没有可以召唤的召唤物：部署后不会出现召唤物
+    for (const c of this.roster) {
+      if (c.attackType === 'summon' && !this.chosenSummon(c)) this.warnings.push(`「${c.name}」的攻击方式是召唤，但还没有设置召唤物（在角色编辑中添加），部署后不会出现召唤物`);
+    }
   }
 
   /** 角色试用：生成来回移动的敌人 */

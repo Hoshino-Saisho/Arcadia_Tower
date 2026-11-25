@@ -13,6 +13,7 @@
  * 10. 角色试用（训练场）：敌人来回移动、停止移动、刷新血量、重新出现、伤害统计
  * 11. 持续治疗 / 持续伤害
  * 12. 召唤物：出现在部署栏、继承数值、部署范围、离场、无敌、召唤者自身攻击
+ * 13. 编队：最多 12 个、顺序、和关卡可用角色的组合
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,6 +46,7 @@ import {
 } from '../src/core/leveling';
 import { checkManualPath, findPath, resolveRoute, resolveWaits, visitNumbers } from '../src/core/pathfinding';
 import { eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount } from '../src/core/endless';
+import { battleRoster, resolveSquad } from '../src/core/squad';
 import { ProgressView } from '../src/core/progress';
 import { rangeOffsets, tileInRange } from '../src/core/range';
 import { applyModifiers, computeDamage } from '../src/core/stats';
@@ -198,7 +200,17 @@ console.log('\n[4] 战斗机制');
   if (medic.onHit) check(g0.statuses.some((st) => st.key.startsWith('onhit:C006')), '治疗时附带的效果作用在被治疗的队友身上');
 
   // 多目标：目标数 -1 攻击射程内全部敌人
-  const gunner = charById.get('C007')!;
+  // 用测试专用的角色（不依赖 data/ 里的数值，数据改了也不影响测试）
+  const gunner = normalizeCharacter({
+    id: 'C007',
+    name: '炮手',
+    placement: 'high',
+    cost: 0,
+    atk: 60,
+    range: 1.5,
+    attackType: 'area',
+    onHit: { modifiers: [{ stat: 'speed', mode: 'percent', value: -40 }], duration: 2 },
+  });
   const lv2 = normalizeLevel({ ...lv, lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [{ id: 'b', enemyId: 'D', count: 3, interval: 0.4, startTime: 0 }] }] });
   const eng2 = new GameEngine(lv2, [gunner], [dummy], { skills });
   runSkills(eng2, 1.2);
@@ -803,6 +815,22 @@ console.log('\n[12] 召唤物');
   eng2.units[0].hp = 0;
   eng2.step(FIXED_DT);
   check(eng2.units.some((x) => x.def.id === 'M2'), '设置了「召唤者离场后保留」的召唤物，召唤者被击败后仍然在场');
+}
+
+console.log('\n[13] 编队');
+{
+  const many = Array.from({ length: 15 }, (_, i) => normalizeCharacter({ id: `Q${i + 1}`, name: `角色${i + 1}` }));
+  const ids = (list: CharacterDef[]) => list.map((c) => c.id).join(',');
+  check(resolveSquad(many, []).length === 12 && resolveSquad(many, [])[0].id === 'Q1', '还没有编队时 = 前 12 个角色');
+  check(ids(resolveSquad(many, ['Q15', 'Q3', 'X', 'Q7'])) === 'Q15,Q3,Q7', '编队按玩家的顺序，不存在的角色被跳过');
+  check(resolveSquad(many, ['X', 'Y']).length === 12, '编队里的角色都被删除了 → 回到前 12 个');
+  check(normalizeProgress({ squad: ['A', 'B', 'A', ...many.map((c) => c.id)] }).squad.length === 12, '读取进度时编队去掉重复，最多 12 个');
+  const r1 = battleRoster(many, ['Q2', 'Q9', 'Q4'], ['Q4', 'Q9', 'Q14']);
+  check(ids(r1.roster) === 'Q9,Q4' && !r1.fallback, '关卡只允许部分角色时：出战 = 编队 ∩ 本关可用（按编队顺序）');
+  const r2 = battleRoster(many, ['Q1', 'Q2'], ['Q14', 'Q15']);
+  check(ids(r2.roster) === 'Q14,Q15' && r2.fallback, '编队里没有本关可用的角色 → 使用本关指定的角色');
+  const engQ = new GameEngine(levels[0], battleRoster(characters, characters.slice(-3).map((c) => c.id).reverse(), []).roster, enemies, { skills });
+  check(ids(engQ.roster) === characters.slice(-3).map((c) => c.id).reverse().join(','), `战斗的部署栏按编队顺序：${ids(engQ.roster)}`);
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

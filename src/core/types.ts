@@ -486,4 +486,6 @@ export interface ProgressData {
   endlessBest: EndlessRecord | null;
   /** 召唤物选择：角色 ID → 召唤物 ID（固定只能选 1 个，没有选择 = 第一个） */
   summonChoice: Record<string, string>;
+  /** 编队：出战的角色 ID（按顺序，最多 12 个；空 = 前 12 个角色） */
+  squad: string[];
 }

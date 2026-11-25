@@ -4,6 +4,7 @@ import { describeSkill, describeSkillTrigger } from '../../core/describe';
 import { levelCode } from '../../core/ids';
 import { endlessRewards, grantRewards, levelMap, rollRewards, type RolledRewards } from '../../core/leveling';
 import { ProgressView } from '../../core/progress';
+import { battleRoster } from '../../core/squad';
 import { DAMAGE_TYPE_LABEL, formatModifier, formatNumber } from '../../core/stats';
 import { loadDatabase, loadLevel, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
 import type { CharacterDef, GridPos, LevelDef } from '../../core/types';
@@ -96,6 +97,8 @@ interface CardPress {
   lastX: number;
   lastY: number;
   touch: boolean;
+  /** 召唤物的卡片不在可以滚动的角色栏里，不用左右滑动 */
+  summon: boolean;
   mode: 'press' | 'drag' | 'pan' | 'blocked';
 }
 
@@ -130,7 +133,9 @@ export function Battle({
 }) {
   const engineRef = useRef<GameEngine>(null as unknown as GameEngine);
   if (!engineRef.current) {
-    engineRef.current = new GameEngine(level, db.characters, db.enemies, {
+    // 出战的角色 = 玩家的编队（最多 12 个）∩ 本关可用角色；角色试用时是全部角色
+    const team = training ? { roster: db.characters, fallback: false } : battleRoster(db.characters, db.progress.squad, level.settings.availableCharacters);
+    engineRef.current = new GameEngine(level, team.roster, db.enemies, {
       skills: db.skills,
       loadouts: training ? {} : db.progress.loadouts,
       // 角色等级（玩家用经验书升级）提高基础数值；试用时全部角色使用选择的等级
@@ -141,6 +146,7 @@ export function Battle({
       summonChoice: training ? {} : db.progress.summonChoice,
     });
     if (training) deployFocus(engineRef.current, training.focusId);
+    if (team.fallback) engineRef.current.warnings.push('编队里没有本关可用的角色，这一关使用关卡指定的角色');
   }
   const engine = engineRef.current;
 
@@ -172,7 +178,7 @@ export function Battle({
   const slowed = started && !paused && !pending && engine.status === 'running' && (placing != null || selectedUid != null);
 
   const battleRef = useRef<HTMLDivElement>(null);
-  const barRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const pressRef = useRef<CardPress | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const ghostPos = useRef({ x: -999, y: -999 });
@@ -371,8 +377,9 @@ export function Battle({
         e.preventDefault();
         if (ctrl.current.started) setPaused((p) => !p);
         else setStarted(true);
-      } else if (/^[1-9]$/.test(e.key)) {
-        const def = engine.roster[Number(e.key) - 1];
+      } else if (/^[0-9]$/.test(e.key)) {
+        // 1~9 = 第 1~9 个角色，0 = 第 10 个
+        const def = engine.roster[e.key === '0' ? 9 : Number(e.key) - 1];
         if (def) selectCard(def.id);
       }
     };
@@ -422,14 +429,14 @@ export function Battle({
     ghostPos.current = { x: -999, y: -999 };
   };
 
-  const onCardPointerDown = (e: React.PointerEvent<HTMLButtonElement>, id: string) => {
+  const onCardPointerDown = (e: React.PointerEvent<HTMLButtonElement>, id: string, summon = false) => {
     if (e.button !== 0) return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* 指针已经失效时忽略 */
     }
-    pressRef.current = { id, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, lastX: e.clientX, lastY: e.clientY, touch: e.pointerType !== 'mouse', mode: 'press' };
+    pressRef.current = { id, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, lastX: e.clientX, lastY: e.clientY, touch: e.pointerType !== 'mouse', summon, mode: 'press' };
   };
   const onCardPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     const d = pressRef.current;
@@ -439,7 +446,7 @@ export function Battle({
       if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 8) return;
       const a = bar ? clientToLocal(bar, d.sx, d.sy) : { x: d.sx, y: d.sy };
       const b = bar ? clientToLocal(bar, e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
-      if (d.touch && bar && bar.scrollWidth > bar.clientWidth + 1 && Math.abs(b.x - a.x) > Math.abs(b.y - a.y)) {
+      if (d.touch && !d.summon && bar && bar.scrollWidth > bar.clientWidth + 1 && Math.abs(b.x - a.x) > Math.abs(b.y - a.y)) {
         d.mode = 'pan';
       } else {
         const def = engine.deployable(d.id);
@@ -498,6 +505,48 @@ export function Battle({
   const rate = engine.moneyPerSecond * 60;
   const done = engine.killed + engine.leaked;
   const settings = level.settings;
+
+  /** 部署栏里的一张卡片（角色或召唤物） */
+  const renderCard = (def: CharacterDef, i: number) => {
+    // 召唤物：召唤者在场时才出现在部署栏
+    const summon = isSummonDef(def);
+    const st = engine.cardState(def);
+    const count = engine.deployedCount(def.id);
+    const skills = engine.loadoutOf(def);
+    const lv = summon ? 1 : engine.levelOf(def.id);
+    const cooling = st.cooldown > 0 && def.deployCooldown > 0;
+    return (
+      <button
+        key={(summon ? 'summon:' : '') + def.id}
+        className={`deploy-card${summon ? ' summon-card' : ''}${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}${cooling ? ' cooling' : ''}`}
+        onPointerDown={(e) => onCardPointerDown(e, def.id, summon)}
+        onPointerMove={onCardPointerMove}
+        onPointerUp={onCardPointerUp}
+        onPointerCancel={onCardPointerCancel}
+        onLostPointerCapture={() => pressRef.current && onCardPointerCancel()}
+        // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
+        onClick={(e) => e.detail === 0 && selectCard(def.id)}
+        onContextMenu={(e) => e.preventDefault()}
+        title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
+      >
+        {summon ? <span className="card-key summon-tag">召唤</span> : <span className="card-key">{i < 9 ? i + 1 : i === 9 ? 0 : ''}</span>}
+        <span className="card-cost">{def.cost}</span>
+        {lv > 1 && <span className="card-lv">Lv.{lv}</span>}
+        <UnitToken kind={summon ? 'summon' : 'character'} def={def} size={44} dim={!st.ok} />
+        <span className="card-name">{def.name}</span>
+        <span className="card-meta">
+          {placementText(def.placement)}
+          {def.maxDeploy > 0 ? ` · ${count}/${def.maxDeploy}` : count > 0 ? ` · ×${count}` : ''}
+        </span>
+        {cooling && (
+          // 部署冷却：遮罩从上往下退去，中间显示剩余秒数
+          <span className="card-cooldown" style={{ ['--cd' as string]: `${Math.min(1, st.cooldown / def.deployCooldown) * 100}%` }}>
+            <span className="mono">{st.cooldown.toFixed(st.cooldown < 10 ? 1 : 0)}</span>
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className="battle" ref={battleRef}>
@@ -766,51 +815,26 @@ export function Battle({
         )}
       </div>
 
-      <footer className="deploy-bar" ref={barRef}>
-        {engine.roster.length === 0 && <div className="muted">本关没有可用角色</div>}
-        {[...engine.roster, ...engine.activeSummons].map((def, i) => {
-          // 召唤物：召唤者在场时才出现在部署栏
-          const summon = isSummonDef(def);
-          const st = engine.cardState(def);
-          const count = engine.deployedCount(def.id);
-          const skills = engine.loadoutOf(def);
-          const lv = summon ? 1 : engine.levelOf(def.id);
-          const cooling = st.cooldown > 0 && def.deployCooldown > 0;
-          return (
-            <button
-              key={(summon ? 'summon:' : '') + def.id}
-              className={`deploy-card${summon ? ' summon-card' : ''}${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}${cooling ? ' cooling' : ''}`}
-              onPointerDown={(e) => onCardPointerDown(e, def.id)}
-              onPointerMove={onCardPointerMove}
-              onPointerUp={onCardPointerUp}
-              onPointerCancel={onCardPointerCancel}
-              onLostPointerCapture={() => pressRef.current && onCardPointerCancel()}
-              // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
-              onClick={(e) => e.detail === 0 && selectCard(def.id)}
-              onContextMenu={(e) => e.preventDefault()}
-              title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
-            >
-              {summon ? <span className="card-key summon-tag">召唤</span> : <span className="card-key">{i + 1}</span>}
-              <span className="card-cost">{def.cost}</span>
-              {lv > 1 && <span className="card-lv">Lv.{lv}</span>}
-              <UnitToken kind={summon ? 'summon' : 'character'} def={def} size={44} dim={!st.ok} />
-              <span className="card-name">{def.name}</span>
-              <span className="card-meta">
-                {placementText(def.placement)}
-                {def.maxDeploy > 0 ? ` · ${count}/${def.maxDeploy}` : count > 0 ? ` · ×${count}` : ''}
-              </span>
-              {cooling && (
-                // 部署冷却：遮罩从上往下退去，中间显示剩余秒数
-                <span className="card-cooldown" style={{ ['--cd' as string]: `${Math.min(1, st.cooldown / def.deployCooldown) * 100}%` }}>
-                  <span className="mono">{st.cooldown.toFixed(st.cooldown < 10 ? 1 : 0)}</span>
-                </span>
-              )}
-            </button>
-          );
-        })}
-        <div className="deploy-help muted small">
-          拖动角色到绿色方块 → 暂停后选择部署 / 取消 · 拿起时时间 ×{SELECT_SLOW_FACTOR} · 点击场上角色放技能或撤退 · 右键 / Esc 取消
+      <footer className="deploy-bar">
+        {/* 召唤物固定显示在最左边，不会被角色挤到看不见的地方 */}
+        {engine.activeSummons.length > 0 && (
+          <div className="deploy-zone summons">
+            <span className="deploy-zone-label">召唤物</span>
+            {engine.activeSummons.map((def, i) => renderCard(def, i))}
+          </div>
+        )}
+        <div className="deploy-zone chars" ref={barRef}>
+          {engine.roster.length === 0 && <div className="muted">本关没有可用角色</div>}
+          {engine.roster.map((def, i) => renderCard(def, i))}
         </div>
+        <button
+          className="deploy-help-btn"
+          title={DEPLOY_HELP}
+          onClick={() => toast(DEPLOY_HELP, 'info', 4000)}
+          aria-label="操作说明"
+        >
+          ?
+        </button>
       </footer>
       {dragging && (
         <div
@@ -998,6 +1022,8 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
     </div>
   );
 }
+
+const DEPLOY_HELP = `拖动角色到绿色方块 → 暂停后选择部署 / 取消；拿起时时间 ×${SELECT_SLOW_FACTOR}。也可以点卡片再点方块。点击场上的角色放技能或撤退；右键 / Esc 取消。召唤者在场时，召唤物出现在部署栏最左边。数字键 1~9、0 选择角色。`;
 
 function placementText(p: string) {
   return p === 'ground' ? '地面' : p === 'high' ? '高台' : '均可';
