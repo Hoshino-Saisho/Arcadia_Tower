@@ -167,7 +167,7 @@
       "color": "#ffffff",
       "sides": 5,
       "size": 1,
-      "maxHp": 2500,
+      "maxHp": 3500,
       "atk": 50,
       "def": 500,
       "res": 90,
