@@ -118,7 +118,7 @@
       }
     ]
   },
-  "firstWave": 15,
+  "firstWave": 20,
   "waveInterval": 30,
   "startDifficulty": 1,
   "difficultyPerWave": 0.5,
