@@ -63,7 +63,7 @@
       "attackType": "basic",
       "summonAttack": "basic",
       "summons": [],
-      "skills": [],
+      "skills": ["S022"],
       "skillSlots": 1,
       "onHit": {
         "modifiers": [
