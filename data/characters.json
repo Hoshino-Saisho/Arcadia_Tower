@@ -47,7 +47,7 @@
       "deployCooldown": 60,
       "attackType": "summon",
       "summonAttack": "none",
-      "summons": [],
+      "summons": ["M001"],
       "skills": [],
       "skillSlots": 1,
       "onHit": null,
