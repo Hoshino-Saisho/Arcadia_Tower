@@ -35,7 +35,7 @@
       "spInitial": 0,
       "spGain": "auto",
       "spRate": 1,
-      "trigger": "manual",
+      "trigger": "auto",
       "duration": 0,
       "effects": [
         {
