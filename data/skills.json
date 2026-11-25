@@ -31,10 +31,10 @@
       "id": "S020",
       "name": "自爆",
       "color": "#d66000",
-      "spMax": 0,
-      "spInitial": 0,
+      "spMax": 1,
+      "spInitial": 1,
       "spGain": "auto",
-      "spRate": 0,
+      "spRate": 1,
       "trigger": "auto",
       "duration": 10,
       "effects": [
