@@ -272,7 +272,7 @@
       "attackTarget": "enemy",
       "targetCount": 1,
       "attackInterval": 1,
-      "range": 0,
+      "range": 20,
       "blockCount": 0,
       "maxDeploy": 0,
       "deployCooldown": 0,
