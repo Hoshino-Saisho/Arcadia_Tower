@@ -33,12 +33,12 @@
       "name": "无敌",
       "color": "#f2b544",
       "description": "无敌是多么...多么的寂寞",
-      "spMax": 70,
+      "spMax": 10,
       "spInitial": 0,
       "spGain": "attack",
       "spRate": 1,
       "trigger": "auto",
-      "duration": 2,
+      "duration": 1,
       "effects": [
         {
           "kind": "modify",
