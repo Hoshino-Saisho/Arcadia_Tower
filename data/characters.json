@@ -249,7 +249,7 @@
       "placement": "high",
       "cost": 20,
       "maxHp": 1000,
-      "atk": 750,
+      "atk": 450,
       "def": 50,
       "res": 0,
       "damageType": "true",
