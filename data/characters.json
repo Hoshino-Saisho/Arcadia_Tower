@@ -140,7 +140,7 @@
       "color": "#2fb380",
       "placement": "ground",
       "cost": 5,
-      "maxHp": 1000,
+      "maxHp": 800,
       "atk": 100,
       "def": 60,
       "res": 60,
