@@ -6,7 +6,7 @@
       "name": "以下犯上",
       "levelCount": 2,
       "description": "通关主线第一章后解锁",
-      "battleMusic": "sample_battle.wav"
+      "battleMusic": "[DLBunny.com][bilibili]“张雪峰老师 我还记得你.”_《念张师》2.0x 氦气版.mp3"
     },
     {
       "id": "CH1",
@@ -19,8 +19,8 @@
       "id": "CH2",
       "name": "张雪峰土木",
       "levelCount": 3,
-      "battleMusic": "[DLBunny.com][bilibili]“张雪峰老师 我还记得你.”_《念张师》2.0x 氦气版.mp3",
-      "description": "跑起来吧！跑起来！"
+      "description": "跑起来吧！跑起来！",
+      "battleMusic": "[DLBunny.com][bilibili]“张雪峰老师 我还记得你.”_《念张师》2.0x 氦气版.mp3"
     }
   ]
 }
