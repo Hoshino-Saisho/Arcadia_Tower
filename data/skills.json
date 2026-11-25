@@ -45,7 +45,7 @@
           "radius": 0,
           "maxTargets": -1,
           "modifiers": [{"stat":"speed","mode":"percent","value":300}],
-          "duration": 0,
+          "duration": 3,
           "amount": 0,
           "damageType": "physical",
           "money": 0,
