@@ -284,7 +284,7 @@
       "name": "吸血鬼",
       "color": "#000000",
       "placement": "ground",
-      "cost": 25,
+      "cost": 35,
       "maxHp": 1500,
       "atk": 50,
       "def": 20,
