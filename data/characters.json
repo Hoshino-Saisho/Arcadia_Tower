@@ -201,7 +201,7 @@
       "damageType": "physical",
       "attackTarget": "enemy",
       "targetCount": -1,
-      "attackInterval": 0.2,
+      "attackInterval": 0.5,
       "range": 2.5,
       "blockCount": 0,
       "maxDeploy": 1,
