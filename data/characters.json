@@ -210,7 +210,7 @@
       "summonAttack": "basic",
       "summons": [],
       "skills": ["S020"],
-      "skillSlots": 0,
+      "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":33,"atk":4,"def":0,"res":0},
       "description": "爆！"
