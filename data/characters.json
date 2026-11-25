@@ -48,7 +48,7 @@
       "attackType": "summon",
       "summonAttack": "none",
       "summons": ["M001"],
-      "skills": [],
+      "skills": ["S022"],
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":50,"atk":3,"def":3,"res":0}
