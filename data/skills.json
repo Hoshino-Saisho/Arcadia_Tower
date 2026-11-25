@@ -40,8 +40,8 @@
       "effects": [
         {
           "kind": "damage",
-          "target": "self",
-          "scope": "range",
+          "target": "enemies",
+          "scope": "all",
           "radius": 0,
           "maxTargets": -1,
           "modifiers": [],
