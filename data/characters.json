@@ -338,7 +338,7 @@
       "name": "核弹",
       "color": "#cfd8dc",
       "placement": "any",
-      "cost": 40,
+      "cost": 50,
       "maxHp": 1000,
       "atk": 175,
       "def": 50,
