@@ -96,7 +96,7 @@
       "attackInterval": 4,
       "range": 2.5,
       "blockCount": 0,
-      "maxDeploy": 2,
+      "maxDeploy": 0,
       "deployCooldown": 0,
       "attackType": "area",
       "summonAttack": "basic",
