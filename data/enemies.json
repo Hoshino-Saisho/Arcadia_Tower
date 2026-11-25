@@ -34,7 +34,7 @@
       "atk": 0,
       "def": 0,
       "res": 0,
-      "speed": 1.7,
+      "speed": 0.5,
       "canAttack": false,
       "damageType": "physical",
       "attackTarget": "enemy",
