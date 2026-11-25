@@ -228,7 +228,7 @@
       "damageType": "true",
       "attackTarget": "enemy",
       "targetCount": 1,
-      "attackInterval": 1.2,
+      "attackInterval": 1,
       "range": 1.5,
       "blockCount": 1,
       "maxDeploy": 3,
