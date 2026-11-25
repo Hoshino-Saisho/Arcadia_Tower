@@ -1,0 +1,37 @@
+{
+  "summons": [
+    {
+      "id": "M001",
+      "name": "奴隶",
+      "color": "#8bc34a",
+      "placement": "ground",
+      "cost": 5,
+      "maxHp": 1600,
+      "atk": 0,
+      "def": 0,
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 1,
+      "range": 1,
+      "blockCount": 1,
+      "maxDeploy": 3,
+      "deployCooldown": 0,
+      "attackType": "area",
+      "summonAttack": "basic",
+      "summons": [],
+      "skills": [],
+      "skillSlots": 1,
+      "onHit": {
+        "modifiers": [{"stat":"def","mode":"percent","value":-30},{"stat":"res","mode":"percent","value":-30}],
+        "duration": 2
+      },
+      "growth": {"maxHp":0,"atk":0,"def":0,"res":0},
+      "inherit": {"maxHp":10,"atk":0,"def":10,"res":10},
+      "invincible": false,
+      "nearSummoner": false,
+      "keepAfterSummoner": false
+    }
+  ]
+}
