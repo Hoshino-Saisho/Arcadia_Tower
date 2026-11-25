@@ -21,6 +21,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 200,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -47,6 +48,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 100000,
+          "regenMode": "flat",
           "damageType": "true",
           "money": 0,
           "moneyRate": 0
@@ -60,6 +62,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 100,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -73,6 +76,7 @@
           "modifiers": [{"stat":"speed","mode":"percent","value":-50}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -100,6 +104,7 @@
           "modifiers": [{"stat":"def","mode":"add","value":100},{"stat":"res","mode":"add","value":100}],
           "duration": 10,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -119,15 +124,16 @@
       "duration": 1,
       "effects": [
         {
-          "kind": "modify",
+          "kind": "regen",
           "target": "enemies",
           "scope": "range",
           "radius": 0,
           "maxTargets": 1,
-          "modifiers": [{"stat":"hpRegen","mode":"percent","value":-30}],
-          "duration": 10,
-          "amount": 0,
-          "damageType": "physical",
+          "modifiers": [],
+          "duration": 5,
+          "amount": -350,
+          "regenMode": "atk",
+          "damageType": "true",
           "money": 0,
           "moneyRate": 0
         }
@@ -153,6 +159,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 500,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -166,6 +173,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 15000,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -192,6 +200,7 @@
           "modifiers": [{"stat":"speed","mode":"percent","value":500}],
           "duration": 3,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -219,6 +228,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 100,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -232,6 +242,7 @@
           "modifiers": [{"stat":"def","mode":"percent","value":-30}],
           "duration": 3,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -259,6 +270,7 @@
           "modifiers": [{"stat":"maxHp","mode":"percent","value":-30}],
           "duration": 999,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -272,6 +284,7 @@
           "modifiers": [],
           "duration": 10,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 30,
           "moneyRate": 1
@@ -298,6 +311,7 @@
           "modifiers": [],
           "duration": 10,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 1,
           "moneyRate": 1
@@ -324,6 +338,7 @@
           "modifiers": [{"stat":"def","mode":"percent","value":60},{"stat":"blockCount","mode":"add","value":1}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -353,6 +368,7 @@
           ],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -379,6 +395,7 @@
           "modifiers": [{"stat":"def","mode":"percent","value":-50}],
           "duration": 6,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -392,6 +409,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 180,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -418,6 +436,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": 250,
+          "regenMode": "flat",
           "damageType": "magic",
           "money": 0,
           "moneyRate": 0
@@ -449,6 +468,7 @@
           ],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -475,6 +495,7 @@
           "modifiers": [{"stat":"atk","mode":"percent","value":20}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -488,6 +509,7 @@
           "modifiers": [{"stat":"def","mode":"percent","value":30}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -514,6 +536,7 @@
           "modifiers": [],
           "duration": 0,
           "amount": -150,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -540,6 +563,7 @@
           "modifiers": [{"stat":"targetCount","mode":"add","value":2},{"stat":"atk","mode":"percent","value":30}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -567,6 +591,7 @@
           "modifiers": [{"stat":"def","mode":"percent","value":80},{"stat":"speed","mode":"percent","value":-50}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -593,6 +618,7 @@
           "modifiers": [{"stat":"speed","mode":"percent","value":20}],
           "duration": 0,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -620,6 +646,7 @@
           "modifiers": [{"stat":"hpRegen","mode":"add","value":-40},{"stat":"res","mode":"add","value":-10}],
           "duration": 5,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
@@ -647,6 +674,7 @@
           "modifiers": [{"stat":"speed","mode":"percent","value":-40}],
           "duration": 5,
           "amount": 0,
+          "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
