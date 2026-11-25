@@ -206,7 +206,7 @@
       "blockCount": 0,
       "maxDeploy": 1,
       "deployCooldown": 60,
-      "attackType": "summon",
+      "attackType": "area",
       "summonAttack": "none",
       "summons": [],
       "skills": ["S020"],
