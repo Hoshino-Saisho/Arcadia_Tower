@@ -37,7 +37,7 @@
       "spGain": "auto",
       "spRate": 1,
       "trigger": "auto",
-      "duration": 1,
+      "duration": 0,
       "effects": [
         {
           "kind": "damage",
