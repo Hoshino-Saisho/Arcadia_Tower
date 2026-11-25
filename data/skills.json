@@ -44,7 +44,7 @@
           "scope": "range",
           "radius": 0,
           "maxTargets": -1,
-          "modifiers": [{"stat":"speed","mode":"percent","value":300}],
+          "modifiers": [{"stat":"speed","mode":"percent","value":500}],
           "duration": 3,
           "amount": 0,
           "damageType": "physical",
