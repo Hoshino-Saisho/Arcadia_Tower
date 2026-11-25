@@ -131,7 +131,7 @@
       "def": 0,
       "res": 0,
       "speed": 0.1,
-      "canAttack": true,
+      "canAttack": false,
       "damageType": "physical",
       "attackTarget": "enemy",
       "targetCount": 1,
@@ -139,9 +139,9 @@
       "attackRange": 7,
       "reward": 0,
       "attackType": "basic",
-      "skills": [],
+      "skills": ["S016"],
       "skillSlots": 1,
-      "onHit": {"modifiers":[{"stat":"def","mode":"percent","value":-30}],"duration":2}
+      "onHit": null
     }
   ]
 }
