@@ -119,6 +119,29 @@
       "skillSlots": 1,
       "onHit": null,
       "description": "治疗附近受伤的敌人，并让它们加速"
+    },
+    {
+      "id": "E006",
+      "name": "狙击手",
+      "color": "#d0743c",
+      "sides": 6,
+      "size": 1,
+      "maxHp": 500,
+      "atk": 350,
+      "def": 0,
+      "res": 0,
+      "speed": 0.1,
+      "canAttack": true,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 15,
+      "attackRange": 7,
+      "reward": 0,
+      "attackType": "basic",
+      "skills": [],
+      "skillSlots": 1,
+      "onHit": {"modifiers":[{"stat":"def","mode":"percent","value":-30}],"duration":2}
     }
   ]
 }
