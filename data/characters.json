@@ -268,11 +268,11 @@
       "onHit": {
         "modifiers": [
           {"stat":"range","mode":"add","value":1},
-          {"stat":"def","mode":"percent","value":40},
-          {"stat":"res","mode":"percent","value":40},
+          {"stat":"def","mode":"percent","value":50},
+          {"stat":"res","mode":"percent","value":50},
           {"stat":"maxHp","mode":"percent","value":2200},
           {"stat":"atk","mode":"percent","value":40},
-          {"stat":"attackInterval","mode":"percent","value":-20}
+          {"stat":"attackInterval","mode":"percent","value":-40}
         ],
         "duration": 2
       },
