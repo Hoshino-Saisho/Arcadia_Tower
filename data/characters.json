@@ -263,7 +263,7 @@
       "name": "核弹",
       "color": "#cfd8dc",
       "placement": "ground",
-      "cost": 10,
+      "cost": 30,
       "maxHp": 1000,
       "atk": 0,
       "def": 50,
@@ -277,7 +277,7 @@
       "maxDeploy": 0,
       "deployCooldown": 0,
       "attackType": "area",
-      "skills": [],
+      "skills": ["S018"],
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":50,"atk":3,"def":3,"res":0}
