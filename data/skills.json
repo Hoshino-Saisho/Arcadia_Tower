@@ -93,12 +93,12 @@
       "effects": [
         {
           "kind": "modify",
-          "target": "self",
+          "target": "enemies",
           "scope": "range",
           "radius": 0,
-          "maxTargets": -1,
+          "maxTargets": 1,
           "modifiers": [{"stat":"def","mode":"add","value":100},{"stat":"res","mode":"add","value":100}],
-          "duration": 0,
+          "duration": 10,
           "amount": 0,
           "damageType": "physical",
           "money": 0,
