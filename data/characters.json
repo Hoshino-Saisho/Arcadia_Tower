@@ -73,7 +73,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":25,"atk":8,"def":0,"res":0},
-      "description": "远程法伤，无视物抗，适合对付盾卫"
+      "description": "我是法师"
     },
     {
       "id": "C004",
