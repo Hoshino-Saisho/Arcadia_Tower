@@ -232,7 +232,7 @@
         ],
         "duration": 2
       },
-      "growth": {"maxHp":50,"atk":0,"def":3,"res":3}
+      "growth": {"maxHp":50,"atk":-5,"def":3,"res":3}
     },
     {
       "id": "C010",
