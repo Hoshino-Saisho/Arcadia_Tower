@@ -169,7 +169,7 @@
       "skills": ["S016"],
       "skillSlots": 1,
       "onHit": null,
-      "endlessScore": 5,
+      "endlessScore": 15,
       "endlessDifficulty": 1,
       "endlessRank": 2
     },
