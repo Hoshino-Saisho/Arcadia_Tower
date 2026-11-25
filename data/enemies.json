@@ -43,7 +43,7 @@
       "attackRange": 0,
       "reward": 1,
       "attackType": "basic",
-      "skills": [],
+      "skills": ["S017"],
       "skillSlots": 1,
       "onHit": null,
       "description": "移动很快，不会攻击角色"
