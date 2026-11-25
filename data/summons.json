@@ -80,7 +80,7 @@
       "invincible": false,
       "nearSummoner": false,
       "keepAfterSummoner": true,
-      "speed": 1,
+      "speed": 0.2,
       "sides": 5,
       "size": 1,
       "reward": 10,
