@@ -57,7 +57,7 @@
       "placement": "high",
       "cost": 25,
       "maxHp": 500,
-      "atk": 150,
+      "atk": 250,
       "def": 15,
       "res": 15,
       "damageType": "magic",
