@@ -249,7 +249,7 @@
       "def": 50,
       "res": 50,
       "damageType": "true",
-      "attackTarget": "ally",
+      "attackTarget": "enemy",
       "targetCount": 1,
       "attackInterval": 3,
       "range": 20,
