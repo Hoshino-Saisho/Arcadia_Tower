@@ -148,7 +148,7 @@
       "skillSlots": 1,
       "onHit": {"modifiers":[{"stat":"maxHp","mode":"percent","value":30}],"duration":2},
       "growth": {"maxHp":30,"atk":4,"def":2,"res":2},
-      "description": "攻击队友：攻击力为负数 = 治疗射程内生命比例最低的队友"
+      "description": "治疗队友（真的不是攻击）"
     },
     {
       "id": "C007",
