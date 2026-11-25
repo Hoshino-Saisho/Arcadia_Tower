@@ -257,8 +257,8 @@
       "maxDeploy": 1,
       "deployCooldown": 0,
       "attackType": "basic",
-      "skills": ["S019"],
-      "skillSlots": 1,
+      "skills": ["S021","S019"],
+      "skillSlots": 2,
       "onHit": {"modifiers":[{"stat":"speed","mode":"percent","value":-30}],"duration":2},
       "growth": {"maxHp":50,"atk":3,"def":3,"res":0},
       "description": "吸特乐"
