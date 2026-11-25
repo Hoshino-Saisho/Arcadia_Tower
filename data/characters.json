@@ -259,7 +259,7 @@
       "attackType": "basic",
       "skills": ["S019"],
       "skillSlots": 1,
-      "onHit": {"modifiers":[{"stat":"hpRegen","mode":"percent","value":-1}],"duration":2},
+      "onHit": {"modifiers":[{"stat":"hpRegen","mode":"percent","value":-2}],"duration":5},
       "growth": {"maxHp":50,"atk":3,"def":3,"res":0},
       "description": "吸特乐"
     },
