@@ -111,7 +111,7 @@
       "skills": ["S012"],
       "skillSlots": 1,
       "onHit": null,
-      "endlessScore": 5,
+      "endlessScore": 15,
       "endlessDifficulty": 2,
       "endlessRank": 2,
       "description": "远程法伤，攻击 2 格内的角色，会施放毒雾"
