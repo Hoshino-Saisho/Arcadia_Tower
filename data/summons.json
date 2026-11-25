@@ -28,26 +28,35 @@
         "duration": 2
       },
       "growth": {"maxHp":0,"atk":0,"def":0,"res":0},
+      "side": "ally",
       "inherit": {"maxHp":10,"atk":0,"def":10,"res":10},
       "invincible": false,
       "nearSummoner": false,
-      "keepAfterSummoner": false
+      "keepAfterSummoner": false,
+      "speed": 1,
+      "sides": 3,
+      "size": 1,
+      "reward": 0,
+      "endlessScore": 0,
+      "summonFirst": 3,
+      "summonInterval": 10,
+      "summonCount": 1
     },
     {
       "id": "M002",
       "name": "无罪者",
-      "color": "#8bc34a",
+      "color": "#cfd8dc",
       "placement": "ground",
       "cost": 3,
       "maxHp": 600,
-      "atk": 30,
+      "atk": 300,
       "def": 30,
-      "res": 0,
-      "damageType": "physical",
-      "attackTarget": "enemy",
+      "res": 100,
+      "damageType": "true",
+      "attackTarget": "ally",
       "targetCount": 1,
-      "attackInterval": 1,
-      "range": 1,
+      "attackInterval": 5,
+      "range": 2.5,
       "blockCount": 1,
       "maxDeploy": 2,
       "deployCooldown": 0,
@@ -56,12 +65,29 @@
       "summons": [],
       "skills": [],
       "skillSlots": 1,
-      "onHit": null,
+      "onHit": {
+        "modifiers": [
+          {"stat":"atk","mode":"percent","value":50},
+          {"stat":"maxHp","mode":"percent","value":20},
+          {"stat":"def","mode":"percent","value":20},
+          {"stat":"res","mode":"percent","value":20}
+        ],
+        "duration": 2
+      },
       "growth": {"maxHp":0,"atk":0,"def":0,"res":0},
-      "inherit": {"maxHp":0,"atk":50,"def":0,"res":0},
+      "side": "enemy",
+      "inherit": {"maxHp":10,"atk":50,"def":0,"res":0},
       "invincible": false,
       "nearSummoner": false,
-      "keepAfterSummoner": false
+      "keepAfterSummoner": true,
+      "speed": 1,
+      "sides": 5,
+      "size": 1,
+      "reward": 0,
+      "endlessScore": 0,
+      "summonFirst": 3,
+      "summonInterval": 20,
+      "summonCount": 1
     }
   ]
 }
