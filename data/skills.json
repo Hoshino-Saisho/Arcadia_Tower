@@ -28,6 +28,45 @@
       ]
     },
     {
+      "id": "S018",
+      "name": "核弹",
+      "color": "#f2b544",
+      "spMax": 1,
+      "spInitial": 0,
+      "spGain": "auto",
+      "spRate": 1,
+      "trigger": "manual",
+      "duration": 0,
+      "effects": [
+        {
+          "kind": "damage",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": 500,
+          "damageType": "physical",
+          "money": 0,
+          "moneyRate": 0
+        },
+        {
+          "kind": "damage",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [],
+          "duration": 0,
+          "amount": 15000,
+          "damageType": "physical",
+          "money": 0,
+          "moneyRate": 0
+        }
+      ]
+    },
+    {
       "id": "S017",
       "name": "跑路了兄弟",
       "color": "#f2b544",
