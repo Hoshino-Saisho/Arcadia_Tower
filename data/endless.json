@@ -13,9 +13,9 @@
       ".HHHHH........",
       "SGGGGGGGGHH...",
       ".GHHHHHHGGH...",
-      ".G.....HHGHHH.",
-      ".G......HGGGGB",
-      ".GGGGGGGGGHHH."
+      ".GH....HHGHHH.",
+      ".GHHHHHHHGGGGB",
+      "SGGGGGGGGGHHH."
     ],
     "settings": {
       "name": "无尽模式",
@@ -71,6 +71,48 @@
             {"x":13,"y":4}
           ],
           "waits": [{"x":1,"y":2,"visit":1,"duration":2}]
+        },
+        "blocks": []
+      },
+      {
+        "id": "Lfxqut7rdrn",
+        "name": "敌人线 3",
+        "color": "#d1605e",
+        "route": {"mode":"auto","spawn":{"x":0,"y":5},"target":null,"path":[],"waits":[]},
+        "blocks": []
+      },
+      {
+        "id": "Lfxwel7suqv",
+        "name": "敌人线 4",
+        "color": "#8f7ad6",
+        "route": {
+          "mode": "manual",
+          "spawn": {"x":0,"y":5},
+          "target": null,
+          "path": [
+            {"x":0,"y":5},
+            {"x":1,"y":5},
+            {"x":1,"y":4},
+            {"x":1,"y":3},
+            {"x":1,"y":2},
+            {"x":1,"y":1},
+            {"x":2,"y":1},
+            {"x":3,"y":1},
+            {"x":4,"y":1},
+            {"x":5,"y":1},
+            {"x":6,"y":1},
+            {"x":7,"y":1},
+            {"x":8,"y":1},
+            {"x":8,"y":2},
+            {"x":9,"y":2},
+            {"x":9,"y":3},
+            {"x":9,"y":4},
+            {"x":10,"y":4},
+            {"x":11,"y":4},
+            {"x":12,"y":4},
+            {"x":13,"y":4}
+          ],
+          "waits": []
         },
         "blocks": []
       }
