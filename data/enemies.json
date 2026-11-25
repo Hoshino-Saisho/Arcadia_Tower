@@ -194,7 +194,7 @@
       "attackType": "summon",
       "summonAttack": "none",
       "summons": ["M002"],
-      "skills": [],
+      "skills": ["S023"],
       "skillSlots": 1,
       "onHit": null,
       "endlessScore": 100,
