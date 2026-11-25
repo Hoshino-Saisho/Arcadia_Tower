@@ -4,9 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-const gitSync = createRequire(import.meta.url)('./electron/git-sync.cjs') as {
-  handle(dataDir: string, cmd: string, message?: string): Promise<unknown>;
-};
+/** 本机 Git 同步（编辑器用）只保存在本机，公开仓库里没有这个文件时不提供 */
+const gitSync = (() => {
+  try {
+    return createRequire(import.meta.url)('./electron/git-sync.cjs') as { handle(dataDir: string, cmd: string, message?: string): Promise<unknown> };
+  } catch {
+    return null;
+  }
+})();
 
 /**
  * 开发模式下的数据接口：浏览器版本（npm run dev）通过 /__data/* 直接读写项目内的 data/ 目录，
@@ -66,7 +71,7 @@ function dataApiPlugin(): Plugin {
           const cmd = url.slice('/__git/'.length);
           const body = (await readBody(req)).toString('utf8');
           const message = body ? JSON.parse(body).message : undefined;
-          const result = await gitSync.handle(dataRoot, cmd, message);
+          const result = gitSync ? await gitSync.handle(dataRoot, cmd, message) : cmd === 'info' ? { available: false } : { ok: false, output: '没有本机 Git 同步' };
           res.setHeader('Content-Type', 'application/json');
           return void res.end(JSON.stringify(result));
         }

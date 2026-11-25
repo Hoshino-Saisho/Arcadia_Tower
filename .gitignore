@@ -6,3 +6,10 @@ data/progress.json
 *.tmp-*
 .DS_Store
 .claude/
+
+# 编辑器、启动器和 GitHub 同步的源代码只保存在本机，不上传到公开仓库
+src/ui/editor/
+src/ui/launcher/
+src/core/github/
+electron/git-sync.cjs
+scripts/sync-test.ts

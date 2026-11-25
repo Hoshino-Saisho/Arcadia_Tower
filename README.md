@@ -1,6 +1,9 @@
-# Arcadia Tower · v0.02
+# Arcadia Tower · v0.0.3
 
 2D 塔防游戏 + 启动器 + 模块化关卡编辑器（Electron + React + TypeScript + Canvas）。更新内容见 [CHANGELOG.md](CHANGELOG.md)。
+
+> 公开仓库只包含游戏本体和数据：编辑器（`src/ui/editor/`）、启动器（`src/ui/launcher/`）和 GitHub 同步（`src/core/github/`、`electron/git-sync.cjs`）的源代码只保存在开发者本机（已加入 `.gitignore`）。
+> 没有这些文件时，程序会直接打开游戏；网页游玩版不包含编辑器的代码。
 
 **▶ 在线游玩：https://hoshino-saisho.github.io/Arcadia_Tower/**（网页版只有游戏端，进度保存在当前浏览器；每次推送到 main 会自动更新；手机也可以玩，点「横屏」）
 
@@ -40,9 +43,9 @@ npm install
 | `npm run dist:mac` | 打包 macOS 应用 → `release/mac-arm64/ArcadiaTower.app` |
 | `npm run build:web` | 构建网页游玩版到 `dist-web/`（GitHub Pages 用的就是它） |
 | `npm run preview:web` | 本地预览网页游玩版 http://localhost:5198 |
-| `npm test` | 无界面测试：寻路（含转圈路线、停留点）、解锁、战斗机制（伤害类型/治疗/技能/增减益/生命上限同步/金钱技能/射程/子弹/范围伤害/停留点/部署冷却/角色等级）、升级经验与通关奖励倍数、负数数值、无尽模式、角色试用、关卡模拟、手机版坐标换算、GitHub 同步逻辑 |
+| `npm test` | 无界面测试：寻路（含转圈路线、停留点）、解锁、战斗机制（伤害类型/治疗/技能/增减益/生命上限同步/金钱技能/射程/子弹/范围伤害/停留点/部署冷却/角色等级）、升级经验与通关奖励倍数、负数数值、无尽模式、角色试用、关卡模拟、手机版坐标换算（本机还可以用 `npm run test:sync` 测试 GitHub 同步） |
 
-版本号在 `src/version.ts`（显示用，`0.02`）和 `package.json`（`0.0.2`）里，发布新版本时两处一起改。
+版本号在 `src/version.ts`（显示用）、`package.json` 和 `package-lock.json` 里（目前是 `0.0.3`），发布新版本时一起改，并在 CHANGELOG.md 中记录。
 
 仓库：https://github.com/Hoshino-Saisho/Arcadia_Tower
 
@@ -55,7 +58,7 @@ git init -b main
 ```
 
 ```bash
-git add -A && git commit -m "Arcadia Tower v0.02"
+git add -A && git commit -m "Arcadia Tower v0.0.3"
 ```
 
 ```bash

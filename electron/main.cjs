@@ -12,7 +12,13 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, Menu, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
-const gitSync = require('./git-sync.cjs');
+// 本机 Git 同步（编辑器用）只保存在本机，公开仓库里没有这个文件时不提供
+let gitSync = null;
+try {
+  gitSync = require('./git-sync.cjs');
+} catch {
+  gitSync = null;
+}
 
 // 背景音乐不需要用户先点击才能播放
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -174,7 +180,9 @@ ipcMain.handle('config:set', (_e, name, value) => {
 
 /* ---------------- 本机 Git 同步 ---------------- */
 
-ipcMain.handle('git', (_e, cmd, message) => gitSync.handle(DATA_DIR, cmd, message));
+ipcMain.handle('git', (_e, cmd, message) =>
+  gitSync ? gitSync.handle(DATA_DIR, cmd, message) : cmd === 'info' ? { available: false, error: '没有本机 Git 同步' } : { ok: false, output: '没有本机 Git 同步' },
+);
 
 /* ---------------- 窗口 ---------------- */
 

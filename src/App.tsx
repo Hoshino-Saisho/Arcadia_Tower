@@ -1,8 +1,6 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useEffect, type ComponentType } from 'react';
 import { useMusic } from './game/music';
 import { ToastHost } from './ui/common/toast';
-import { EditorApp } from './ui/editor/EditorApp';
-import { LauncherPage } from './ui/launcher/LauncherPage';
 import { BattlePage } from './ui/play/BattlePage';
 import { ChapterSelectPage } from './ui/play/ChapterSelectPage';
 import { CharactersPage } from './ui/play/CharactersPage';
@@ -14,10 +12,24 @@ import { LevelSelectPage } from './ui/play/LevelSelectPage';
 import { navigate, useRoute } from './ui/router';
 import { IS_WEB_PLAY } from './version';
 
+/**
+ * 编辑器和启动器（含 GitHub 同步）的源代码只保存在本机，不上传到公开的 GitHub 仓库：
+ * 文件存在时才加载（按需加载）；网页游玩版（mode = pages）完全不包含这些代码。
+ */
+const TOOLS = import.meta.env.MODE !== 'pages';
+const EditorApp = lazyModule<{ initialLevel?: string }>(TOOLS ? import.meta.glob('./ui/editor/EditorApp.tsx') : {}, 'EditorApp');
+const LauncherPage = lazyModule<object>(TOOLS ? import.meta.glob('./ui/launcher/LauncherPage.tsx') : {}, 'LauncherPage');
+
+function lazyModule<P>(mods: Record<string, () => Promise<unknown>>, name: string): ComponentType<P> | null {
+  const load = Object.values(mods)[0];
+  if (!load) return null;
+  return lazy(async () => ({ default: ((await load()) as Record<string, ComponentType<P>>)[name] }));
+}
+
 export function App() {
   const route = useRoute();
-  // 网页游玩版只有游戏：启动器 / 编辑器的地址都转到游戏主页
-  const redirect = IS_WEB_PLAY && route.segments[0] !== 'game';
+  // 网页游玩版只有游戏：启动器 / 编辑器的地址都转到游戏主页（没有启动器的版本也一样）
+  const redirect = (IS_WEB_PLAY || !LauncherPage) && route.segments[0] !== 'game' && !(route.segments[0] === 'editor' && EditorApp);
   useEffect(() => {
     if (redirect) navigate('/game');
   }, [redirect]);
@@ -33,8 +45,12 @@ export function App() {
   useMusic(top === 'game' && !inBattle ? { kind: 'home' } : inBattle ? { kind: 'battle', file: '' } : { kind: 'none' });
 
   let page: React.ReactNode;
-  if (top === 'editor') {
-    page = <EditorApp initialLevel={route.query.get('level') ?? undefined} />;
+  if (top === 'editor' && EditorApp) {
+    page = (
+      <Suspense fallback={<div className="page-msg">加载编辑器…</div>}>
+        <EditorApp initialLevel={route.query.get('level') ?? undefined} />
+      </Suspense>
+    );
   } else if (top === 'game') {
     if (sub === 'chapters') page = <ChapterSelectPage />;
     else if (sub === 'chapter' && arg) page = <LevelSelectPage chapterId={arg} />;
@@ -44,8 +60,14 @@ export function App() {
     else if (sub === 'endless') page = <EndlessPage />;
     else if (inBattle) page = <BattlePage key={arg + route.query.toString()} code={arg} test={route.query.get('test') === '1'} />;
     else page = <HomePage />;
+  } else if (LauncherPage) {
+    page = (
+      <Suspense fallback={<div className="page-msg">加载中…</div>}>
+        <LauncherPage />
+      </Suspense>
+    );
   } else {
-    page = <LauncherPage />;
+    page = <div className="page-msg">加载中…</div>;
   }
   // 游戏页面放在舞台里：手机上等比缩放 / 横屏（提示消息也在舞台里，横屏时跟着旋转）
   if (top === 'game') {
