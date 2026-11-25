@@ -23,7 +23,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":60,"atk":4,"def":2,"res":0},
-      "description": "近战，部署在地面上阻挡敌人"
+      "description": "你到底守护了什么？"
     },
     {
       "id": "C002",
