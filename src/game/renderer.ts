@@ -7,6 +7,9 @@ import { SUMMON_RADIUS, UNIT_RADIUS, enemyRadius, type Combatant } from './entit
 import { getIcon } from './icons';
 import { drawCharacterToken, drawEnemyToken, drawHpBar, drawTile, outlineColor, withAlpha } from './shapes';
 
+/** 敌人召唤物的血条颜色（敌人是红色） */
+export const ENEMY_SUMMON_HP = '#ff9f43';
+
 /** 世界坐标（格）→ 屏幕像素：sx = ox + x * scale */
 export interface Viewport {
   scale: number;
@@ -317,6 +320,17 @@ export class BattleRenderer {
         ctx.restore();
       }
       drawEnemyToken(ctx, e.def, cx, cy, r, e.angle, { icon: getIcon(e.def.icon), flash: e.flash, alpha: fade });
+      if (e.summon?.invincible) {
+        // 无敌的召唤物：金色虚线圈
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,214,102,0.9)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       if (e.waitLeft > 0 && e.waitTotal > 0) {
         // 正在停留：外圈显示剩余的停留时间
         ctx.save();
@@ -332,10 +346,12 @@ export class BattleRenderer {
         ctx.stroke();
         ctx.restore();
       }
+      // 敌人的召唤物：血条更短、是橙色的
+      const barW = vp.scale * (e.summon ? 0.45 : 0.6);
       const hpTop = cy - r - Math.max(6, vp.scale * 0.13);
-      drawHpBar(ctx, cx, hpTop, vp.scale * 0.6, e.hp / e.stats.maxHp, '#e5484d');
-      this.drawStatusMarks(ctx, e, cx, hpTop, vp.scale * 0.6);
-      if (e.skills.length) this.drawSkillBars(ctx, e, cx, hpTop - Math.max(4, vp.scale * 0.08), vp.scale * 0.6, clock);
+      drawHpBar(ctx, cx, hpTop, barW, e.hp / e.stats.maxHp, e.summon ? ENEMY_SUMMON_HP : '#e5484d');
+      this.drawStatusMarks(ctx, e, cx, hpTop, barW);
+      if (e.skills.length) this.drawSkillBars(ctx, e, cx, hpTop - Math.max(4, vp.scale * 0.08), barW, clock);
     }
 
     // 弹道

@@ -1,4 +1,4 @@
-import { LEAK_DAMAGE, isSummonDef, resolveLoadout, retreatRefund } from '../core/defaults';
+import { LEAK_DAMAGE, isSummonDef, resolveLoadout, retreatRefund, summonAsEnemy, summonsOfSide } from '../core/defaults';
 import { planWave } from '../core/endless';
 import { leveledCharacter } from '../core/leveling';
 import { tileInRange, tileOf } from '../core/range';
@@ -56,13 +56,13 @@ export interface EngineOptions {
   rng?: () => number;
   /** 角色试用（训练场）：只有一个来回移动的敌人，被击败后重新出现，战斗不会结束 */
   training?: TrainingOptions;
-  /** 召唤物库 */
+  /** 召唤物库（角色的召唤物和敌人的召唤物都在这里，按阵营区分） */
   summons?: SummonDef[];
   /** 玩家的召唤物选择：角色 ID → 召唤物 ID（没有选择 = 第一个） */
   summonChoice?: Record<string, string>;
 }
 
-/** 攻击方式：召唤者按「自身攻击」攻击；none = 不攻击 */
+/** 攻击方式：召唤者（角色 / 敌人）按「自身攻击」攻击；none = 不攻击 */
 export function attackTypeOf(def: Pick<CharacterDef, 'attackType' | 'summonAttack'>): string {
   return def.attackType === 'summon' ? def.summonAttack || 'basic' : def.attackType;
 }
@@ -97,7 +97,12 @@ export class GameEngine {
   readonly levels: Record<string, number>;
   readonly enemyDefs: Map<string, EnemyDef>;
   readonly skillDefs: Map<string, SkillDef>;
+  /** 角色的召唤物 */
   readonly summonDefs: Map<string, SummonDef>;
+  /** 敌人的召唤物 */
+  readonly enemySummonDefs: Map<string, SummonDef>;
+  /** 敌人的召唤物转换成的敌人数据（战斗中按敌人处理） */
+  private enemySummonAs: Map<string, EnemyDef>;
   readonly loadouts: Record<string, string[]>;
   readonly routes: RouteInfo[];
   readonly warnings: string[];
@@ -116,6 +121,9 @@ export class GameEngine {
   killed = 0;
   leaked = 0;
   spawned = 0;
+  /** 敌人的召唤物：击败 / 进入基地的数量（不算在敌人总数里） */
+  summonsKilled = 0;
+  summonsLeaked = 0;
   /** 无尽模式：当前波次、分数、下一波的时间、是否由玩家结束 */
   wave = 0;
   score = 0;
@@ -153,7 +161,9 @@ export class GameEngine {
     this.roster = (allowed.length ? characters.filter((c) => allowed.includes(c.id)) : characters).map((c) => leveledCharacter(c, this.levelOf(c.id)));
     this.enemyDefs = new Map(enemies.map((e) => [e.id, e]));
     this.skillDefs = new Map((opts.skills ?? []).map((s) => [s.id, s]));
-    this.summonDefs = new Map((opts.summons ?? []).map((s) => [s.id, s]));
+    this.summonDefs = new Map(summonsOfSide(opts.summons ?? [], 'ally').map((s) => [s.id, s]));
+    this.enemySummonDefs = new Map(summonsOfSide(opts.summons ?? [], 'enemy').map((s) => [s.id, s]));
+    this.enemySummonAs = new Map([...this.enemySummonDefs.values()].map((s) => [s.id, summonAsEnemy(s)]));
     this.summonChoice = opts.summonChoice ?? {};
     this.loadouts = opts.loadouts ?? {};
     this.endless = opts.endless ?? null;
@@ -178,6 +188,18 @@ export class GameEngine {
     for (const c of this.roster) {
       if (c.attackType === 'summon' && !this.chosenSummon(c)) this.warnings.push(`「${c.name}」的攻击方式是召唤，但还没有设置召唤物（在角色编辑中添加），部署后不会出现召唤物`);
     }
+    // 会出现的敌人里，攻击方式是「召唤」但没有可以召唤的召唤物
+    const appearing = this.endless ? [...this.enemyDefs.keys()] : [...new Set([...this.schedule.map((ev) => ev.enemyId), ...(this.training ? [this.training.enemyId] : [])])];
+    for (const id of appearing) {
+      const e = this.enemyDefs.get(id);
+      if (e?.attackType === 'summon' && !this.enemySummonsOf(e).length) this.warnings.push(`敌人「${e.name}」的攻击方式是召唤，但还没有设置敌人的召唤物（在敌人编辑中添加），不会召唤`);
+    }
+  }
+
+  /** 敌人可以召唤的召唤物（攻击方式不是「召唤」= 空；只算存在的敌人的召唤物） */
+  enemySummonsOf(def: EnemyDef): SummonDef[] {
+    if (def.attackType !== 'summon') return [];
+    return def.summons.map((id) => this.enemySummonDefs.get(id)).filter((s): s is SummonDef => !!s);
   }
 
   /** 角色试用：生成来回移动的敌人 */
@@ -191,7 +213,7 @@ export class GameEngine {
   /** 角色试用：敌人回满生命（已经被击败时立即重新出现） */
   refillEnemies() {
     for (const e of this.enemies) if (e.hp > 0) e.hp = e.stats.maxHp;
-    if (this.training && !this.enemies.some((e) => e.hp > 0)) this.spawnTraining();
+    if (this.training && !this.enemies.some((e) => e.hp > 0 && !e.summon)) this.spawnTraining();
   }
 
   /** 角色试用：重新开始统计伤害 / 治疗 */
@@ -224,10 +246,11 @@ export class GameEngine {
 
     if (this.endless) this.updateEndless();
     // 角色试用：敌人被击败（并清理掉）后，过一会儿重新出现
-    if (this.training && this.enemies.length === 0 && this.time + 1e-9 >= this.respawnAt) this.spawnTraining();
+    if (this.training && !this.enemies.some((e) => !e.summon) && this.time + 1e-9 >= this.respawnAt) this.spawnTraining();
     this.spawnDue();
     this.updateStatuses(dt);
     this.updateSkills(dt);
+    this.updateEnemySummons();
     this.moveEnemies(dt);
     this.updateBlocking();
     this.combatantsAct(this.units, dt);
@@ -320,7 +343,12 @@ export class GameEngine {
       healFlash: 0,
       attackAnim: 0,
       spawnedAt: this.time,
+      hpScale: ev.hpScale,
+      atkScale: ev.atkScale,
     };
+    // 召唤者：每种召唤物在出现后「首次召唤」秒第一次召唤
+    const calls = this.enemySummonsOf(def);
+    if (calls.length) e.summonTimers = calls.map((m) => ({ id: m.id, next: this.time + m.summonFirst }));
     if (ev.path.length > 1) {
       const n = tileCenter(ev.path[1]);
       e.angle = Math.atan2(n.y - e.y, n.x - e.x);
@@ -330,6 +358,77 @@ export class GameEngine {
     this.addEffect({ kind: 'spawn', x: e.x, y: e.y, duration: 0.45, color: def.color });
     // 出现点本身就是基地的极端情况
     if (ev.path.length === 1) this.leak(e);
+  }
+
+  /** 敌人召唤：每种召唤物按自己的召唤间隔召唤（每个召唤者同时存在的数量不超过上限） */
+  private updateEnemySummons() {
+    for (const owner of this.enemies.slice()) {
+      if (owner.hp <= 0 || !owner.summonTimers) continue;
+      for (const t of owner.summonTimers) {
+        if (this.time + 1e-9 < t.next) continue;
+        const m = this.enemySummonDefs.get(t.id);
+        if (!m) {
+          t.next = Infinity;
+          continue;
+        }
+        t.next = m.summonInterval > 0 ? Math.max(t.next + m.summonInterval, this.time) : Infinity;
+        let n = m.summonCount;
+        if (m.maxDeploy > 0) n = Math.min(n, m.maxDeploy - this.enemies.filter((x) => x.hp > 0 && x.summonerUid === owner.uid && x.def.id === m.id).length);
+        for (let i = 0; i < n && this.enemies.length < MAX_ENEMIES; i++) this.spawnEnemySummon(owner, m);
+      }
+    }
+  }
+
+  /**
+   * 召唤一个敌人的召唤物：出现在召唤者的位置，沿召唤者剩下的路线前进。
+   * 数值 = 自己的数值（无尽模式按召唤者的波次加成）+ 召唤者的数值 × 继承百分比
+   */
+  private spawnEnemySummon(owner: Enemy, m: SummonDef) {
+    const def = this.enemySummonAs.get(m.id);
+    if (!def) return;
+    const base = enemyBaseStats(def);
+    if (owner.hpScale && owner.hpScale !== 1) base.maxHp = Math.max(1, Math.round(base.maxHp * owner.hpScale));
+    if (owner.atkScale && owner.atkScale !== 1) base.atk = Math.round(base.atk * owner.atkScale * 100) / 100;
+    const sb = owner.base;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    base.maxHp = r(Math.max(1, base.maxHp + (sb.maxHp * m.inherit.maxHp) / 100));
+    base.atk = r(base.atk + (sb.atk * m.inherit.atk) / 100);
+    base.def = r(base.def + (sb.def * m.inherit.def) / 100);
+    base.res = r(Math.min(100, base.res + (sb.res * m.inherit.res) / 100));
+    const e: Enemy = {
+      uid: this.seq++,
+      side: 'enemy',
+      def,
+      lineId: owner.lineId,
+      path: owner.path,
+      waypoint: owner.waypoint,
+      waits: owner.waits,
+      waitLeft: 0,
+      waitTotal: 0,
+      x: owner.x,
+      y: owner.y,
+      hp: base.maxHp,
+      base,
+      stats: { ...base },
+      statuses: [],
+      regens: [],
+      skills: this.makeSkillStates(def.skills.slice(0, def.skillSlots)),
+      attackCd: def.attackInterval * 0.5,
+      blockedBy: null,
+      distLeft: owner.distLeft,
+      angle: owner.angle,
+      flash: 0,
+      healFlash: 0,
+      attackAnim: 0,
+      spawnedAt: this.time,
+      patrol: owner.patrol,
+      hpScale: owner.hpScale,
+      atkScale: owner.atkScale,
+      summonerUid: owner.uid,
+      summon: m,
+    };
+    this.enemies.push(e);
+    this.addEffect({ kind: 'spawn', x: e.x, y: e.y, duration: 0.45, color: def.color });
   }
 
   /** 增益 / 减益计时、属性重算、持续回复 / 持续伤害 */
@@ -505,7 +604,9 @@ export class GameEngine {
     if (e.hp <= 0) return;
     e.hp = 0;
     e.leaked = true;
-    this.leaked++;
+    // 敌人的召唤物进入基地同样扣血，但不算在敌人总数里
+    if (e.summon) this.summonsLeaked++;
+    else this.leaked++;
     this.hp = Math.max(0, this.hp - LEAK_DAMAGE);
     this.addEffect({ kind: 'leak', x: e.x, y: e.y, duration: 0.8, color: '#ff5a5a' });
     this.addEffect({ kind: 'text', x: e.x, y: e.y - 0.4, duration: 1, color: '#ff6b6b', text: `-${LEAK_DAMAGE}` });
@@ -539,8 +640,8 @@ export class GameEngine {
       c.attackAnim = Math.max(0, c.attackAnim - dt);
       if (c.hp <= 0) continue;
       if (c.side === 'enemy' && !c.def.canAttack) continue;
-      const type = c.side === 'ally' ? attackTypeOf(c.def) : c.def.attackType;
-      // 不攻击（召唤物可以设置；召唤者可以只召唤不攻击）
+      const type = attackTypeOf(c.def);
+      // 不攻击（召唤物可以设置；召唤者（角色 / 敌人）可以只召唤不攻击）
       if (type === 'none') continue;
       c.attackCd -= dt;
       if (c.attackCd > 0) continue;
@@ -587,16 +688,34 @@ export class GameEngine {
   }
 
   private cleanup() {
-    const dead = this.enemies.filter((e) => e.hp <= 0);
+    // 无敌的敌人召唤物不会被击败（只会进入基地或随召唤者离场）
+    for (const e of this.enemies) if (e.hp <= 0 && e.summon?.invincible && !e.leaked && !e.dismissed) e.hp = 1;
+    let dead = this.enemies.filter((e) => e.hp <= 0);
     if (dead.length) {
+      // 召唤者离场（被击败 / 进入基地）：它的召唤物一起消失（设置了「召唤者离场后保留」的除外）
+      let gone = new Set(dead.map((e) => e.uid));
+      while (gone.size) {
+        const extra = this.enemies.filter((x) => x.hp > 0 && x.summonerUid != null && gone.has(x.summonerUid) && !x.summon?.keepAfterSummoner);
+        for (const x of extra) {
+          x.hp = 0;
+          x.dismissed = true;
+        }
+        gone = new Set(extra.map((x) => x.uid));
+      }
+      dead = this.enemies.filter((e) => e.hp <= 0);
       for (const e of dead) {
         if (e.blockedBy != null) {
           const u = this.unitByUid(e.blockedBy);
           if (u) u.blocked = u.blocked.filter((id) => id !== e.uid);
         }
-        if (!e.leaked) {
-          this.killed++;
-          if (this.training) this.respawnAt = this.time + (this.training.respawnDelay ?? 1.5);
+        if (e.dismissed) {
+          this.addEffect({ kind: 'death', x: e.x, y: e.y, duration: 0.4, color: e.def.color, size: enemyRadius(e.def) });
+        } else if (!e.leaked) {
+          if (e.summon) this.summonsKilled++;
+          else {
+            this.killed++;
+            if (this.training) this.respawnAt = this.time + (this.training.respawnDelay ?? 1.5);
+          }
           if (this.endless) this.score += e.def.endlessScore;
           // 击杀奖励可以是负数（击败时扣除金钱）
           if (e.def.reward) this.moneyText({ x: e.x - 0.2, y: e.y + 0.2 }, this.changeMoney(e.def.reward));
@@ -666,8 +785,8 @@ export class GameEngine {
   /** 造成伤害（按伤害类型结算物抗 / 法抗），返回实际伤害 */
   dealDamage(target: Combatant, atk: number, type: SkillDamageType): number {
     if (target.hp <= 0) return 0;
-    // 无敌的召唤物不会受到伤害
-    if (target.side === 'ally' && isSummonDef(target.def) && target.def.invincible) return 0;
+    // 无敌的召唤物（角色的 / 敌人的）不会受到伤害
+    if (target.side === 'ally' ? isSummonDef(target.def) && target.def.invincible : target.summon?.invincible) return 0;
     const dmg = computeDamage(atk, type, target.stats.def, target.stats.res);
     if (this.training && target.side === 'enemy') this.damageDealt += Math.min(dmg, target.hp);
     target.hp -= dmg;

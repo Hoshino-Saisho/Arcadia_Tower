@@ -1,5 +1,5 @@
 import type { Stats } from '../core/stats';
-import type { CharacterDef, EnemyDef, GridPos, SkillDamageType, SkillDef, StatModifier } from '../core/types';
+import type { CharacterDef, EnemyDef, GridPos, SkillDamageType, SkillDef, StatModifier, SummonDef } from '../core/types';
 
 /** 身上的增益 / 减益 */
 export interface StatusInstance {
@@ -97,8 +97,18 @@ export interface Enemy extends CombatantBase {
   spawnedAt: number;
   /** 已进入基地（不算击杀） */
   leaked?: boolean;
+  /** 召唤者离场时一起消失（不算击杀，没有奖励） */
+  dismissed?: boolean;
   /** 角色试用：在路线上来回移动（走到头就掉头，不会进入基地） */
   patrol?: boolean;
+  /** 无尽模式的波次加成（这个敌人召唤的召唤物同样加成） */
+  hpScale?: number;
+  atkScale?: number;
+  /** 敌人的召唤物：召唤者的 uid 和召唤物设置（def 是转换后的敌人数据） */
+  summonerUid?: number;
+  summon?: SummonDef;
+  /** 召唤者：每种召唤物下一次召唤的时间 */
+  summonTimers?: { id: string; next: number }[];
 }
 
 export type Combatant = Unit | Enemy;

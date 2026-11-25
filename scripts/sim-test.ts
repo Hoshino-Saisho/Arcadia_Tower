@@ -14,6 +14,7 @@
  * 11. 持续治疗 / 持续伤害
  * 12. 召唤物：出现在部署栏、继承数值、部署范围、离场、无敌、召唤者自身攻击
  * 13. 编队：最多 12 个、顺序、和关卡可用角色的组合
+ * 14. 敌人的召唤物：召唤节奏、同时存在上限、继承、沿路线前进、进入基地、击败奖励、随召唤者消失、无敌、阵营限制
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,6 +45,7 @@ import {
   rollRewards,
   usefulBooks,
 } from '../src/core/leveling';
+import { describeAttack } from '../src/core/describe';
 import { checkManualPath, findPath, resolveRoute, resolveWaits, visitNumbers } from '../src/core/pathfinding';
 import { eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount } from '../src/core/endless';
 import { battleRoster, resolveSquad } from '../src/core/squad';
@@ -831,6 +833,115 @@ console.log('\n[13] 编队');
   check(ids(r2.roster) === 'Q14,Q15' && r2.fallback, '编队里没有本关可用的角色 → 使用本关指定的角色');
   const engQ = new GameEngine(levels[0], battleRoster(characters, characters.slice(-3).map((c) => c.id).reverse(), []).roster, enemies, { skills });
   check(ids(engQ.roster) === characters.slice(-3).map((c) => c.id).reverse().join(','), `战斗的部署栏按编队顺序：${ids(engQ.roster)}`);
+}
+
+console.log('\n[14] 敌人的召唤物');
+{
+  const lvE = normalizeLevel({
+    id: 'T_14',
+    width: 10,
+    height: 3,
+    grid: ['HHHHHHHHHH', 'SGGGGGGGGB', 'HHHHHHHHHH'],
+    settings: { initialHp: 10, initialMoney: 0, autoMoney: false },
+    lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 1 } }, blocks: [{ id: 'b', enemyId: 'SUM', count: 1, interval: 1, startTime: 0 }] }],
+  });
+  // 战斗结束后时间不再前进，所以只在战斗进行中推进
+  const runUntil = (eng: GameEngine, time: number) => {
+    while (eng.status === 'running' && eng.time < time - 1e-9) eng.step(FIXED_DT);
+  };
+  const oldEnemy = normalizeEnemy({ id: 'OLD' });
+  check(oldEnemy.summonAttack === 'basic' && oldEnemy.summons.length === 0 && normalizeSummon({ id: 'OLDM' }).side === 'ally', '旧数据：敌人没有召唤物，召唤物默认是角色的召唤物');
+  const es1 = normalizeSummon({
+    id: 'ES1',
+    name: '小鬼',
+    side: 'enemy',
+    maxHp: 200,
+    atk: 20,
+    speed: 1,
+    sides: 4,
+    reward: 3,
+    endlessScore: 2,
+    summonFirst: 1,
+    summonInterval: 2,
+    summonCount: 1,
+    maxDeploy: 2,
+    attackType: 'none',
+    inherit: { maxHp: 10, atk: 50, def: 0, res: 0 },
+  });
+  const es2 = normalizeSummon({ id: 'ES2', name: '护卫', side: 'enemy', maxHp: 50, speed: 0.2, summonFirst: 0.5, summonInterval: 0, maxDeploy: 0, invincible: true, keepAfterSummoner: true, inherit: { maxHp: 0, atk: 0, def: 0, res: 0 } });
+  check(
+    es1.side === 'enemy' && es1.speed === 1 && es1.sides === 4 && es1.summonFirst === 1 && es1.summonInterval === 2 && es1.maxDeploy === 2 && es2.summonInterval === 0,
+    '敌人的召唤物可以保存 / 读取（移动速度、外形、召唤节奏、同时存在上限）',
+  );
+  check(normalizeSummon({ side: 'enemy', summonInterval: 0.1 }).summonInterval === 0.5, '召唤间隔最短 0.5 秒（0 = 只召唤一次）');
+  const sum = normalizeEnemy({ id: 'SUM', name: '召唤师', maxHp: 1000, atk: 100, speed: 0.5, attackType: 'summon', summonAttack: 'none', summons: ['ES1', 'ES2'] });
+  check(sum.attackType === 'summon' && sum.summonAttack === 'none' && sum.summons.join() === 'ES1,ES2', '敌人的攻击方式可以是「召唤」');
+  check(describeAttack(sum) === '召唤 · 自身不攻击' && describeAttack({ ...sum, summonAttack: 'area' }).startsWith('召唤 · 自身：'), `敌人的攻击说明：${describeAttack(sum)}`);
+
+  const eng = new GameEngine(lvE, [], [sum], { skills: [], summons: [es1, es2] });
+  runUntil(eng, 0.45);
+  check(eng.enemies.length === 1 && !eng.enemies[0].summon, '召唤者出现后，「首次召唤」之前不会召唤');
+  const owner = eng.enemies[0];
+  runUntil(eng, 0.55);
+  const guard = eng.enemies.find((e) => e.def.id === 'ES2');
+  check(!!guard && Math.abs(guard.x - owner.x) < 0.05 && Math.abs(guard.y - owner.y) < 0.05, '召唤物出现在召唤者的位置');
+  check(!!guard && guard.path === owner.path && guard.waypoint === owner.waypoint, '召唤物沿召唤者剩下的路线前进');
+  runUntil(eng, 1.1);
+  const imp = eng.enemies.find((e) => e.def.id === 'ES1');
+  check(!!imp && imp.base.maxHp === 300 && imp.base.atk === 70 && imp.summonerUid === owner.uid, `继承召唤者的数值：生命 ${imp?.base.maxHp}（200 + 1000 × 10%），攻击 ${imp?.base.atk}（20 + 100 × 50%）`);
+  check(!!imp && imp.def.size < 1 && imp.stats.speed === 1 && !imp.def.canAttack, '召唤物比敌人小，按自己的移动速度前进，可以设置为不攻击');
+  check(eng.totalEnemies === 1, '召唤物不算在敌人总数里');
+  runUntil(eng, 3.1);
+  check(eng.enemies.filter((e) => e.def.id === 'ES1').length === 2, '之后按召唤间隔继续召唤');
+  runUntil(eng, 5.1);
+  check(eng.enemies.filter((e) => e.def.id === 'ES1').length === 2 && eng.enemies.filter((e) => e.def.id === 'ES2').length === 1, '每个召唤者同时存在的数量不超过上限；召唤间隔为 0 时只召唤一次');
+  check(!!imp && imp.x > owner.x + 1, '召唤物比召唤者走得快时走在前面');
+  check(eng.dealDamage(guard!, 999, 'true') === 0, '无敌的敌人召唤物不会受到伤害');
+  runUntil(eng, 10);
+  check(eng.summonsLeaked >= 1 && eng.leaked === 0 && eng.hp < 10, `召唤物进入基地同样扣血（召唤物进入基地 ${eng.summonsLeaked}，血量 ${eng.hp}/10），不算在敌人的进入基地里`);
+  const victim = eng.enemies.find((e) => e.def.id === 'ES1')!;
+  victim.hp = 0;
+  eng.step(FIXED_DT);
+  check(eng.summonsKilled === 1 && eng.killed === 0 && eng.money === 3, `击败召唤物获得它的奖励（金钱 ${eng.money}），不算在击败敌人里`);
+  owner.hp = 0;
+  eng.step(FIXED_DT);
+  check(
+    !eng.enemies.some((e) => e.def.id === 'ES1') && eng.enemies.some((e) => e.def.id === 'ES2') && eng.killed === 1 && eng.money === 3,
+    '召唤者被击败后召唤物一起消失（没有奖励），设置了「召唤者离场后保留」的留下',
+  );
+  check(eng.status === 'running', '还有召唤物在场时，战斗没有结束');
+  runUntil(eng, 80);
+  check(eng.status === 'won' && eng.enemies.length === 0, `场上的召唤物全部离场后才胜利（${eng.status}）`);
+
+  // 无尽模式的波次加成：召唤物自己的数值按召唤者的加成
+  const engS = new GameEngine(lvE, [], [sum], { skills: [], summons: [es1] });
+  engS.step(FIXED_DT);
+  engS.enemies[0].hpScale = 2;
+  engS.enemies[0].atkScale = 2;
+  runUntil(engS, 1.1);
+  const scaled = engS.enemies.find((e) => e.summon);
+  check(!!scaled && scaled.base.maxHp === 500 && scaled.base.atk === 90, `无尽模式的波次加成同样作用在召唤物上：生命 ${scaled?.base.maxHp}，攻击 ${scaled?.base.atk}`);
+
+  // 阵营限制：角色不能召唤敌人的召唤物，敌人不能召唤角色的召唤物
+  const wrongChar = normalizeCharacter({ id: 'BC', name: '错召唤', attackType: 'summon', summons: ['ES1'] });
+  const allyM = normalizeSummon({ id: 'MA', name: '友方' });
+  const wrongEnemy = normalizeEnemy({ id: 'SUM', name: '孤独召唤师', attackType: 'summon', summons: ['MA'] });
+  const engB = new GameEngine(lvE, [wrongChar], [wrongEnemy], { skills: [], summons: [es1, allyM] });
+  check(engB.chosenSummon(engB.roster[0]) === null && engB.warnings.some((w) => w.includes('错召唤')), '角色不能召唤敌人的召唤物（有提示）');
+  check(engB.enemySummonsOf(wrongEnemy).length === 0 && engB.warnings.some((w) => w.includes('孤独召唤师')), '敌人不能召唤角色的召唤物（有提示）');
+
+  // 角色试用：召唤物和试用的敌人一样来回移动；试用的敌人被击败后照样重新出现
+  // 试用的地图没有敌人线，只有来回移动的敌人
+  const engT = new GameEngine({ ...lvE, lines: [] }, [], [sum], {
+    skills: [],
+    summons: [es1],
+    training: { enemyId: 'SUM', path: [{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }], respawnDelay: 1 },
+  });
+  runUntil(engT, 1.2);
+  check(engT.enemies.some((e) => e.summon && e.patrol), '角色试用：召唤物也来回移动，不会进入基地');
+  engT.enemies.find((e) => !e.summon)!.hp = 0;
+  runUntil(engT, 2.5);
+  check(engT.enemies.some((e) => !e.summon && e.hp > 0) && engT.enemies.filter((e) => e.summon).length === 0, '角色试用：召唤者被击败后召唤物消失，召唤者重新出现');
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

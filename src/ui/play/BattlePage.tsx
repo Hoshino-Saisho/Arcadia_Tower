@@ -47,7 +47,7 @@ export function BattlePage({ code, test, endless = false }: { code: string; test
       } else if (!test && !view.isLevelUnlocked(level.chapterId, level.index)) {
         return setState({ status: 'error', message: `关卡 ${code} 尚未解锁` });
       }
-      preloadIcons([...db.characters.map((c) => c.icon), ...db.enemies.map((e) => e.icon)]);
+      preloadIcons([...db.characters.map((c) => c.icon), ...db.enemies.map((e) => e.icon), ...db.summons.map((m) => m.icon)]);
       // 战斗音乐：关卡单独设置的优先，否则用章节的
       const chapter = db.chapters.find((c) => c.id === level.chapterId);
       music.set({ kind: 'battle', file: level.settings.battleMusic || chapter?.battleMusic || '' });
@@ -736,6 +736,12 @@ export function Battle({
                   <dd>第 {engine.wave} 波</dd>
                   <dt>击败敌人</dt>
                   <dd>{engine.killed}</dd>
+                  {engine.summonsKilled > 0 && (
+                    <>
+                      <dt>击败召唤物</dt>
+                      <dd>{engine.summonsKilled}</dd>
+                    </>
+                  )}
                   <dt>用时</dt>
                   <dd>{formatTime(engine.time)}</dd>
                   {!test && db.progress.endlessBest && !newBest && (
@@ -779,6 +785,15 @@ export function Battle({
                 <dd>{engine.killed}</dd>
                 <dt>进入基地</dt>
                 <dd>{engine.leaked}</dd>
+                {engine.summonsKilled + engine.summonsLeaked > 0 && (
+                  <>
+                    <dt>敌人的召唤物</dt>
+                    <dd>
+                      击败 {engine.summonsKilled}
+                      {engine.summonsLeaked > 0 ? ` · 进入基地 ${engine.summonsLeaked}` : ''}
+                    </dd>
+                  </>
+                )}
                 <dt>用时</dt>
                 <dd>{formatTime(engine.time)}</dd>
               </dl>
@@ -1050,7 +1065,8 @@ function deployFocus(engine: GameEngine, id: string) {
 /** 角色试用的 HUD：伤害 / 治疗统计 */
 function TrainingHud({ engine }: { engine: GameEngine }) {
   const secs = Math.max(1, engine.time - engine.meterStart);
-  const enemy = engine.enemies.find((e) => e.hp > 0);
+  // 试用的敌人（不算它召唤的召唤物）
+  const enemy = engine.enemies.find((e) => e.hp > 0 && !e.summon);
   return (
     <div className="hud-stats">
       <div className="hud-stat" title="试用中可以随意部署">

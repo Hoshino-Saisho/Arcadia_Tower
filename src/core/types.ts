@@ -4,7 +4,7 @@
  *   data/characters.json   角色列表
  *   data/enemies.json      敌人列表
  *   data/skills.json       技能库（角色和敌人通过技能 ID 引用）
- *   data/summons.json      召唤物（攻击方式为「召唤」的角色引用）
+ *   data/summons.json      召唤物（攻击方式为「召唤」的角色 / 敌人引用）
  *   data/chapters.json     章节顺序
  *   data/settings.json     全局设置（主页音乐等）
  *   data/currency.json     货币编辑：游戏外货币、经验书、升级经验、基础通关奖励
@@ -198,20 +198,44 @@ export interface SummonInherit {
   res: number;
 }
 
+/** 召唤物属于哪一方：ally = 角色的召唤物；enemy = 敌人的召唤物 */
+export type SummonSide = 'ally' | 'enemy';
+
 /**
  * 召唤物（data/summons.json，在「召唤物编辑」中编辑）：几乎和角色一样（数值、攻击方式、技能……）。
- * 攻击方式为「召唤」的角色部署后，它选择的召唤物出现在部署栏里，可以像角色一样拖到地图上。
  * 不使用角色的 growth / summons / summonAttack（召唤物不升级，按继承的数值变强）。
+ *  - 角色的召唤物：攻击方式为「召唤」的角色部署后，它选择的召唤物出现在部署栏里，可以像角色一样拖到地图上。
+ *  - 敌人的召唤物：攻击方式为「召唤」的敌人按召唤间隔自动召唤，召唤物出现在召唤者的位置，
+ *    像敌人一样沿召唤者剩下的路线前进（不会被放置）。range = 攻击范围（0 = 只攻击阻挡它的角色），
+ *    maxDeploy = 每个召唤者同时存在的上限；cost / placement / blockCount / deployCooldown / nearSummoner 不使用。
  */
 export interface SummonDef extends CharacterDef {
+  /** 召唤者是角色还是敌人（召唤物编辑最上面的设置） */
+  side: SummonSide;
   /** 从召唤者继承的数值（%） */
   inherit: SummonInherit;
   /** 无敌：不会受到伤害 */
   invincible: boolean;
-  /** 只能部署在召唤者的攻击范围内 */
+  /** 角色的召唤物：只能部署在召唤者的攻击范围内 */
   nearSummoner: boolean;
-  /** 召唤者离场（撤退 / 被击败）后召唤物仍然留在场上 */
+  /** 召唤者离场（撤退 / 被击败 / 进入基地）后召唤物仍然留在场上 */
   keepAfterSummoner: boolean;
+  /** 敌人的召唤物：移动速度（格/秒） */
+  speed: number;
+  /** 敌人的召唤物：外形（3~6 边形） */
+  sides: EnemySides;
+  /** 敌人的召唤物：体型（0.5 ~ 2；召唤物比同样体型的敌人小一些） */
+  size: number;
+  /** 敌人的召唤物：被击败时的金钱奖励（负数 = 扣除金钱） */
+  reward: number;
+  /** 敌人的召唤物：无尽模式中被击败时获得的分数 */
+  endlessScore: number;
+  /** 敌人的召唤物：召唤者出现后第几秒第一次召唤 */
+  summonFirst: number;
+  /** 敌人的召唤物：之后每隔几秒召唤一次（0 = 只召唤一次） */
+  summonInterval: number;
+  /** 敌人的召唤物：每次召唤的数量 */
+  summonCount: number;
 }
 
 /** 敌人外形边数 */
@@ -250,7 +274,15 @@ export interface EnemyDef {
   attackRange: number;
   /** 击杀奖励金钱（负数 = 击败时扣除金钱） */
   reward: number;
+  /**
+   * 攻击方式：basic = 子弹（默认）；area = 范围伤害；
+   * summon = 召唤（按召唤物的召唤间隔自动召唤敌人的召唤物，自己按 summonAttack 攻击）
+   */
   attackType: string;
+  /** 攻击方式为「召唤」时，敌人自己的攻击方式：basic / area / none */
+  summonAttack: string;
+  /** 攻击方式为「召唤」时召唤的召唤物（敌人的召唤物）：每种按自己的召唤间隔召唤 */
+  summons: string[];
   skills: string[];
   skillSlots: number;
   onHit: OnHitEffect | null;

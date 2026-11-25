@@ -1526,6 +1526,14 @@ select.input {
   padding: 1px 7px;
   border-radius: 9px;
 }
+/* 召唤物列表：敌人的召唤物 */
+.summon-side-chip {
+  font-size: 11px;
+  color: #ffb4a2;
+  background: #3a1a14;
+  padding: 1px 7px;
+  border-radius: 9px;
+}
 .def-list-actions {
   display: grid;
   grid-template-columns: 1fr auto auto 1fr;

@@ -121,13 +121,17 @@ export async function loadSummons(): Promise<SummonDef[]> {
   }
 }
 
-/** 保存召唤物；renames 为 旧 ID → 新 ID，会同步更新角色的召唤物列表和玩家的召唤物选择 */
+/** 保存召唤物；renames 为 旧 ID → 新 ID，会同步更新角色 / 敌人的召唤物列表和玩家的召唤物选择 */
 export async function saveSummons(list: SummonDef[], renames: Map<string, string> = new Map()) {
   await writeJson(FILES.summons, { summons: list });
   if (!renames.size) return;
   const chars = await loadCharacters();
   if (chars.some((c) => c.summons.some((id) => renames.has(id)))) {
     await writeJson(FILES.characters, { characters: chars.map((c) => ({ ...c, summons: c.summons.map((id) => renames.get(id) ?? id) })) });
+  }
+  const enemies = await loadEnemies();
+  if (enemies.some((e) => e.summons.some((id) => renames.has(id)))) {
+    await writeJson(FILES.enemies, { enemies: enemies.map((e) => ({ ...e, summons: e.summons.map((id) => renames.get(id) ?? id) })) });
   }
   const prog = await loadProgress();
   const summonChoice: Record<string, string> = {};

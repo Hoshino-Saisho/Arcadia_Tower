@@ -30,6 +30,7 @@ import type {
   StatKey,
   StatModifier,
   SummonDef,
+  SummonSide,
 } from './types';
 
 export const LEVEL_FORMAT_VERSION = 2;
@@ -84,26 +85,82 @@ export function newCharacter(id: string): CharacterDef {
 }
 
 /** 新的召唤物：比角色弱一些，继承召唤者 50% 的攻击力 */
-export function newSummon(id: string): SummonDef {
+export function newSummon(id: string, side: SummonSide = 'ally'): SummonDef {
   const base = { maxHp: 600, atk: 30, def: 30, res: 0 };
   return {
     ...newCharacter(id),
     name: '新召唤物',
-    color: '#8bc34a',
+    color: side === 'enemy' ? '#e07a5f' : '#8bc34a',
     cost: 3,
     ...base,
     growth: { maxHp: 0, atk: 0, def: 0, res: 0 },
     maxDeploy: 2,
+    side,
     inherit: { maxHp: 0, atk: 50, def: 0, res: 0 },
     invincible: false,
     nearSummoner: false,
     keepAfterSummoner: false,
+    speed: 1,
+    sides: 3,
+    size: 1,
+    reward: 0,
+    endlessScore: 0,
+    summonFirst: 3,
+    summonInterval: 10,
+    summonCount: 1,
   };
 }
 
 /** 是否是召唤物（召唤物有「继承」设置） */
 export function isSummonDef(def: unknown): def is SummonDef {
   return !!def && typeof def === 'object' && 'inherit' in def;
+}
+
+/** 敌人的召唤物比同样体型的敌人小 */
+export const ENEMY_SUMMON_SCALE = 0.72;
+
+/** 召唤物列表中属于某一方的召唤物（角色只能召唤角色的召唤物，敌人只能召唤敌人的召唤物） */
+export function summonsOfSide(list: SummonDef[], side: SummonSide): SummonDef[] {
+  return list.filter((s) => s.side === side);
+}
+
+/**
+ * 敌人的召唤物在战斗中按敌人处理：转换成敌人的数据
+ * （攻击范围 = range，不攻击 = canAttack false，体型缩小；召唤物不能再召唤）。
+ */
+export function summonAsEnemy(s: SummonDef): EnemyDef {
+  return {
+    id: s.id,
+    name: s.name,
+    color: s.color,
+    icon: s.icon,
+    iconCenter: s.iconCenter,
+    iconZoom: s.iconZoom,
+    sides: s.sides,
+    size: s.size * ENEMY_SUMMON_SCALE,
+    maxHp: s.maxHp,
+    atk: s.atk,
+    def: s.def,
+    res: s.res,
+    speed: s.speed,
+    canAttack: s.attackType !== 'none',
+    damageType: s.damageType,
+    attackTarget: s.attackTarget,
+    targetCount: s.targetCount,
+    attackInterval: s.attackInterval,
+    attackRange: s.range,
+    reward: s.reward,
+    attackType: s.attackType === 'area' ? 'area' : 'basic',
+    summonAttack: 'basic',
+    summons: [],
+    skills: s.skills,
+    skillSlots: s.skillSlots,
+    onHit: s.onHit,
+    endlessScore: s.endlessScore,
+    endlessDifficulty: 0,
+    endlessRank: 1,
+    description: s.description,
+  };
 }
 
 /** 默认的升级成长：每级增加基础生命 / 攻击（治疗量）/ 物抗的 5%（取整），法抗不增加 */
@@ -132,6 +189,8 @@ export function newEnemy(id: string): EnemyDef {
     attackRange: 0,
     reward: 0,
     attackType: 'basic',
+    summonAttack: 'basic',
+    summons: [],
     skills: [],
     skillSlots: 1,
     onHit: null,
@@ -373,16 +432,22 @@ function normalizeGrowth(raw: any, base: { maxHp: number; atk: number; def: numb
   };
 }
 
-/** 召唤物：和角色一样的字段 + 继承 / 无敌 / 部署位置；攻击方式只能是子弹 / 范围 / 不攻击 */
+/**
+ * 召唤物：和角色一样的字段 + 阵营 / 继承 / 无敌 / 部署位置 + 敌人的召唤物用的移动速度、外形和召唤节奏；
+ * 攻击方式只能是子弹 / 范围 / 不攻击（没有阵营设置的旧数据 = 角色的召唤物）
+ */
 export function normalizeSummon(raw: any): SummonDef {
-  const d = newSummon(str(raw?.id, 'M000'));
+  const side: SummonSide = raw?.side === 'enemy' ? 'enemy' : 'ally';
+  const d = newSummon(str(raw?.id, 'M000'), side);
   const c = normalizeCharacter({ ...d, ...(raw && typeof raw === 'object' ? raw : {}), growth: { maxHp: 0, atk: 0, def: 0, res: 0 } });
   const inh = raw?.inherit ?? {};
+  const interval = num(raw?.summonInterval, d.summonInterval, 0, 3600);
   return {
     ...c,
     attackType: raw?.attackType === 'area' || raw?.attackType === 'none' ? raw.attackType : 'basic',
     summonAttack: 'basic',
     summons: [],
+    side,
     inherit: {
       maxHp: num(inh.maxHp, d.inherit.maxHp, -1000, 1000),
       atk: num(inh.atk, d.inherit.atk, -1000, 1000),
@@ -392,6 +457,15 @@ export function normalizeSummon(raw: any): SummonDef {
     invincible: raw?.invincible === true,
     nearSummoner: raw?.nearSummoner === true,
     keepAfterSummoner: raw?.keepAfterSummoner === true,
+    speed: num(raw?.speed, d.speed, 0.05, 20),
+    sides: Math.round(num(raw?.sides, d.sides, 3, 6)) as EnemySides,
+    size: num(raw?.size, d.size, 0.5, 2),
+    reward: num(raw?.reward, d.reward, -99999, 99999),
+    endlessScore: num(raw?.endlessScore, d.endlessScore, -99999, 99999),
+    summonFirst: num(raw?.summonFirst, d.summonFirst, 0, 3600),
+    // 太短的间隔会召唤出大量的召唤物：最短 0.5 秒（0 = 只召唤一次）
+    summonInterval: interval > 0 ? Math.max(0.5, interval) : 0,
+    summonCount: Math.round(num(raw?.summonCount, d.summonCount, 1, 20)),
   };
 }
 
@@ -420,7 +494,9 @@ export function normalizeEnemy(raw: any): EnemyDef {
     attackInterval: num(raw?.attackInterval, d.attackInterval, 0.05),
     attackRange: num(raw?.attackRange, d.attackRange, 0),
     reward: num(raw?.reward, d.reward, -99999, 99999),
-    attackType: str(raw?.attackType, 'basic'),
+    attackType: raw?.attackType === 'summon' || raw?.attackType === 'area' ? raw.attackType : 'basic',
+    summonAttack: raw?.summonAttack === 'area' || raw?.summonAttack === 'none' ? raw.summonAttack : 'basic',
+    summons: strList(raw?.summons),
     skills: strList(raw?.skills),
     skillSlots: Math.round(num(raw?.skillSlots, 1, 0, 9)),
     onHit: normalizeOnHit(raw?.onHit),

@@ -5,7 +5,7 @@ import { loadDatabase, loadProgress, saveProgress, type GameDatabase } from '../
 import type { CharacterDef, EnemyDef, SkillDef, SummonDef } from '../../core/types';
 import { RangeGrid } from '../common/rangeGrid';
 import { SkillCard } from '../common/skillCard';
-import { SummonList } from '../common/summonList';
+import { EnemySummonList, SummonList } from '../common/summonList';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
 import { navigate } from '../router';
@@ -76,7 +76,7 @@ export function CodexPage() {
                 onChoose={(id) => void chooseSummon(current.id, id)}
               />
             ) : (
-              <EnemyDetail def={current as EnemyDef} skills={skillMap} />
+              <EnemyDetail def={current as EnemyDef} skills={skillMap} summons={summonMap} />
             )}
           </section>
         )}
@@ -172,8 +172,10 @@ function CharacterDetail({
   );
 }
 
-function EnemyDetail({ def, skills }: { def: EnemyDef; skills: Map<string, SkillDef> }) {
+function EnemyDetail({ def, skills, summons }: { def: EnemyDef; skills: Map<string, SkillDef>; summons: Map<string, SummonDef> }) {
   const healer = def.attackTarget === 'ally' && def.atk < 0;
+  // 召唤者「自身不攻击」时没有攻击间隔 / 范围
+  const attacks = def.canAttack && !(def.attackType === 'summon' && def.summonAttack === 'none');
   return (
     <>
       <Head kind="enemy" def={def} />
@@ -184,13 +186,13 @@ function EnemyDetail({ def, skills }: { def: EnemyDef; skills: Map<string, Skill
         <Row k="法抗" v={`${def.res}%`} />
         <Row k="移动速度" v={`${def.speed} 格/秒`} />
         <Row k="攻击方式" v={describeAttack(def)} />
-        <Row k="攻击间隔" v={def.canAttack ? `${def.attackInterval} 秒` : '—'} />
-        <Row k="攻击范围" v={def.canAttack ? (def.attackRange > 0 ? `${def.attackRange} 格` : '只攻击阻挡者') : '—'} />
+        <Row k="攻击间隔" v={attacks ? `${def.attackInterval} 秒` : '—'} />
+        <Row k="攻击范围" v={attacks ? (def.attackRange > 0 ? `${def.attackRange} 格` : '只攻击阻挡者') : '—'} />
         <Row k="击杀奖励" v={def.reward} />
         <Row k="外形" v={`${def.sides} 边形`} />
         <Row k="无尽模式" v={`分数 ${def.endlessScore} · 难度 ${def.endlessDifficulty} · 出现位列 ${def.endlessRank}`} />
       </dl>
-      {def.canAttack && def.attackRange > 0 && (
+      {attacks && def.attackRange > 0 && (
         <div className="codex-range">
           <RangeGrid range={def.attackRange} color={healer ? '#5dff9d' : def.color} cell={16} />
           <span className="muted small">射程（中间 = 敌人所在方块）</span>
@@ -198,6 +200,7 @@ function EnemyDetail({ def, skills }: { def: EnemyDef; skills: Map<string, Skill
       )}
       {describeOnHit(def.onHit) && <div className="codex-note">{describeOnHit(def.onHit)}</div>}
       <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} side="enemy" />
+      <EnemySummonList def={def} summons={summons} skills={skills} />
     </>
   );
 }

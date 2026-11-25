@@ -79,12 +79,13 @@ export function describeAttack(opts: {
   summonAttack?: string;
   canAttack?: boolean;
 }): string {
-  if (opts.canAttack === false || opts.attackType === 'none') return '不攻击';
-  // 召唤：部署后召唤物出现在部署栏；自己按「自身攻击」攻击
+  // 召唤：角色部署后召唤物出现在部署栏 / 敌人按召唤间隔自动召唤；自己按「自身攻击」攻击（敌人不攻击时同样只召唤）
   if (opts.attackType === 'summon') {
-    const own = opts.summonAttack === 'none' ? '自身不攻击' : `自身：${describeAttack({ ...opts, attackType: opts.summonAttack || 'basic' })}`;
+    const own =
+      opts.summonAttack === 'none' || opts.canAttack === false ? '自身不攻击' : `自身：${describeAttack({ ...opts, attackType: opts.summonAttack || 'basic' })}`;
     return `召唤 · ${own}`;
   }
+  if (opts.canAttack === false || opts.attackType === 'none') return '不攻击';
   const area = opts.attackType === 'area';
   const count = area ? '范围（射程内全部）' : opts.targetCount < 0 ? '子弹 · 射程内全部目标' : opts.targetCount === 1 ? '子弹 · 单个目标' : `子弹 · ${opts.targetCount} 个目标`;
   if (opts.attackTarget === 'ally') {
@@ -106,6 +107,14 @@ export function describeInherit(inh: { maxHp: number; atk: number; def: number; 
     .filter(([, v]) => v)
     .map(([k, v]) => `${k} ${formatNumber(v)}%`);
   return parts.length ? `继承召唤者：${parts.join(' · ')}` : '不继承召唤者的数值';
+}
+
+/** 敌人的召唤物什么时候召唤，例如「出现 3 秒后召唤 1 个，之后每 10 秒 1 个（每个召唤者最多同时 2 个）」 */
+export function describeSummonTiming(s: { summonFirst: number; summonInterval: number; summonCount: number; maxDeploy: number }): string {
+  const first = s.summonFirst > 0 ? `出现 ${formatNumber(s.summonFirst)} 秒后召唤 ${s.summonCount} 个` : `出现时召唤 ${s.summonCount} 个`;
+  const repeat = s.summonInterval > 0 ? `，之后每 ${formatNumber(s.summonInterval)} 秒 ${s.summonCount} 个` : '（只召唤一次）';
+  const cap = s.maxDeploy > 0 ? `（每个召唤者最多同时 ${s.maxDeploy} 个）` : '';
+  return first + repeat + cap;
 }
 
 export function describeOnHit(h: OnHitEffect | null): string | null {
