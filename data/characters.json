@@ -299,7 +299,7 @@
       "range": 2.5,
       "blockCount": 2,
       "maxDeploy": 1,
-      "deployCooldown": 0,
+      "deployCooldown": 30,
       "attackType": "basic",
       "summonAttack": "basic",
       "summons": [],
