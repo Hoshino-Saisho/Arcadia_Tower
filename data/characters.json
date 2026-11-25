@@ -48,7 +48,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":30,"atk":3,"def":0,"res":0},
-      "description": "远程，部署在高台上，攻速快"
+      "description": "站得高了，看的就更远了，所以你们都去给我当前排！"
     },
     {
       "id": "C003",
