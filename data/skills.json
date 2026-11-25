@@ -187,7 +187,7 @@
           "duration": 0,
           "amount": 500,
           "regenMode": "flat",
-          "damageType": "physical",
+          "damageType": "true",
           "money": 0,
           "moneyRate": 0
         },
