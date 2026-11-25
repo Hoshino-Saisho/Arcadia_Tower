@@ -118,7 +118,7 @@
       "spMax": 50,
       "spInitial": 0,
       "spGain": "auto",
-      "spRate": 2,
+      "spRate": 1,
       "trigger": "manual",
       "duration": 10,
       "effects": [
