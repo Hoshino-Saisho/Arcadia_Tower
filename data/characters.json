@@ -265,7 +265,7 @@
       "placement": "ground",
       "cost": 30,
       "maxHp": 1000,
-      "atk": 0,
+      "atk": 100,
       "def": 50,
       "res": 0,
       "damageType": "physical",
