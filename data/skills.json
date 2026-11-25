@@ -29,6 +29,37 @@
       ]
     },
     {
+      "id": "S023",
+      "name": "无敌",
+      "color": "#f2b544",
+      "spMax": 70,
+      "spInitial": 0,
+      "spGain": "attack",
+      "spRate": 1,
+      "trigger": "auto",
+      "duration": 10,
+      "effects": [
+        {
+          "kind": "modify",
+          "target": "self",
+          "scope": "range",
+          "radius": 0,
+          "maxTargets": -1,
+          "modifiers": [
+            {"stat":"def","mode":"percent","value":99999},
+            {"stat":"res","mode":"percent","value":99999}
+          ],
+          "duration": 0,
+          "amount": 0,
+          "regenMode": "flat",
+          "damageType": "physical",
+          "money": 0,
+          "moneyRate": 0
+        }
+      ],
+      "description": "无敌是多么...多么的寂寞"
+    },
+    {
       "id": "S022",
       "name": "花钱",
       "color": "#f2b544",
