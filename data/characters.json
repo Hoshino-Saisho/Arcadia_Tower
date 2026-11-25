@@ -274,7 +274,7 @@
           {"stat":"atk","mode":"percent","value":40},
           {"stat":"attackInterval","mode":"percent","value":-40}
         ],
-        "duration": 2
+        "duration": 10
       },
       "growth": {"maxHp":50,"atk":-2,"def":3,"res":3},
       "description": "等我100级就让你看看什么叫做神辅助！"
