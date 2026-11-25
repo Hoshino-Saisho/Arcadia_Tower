@@ -259,7 +259,8 @@
       "skills": [],
       "skillSlots": 1,
       "onHit": {"modifiers":[{"stat":"hpRegen","mode":"percent","value":10}],"duration":2},
-      "growth": {"maxHp":50,"atk":3,"def":3,"res":0}
+      "growth": {"maxHp":50,"atk":3,"def":3,"res":0},
+      "description": "吸特乐"
     },
     {
       "id": "C010",
