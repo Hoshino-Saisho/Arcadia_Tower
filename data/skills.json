@@ -31,6 +31,7 @@
       "id": "S016",
       "name": "狙击",
       "color": "#f2b544",
+      "description": "狙击你家里的加菲猫",
       "spMax": 20,
       "spInitial": 0,
       "spGain": "auto",
@@ -58,14 +59,13 @@
           "radius": 0,
           "maxTargets": -1,
           "modifiers": [{"stat":"def","mode":"percent","value":-30}],
-          "duration": 0,
+          "duration": 3,
           "amount": 0,
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0
         }
-      ],
-      "description": "狙击你家里的加菲猫"
+      ]
     },
     {
       "id": "S015",
