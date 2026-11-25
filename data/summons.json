@@ -32,6 +32,36 @@
       "invincible": false,
       "nearSummoner": false,
       "keepAfterSummoner": false
+    },
+    {
+      "id": "M002",
+      "name": "无罪者",
+      "color": "#8bc34a",
+      "placement": "ground",
+      "cost": 3,
+      "maxHp": 600,
+      "atk": 30,
+      "def": 30,
+      "res": 0,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 1,
+      "range": 1,
+      "blockCount": 1,
+      "maxDeploy": 2,
+      "deployCooldown": 0,
+      "attackType": "basic",
+      "summonAttack": "basic",
+      "summons": [],
+      "skills": [],
+      "skillSlots": 1,
+      "onHit": null,
+      "growth": {"maxHp":0,"atk":0,"def":0,"res":0},
+      "inherit": {"maxHp":0,"atk":50,"def":0,"res":0},
+      "invincible": false,
+      "nearSummoner": false,
+      "keepAfterSummoner": false
     }
   ]
 }
