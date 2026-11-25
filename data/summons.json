@@ -6,7 +6,7 @@
       "color": "#8bc34a",
       "placement": "ground",
       "cost": 10,
-      "maxHp": 1600,
+      "maxHp": 1000,
       "atk": 0,
       "def": 0,
       "res": 0,

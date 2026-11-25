@@ -30,7 +30,7 @@
     {
       "id": "C013",
       "name": "奴隶主",
-      "color": "#4a90d9",
+      "color": "#8ca2ba",
       "placement": "ground",
       "cost": 10,
       "maxHp": 1000,
