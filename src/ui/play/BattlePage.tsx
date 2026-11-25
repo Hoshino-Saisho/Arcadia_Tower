@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { SELECT_SLOW_FACTOR, retreatRefund } from '../../core/defaults';
+import { SELECT_SLOW_FACTOR, isSummonDef, retreatRefund } from '../../core/defaults';
 import { describeSkill, describeSkillTrigger } from '../../core/describe';
 import { levelCode } from '../../core/ids';
 import { endlessRewards, grantRewards, levelMap, rollRewards, type RolledRewards } from '../../core/leveling';
@@ -137,6 +137,8 @@ export function Battle({
       levels: training ? Object.fromEntries(db.characters.map((c) => [c.id, training.level])) : levelMap(db.currency, db.progress),
       endless: endless ? db.endless : undefined,
       training: training ? { enemyId: training.enemyId, path: training.path } : undefined,
+      summons: db.summons,
+      summonChoice: training ? {} : db.progress.summonChoice,
     });
     if (training) deployFocus(engineRef.current, training.focusId);
   }
@@ -216,7 +218,7 @@ export function Battle({
       }
       const { w, h, dpr } = sizeRef.current;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const placingDef = c.placing ? engine.roster.find((r) => r.id === c.placing) ?? null : null;
+      const placingDef = c.placing ? engine.deployable(c.placing) ?? null : null;
       const hoverTile = c.pending ? c.pending.tile : hoverRef.current;
       vpRef.current = renderer.render(ctx, w, h, dpr, { hoverTile, placing: placingDef, selectedUid: c.selectedUid, showRoutes: c.showRoutes }, now / 1000);
       hud += dt;
@@ -274,9 +276,14 @@ export function Battle({
     })().catch((err) => toast(`保存进度失败：${String(err)}`, 'error'));
   }, [status, test, level, db, endless, engine]);
 
-  // 选中的角色被击倒时取消选择
+  // 选中的角色被击倒时取消选择；召唤者离场后，正在部署的召唤物也取消
   useEffect(() => {
     if (selectedUid != null && !engine.unitByUid(selectedUid)) setSelectedUid(null);
+    if (placing && !engine.deployable(placing)) {
+      setPlacing(null);
+      setPending(null);
+      setDragging(null);
+    }
   });
 
   const exit = useCallback(() => {
@@ -294,7 +301,7 @@ export function Battle({
 
   const selectCard = useCallback(
     (id: string) => {
-      const def = engine.roster.find((c) => c.id === id);
+      const def = engine.deployable(id);
       if (!def) return;
       setPending(null);
       if (ctrl.current.placing === id) return setPlacing(null);
@@ -309,7 +316,7 @@ export function Battle({
   /** 选好方块后：检查能否部署 → 暂停并显示「部署 / 取消」 */
   const requestDeploy = useCallback(
     (id: string, tile: GridPos, cancelOnError: boolean) => {
-      const def = engine.roster.find((c) => c.id === id);
+      const def = engine.deployable(id);
       const err = def ? engine.checkDeploy(def, tile) : '本关不能使用该角色';
       if (err) {
         toast(err, 'error', 1500);
@@ -435,7 +442,7 @@ export function Battle({
       if (d.touch && bar && bar.scrollWidth > bar.clientWidth + 1 && Math.abs(b.x - a.x) > Math.abs(b.y - a.y)) {
         d.mode = 'pan';
       } else {
-        const def = engine.roster.find((c) => c.id === d.id);
+        const def = engine.deployable(d.id);
         const st = def ? engine.cardState(def) : { ok: false, reason: '本关不能使用该角色' };
         if (!st.ok) {
           toast(st.reason!, 'error', 1500);
@@ -636,7 +643,7 @@ export function Battle({
         )}
         {pending && engine.status === 'running' && (
           <DeployConfirm
-            def={engine.roster.find((c) => c.id === pending.id)!}
+            def={engine.deployable(pending.id) ?? engine.roster[0]}
             tile={pending.tile}
             vp={vpRef.current}
             fieldW={wrapRef.current?.clientWidth ?? 800}
@@ -761,16 +768,18 @@ export function Battle({
 
       <footer className="deploy-bar" ref={barRef}>
         {engine.roster.length === 0 && <div className="muted">本关没有可用角色</div>}
-        {engine.roster.map((def, i) => {
+        {[...engine.roster, ...engine.activeSummons].map((def, i) => {
+          // 召唤物：召唤者在场时才出现在部署栏
+          const summon = isSummonDef(def);
           const st = engine.cardState(def);
           const count = engine.deployedCount(def.id);
           const skills = engine.loadoutOf(def);
-          const lv = engine.levelOf(def.id);
+          const lv = summon ? 1 : engine.levelOf(def.id);
           const cooling = st.cooldown > 0 && def.deployCooldown > 0;
           return (
             <button
-              key={def.id}
-              className={`deploy-card${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}${cooling ? ' cooling' : ''}`}
+              key={(summon ? 'summon:' : '') + def.id}
+              className={`deploy-card${summon ? ' summon-card' : ''}${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}${cooling ? ' cooling' : ''}`}
               onPointerDown={(e) => onCardPointerDown(e, def.id)}
               onPointerMove={onCardPointerMove}
               onPointerUp={onCardPointerUp}
@@ -779,12 +788,12 @@ export function Battle({
               // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
               onClick={(e) => e.detail === 0 && selectCard(def.id)}
               onContextMenu={(e) => e.preventDefault()}
-              title={`${def.name}（${def.id}）Lv.${lv}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${st.ok ? '' : '\n' + st.reason}`}
+              title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
             >
-              <span className="card-key">{i + 1}</span>
+              {summon ? <span className="card-key summon-tag">召唤</span> : <span className="card-key">{i + 1}</span>}
               <span className="card-cost">{def.cost}</span>
               {lv > 1 && <span className="card-lv">Lv.{lv}</span>}
-              <UnitToken kind="character" def={def} size={44} dim={!st.ok} />
+              <UnitToken kind={summon ? 'summon' : 'character'} def={def} size={44} dim={!st.ok} />
               <span className="card-name">{def.name}</span>
               <span className="card-meta">
                 {placementText(def.placement)}
@@ -811,7 +820,7 @@ export function Battle({
             if (el) el.style.transform = `translate(${ghostPos.current.x}px, ${ghostPos.current.y}px) translate(-50%, -50%)`;
           }}
         >
-          <UnitToken kind="character" def={engine.roster.find((c) => c.id === dragging)!} size={56} />
+          <UnitToken kind={isSummonDef(engine.deployable(dragging)) ? 'summon' : 'character'} def={engine.deployable(dragging) ?? engine.roster[0]} size={56} />
         </div>
       )}
     </div>
@@ -882,10 +891,15 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
   return (
     <div className="unit-panel">
       <div className="row gap-s">
-        <UnitToken kind="character" def={unit.def} size={40} />
+        <UnitToken kind={isSummonDef(unit.def) ? 'summon' : 'character'} def={unit.def} size={40} />
         <div className="grow">
           <div className="unit-name">
-            {unit.def.name} <span className="lv-text small">Lv.{unit.level}</span>
+            {unit.def.name}{' '}
+            {isSummonDef(unit.def) ? (
+              <span className="badge summon-badge">召唤物{unit.def.invincible ? ' · 无敌' : ''}</span>
+            ) : (
+              <span className="lv-text small">Lv.{unit.level}</span>
+            )}
           </div>
           <div className="muted small mono">{unit.def.id}</div>
         </div>
@@ -923,8 +937,18 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
         <dt>阻挡</dt>
         <dd>{unit.canBlock ? `${unit.blocked.length}/${s.blockCount}` : '—（高台）'}</dd>
       </dl>
-      {unit.statuses.length > 0 && (
+      {(unit.statuses.length > 0 || unit.regens.length > 0) && (
         <div className="status-list">
+          {unit.regens.map((r) => (
+            <div key={`regen:${r.key}`} className="status-item" title={r.perSecond > 0 ? '持续治疗' : `持续伤害（${DAMAGE_TYPE_LABEL[r.damageType]}）`}>
+              <span className={r.perSecond > 0 ? 'pos' : 'neg'}>{r.perSecond > 0 ? '✚' : '✖'}</span>
+              <span className="grow">
+                {r.name} {r.perSecond > 0 ? '+' : '−'}
+                {formatNumber(Math.round(Math.abs(r.perSecond) * 10) / 10)}/秒
+              </span>
+              <span className="mono muted">{Math.max(0, r.remaining).toFixed(1)}s</span>
+            </div>
+          ))}
           {unit.statuses.map((st) => (
             <div key={st.key} className="status-item" title={st.modifiers.map(formatModifier).join('，')}>
               <span className={st.hasDebuff && !st.hasBuff ? 'neg' : st.hasBuff && !st.hasDebuff ? 'pos' : 'mix'}>

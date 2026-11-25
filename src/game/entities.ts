@@ -14,6 +14,21 @@ export interface StatusInstance {
   hasDebuff: boolean;
 }
 
+/** 身上的持续治疗 / 持续伤害（每秒结算一次） */
+export interface RegenInstance {
+  /** 同一来源再次施加时刷新持续时间 */
+  key: string;
+  name: string;
+  color: string;
+  /** 每秒的数值：正数 = 治疗，负数 = 伤害 */
+  perSecond: number;
+  damageType: SkillDamageType;
+  remaining: number;
+  total: number;
+  /** 距离下一次结算的时间 */
+  tick: number;
+}
+
 /** 战斗中某个技能的状态 */
 export interface SkillState {
   def: SkillDef;
@@ -33,6 +48,8 @@ interface CombatantBase {
   /** 加上增益 / 减益后的实际属性 */
   stats: Stats;
   statuses: StatusInstance[];
+  /** 持续治疗 / 持续伤害 */
+  regens: RegenInstance[];
   skills: SkillState[];
   attackCd: number;
   /** 受击闪烁 / 治疗闪烁 / 攻击动作计时（用于渲染） */
@@ -46,8 +63,10 @@ export interface Unit extends CombatantBase {
   side: 'ally';
   def: CharacterDef;
   tile: GridPos;
-  /** 角色等级（影响基础数值） */
+  /** 角色等级（影响基础数值；召唤物为召唤者的等级） */
   level: number;
+  /** 召唤物：召唤它的角色（召唤者离场时一起离场） */
+  summonerUid?: number;
   /** 地面上的角色才能阻挡敌人 */
   canBlock: boolean;
   /** 当前阻挡的敌人 uid */
@@ -121,6 +140,8 @@ export interface Effect {
 }
 
 export const UNIT_RADIUS = 0.36;
+/** 召唤物比角色小 */
+export const SUMMON_RADIUS = 0.26;
 export const ENEMY_BASE_RADIUS = 0.27;
 /** 敌人中心与地面角色中心距离小于该值时被阻挡 */
 export const BLOCK_DISTANCE = 0.62;

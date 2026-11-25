@@ -11,10 +11,13 @@
  *  8. 负数数值：负数物抗 / 法抗、负数成长、负数费用 / 击杀奖励 / 金钱回复
  *  9. 无尽模式：难度、出现位列、波次、敌人强化、分数和兑换
  * 10. 角色试用（训练场）：敌人来回移动、停止移动、刷新血量、重新出现、伤害统计
+ * 11. 持续治疗 / 持续伤害
+ * 12. 召唤物：出现在部署栏、继承数值、部署范围、离场、无敌、召唤者自身攻击
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  isSummonDef,
   newEndlessConfig,
   normalizeCharacter,
   normalizeChapter,
@@ -24,6 +27,7 @@ import {
   normalizeLevel,
   normalizeProgress,
   normalizeSkill,
+  normalizeSummon,
   resolveLoadout,
 } from '../src/core/defaults';
 import {
@@ -696,6 +700,109 @@ console.log('\n[10] 角色试用（训练场）');
   engT.step(FIXED_DT);
   engT.refillEnemies();
   check(engT.enemies.length === 1, '被击败后点「刷新血量」立即重新出现');
+}
+
+console.log('\n[11] 持续治疗 / 持续伤害');
+{
+  const lvR = normalizeLevel({
+    id: 'T_9',
+    width: 6,
+    height: 2,
+    grid: ['SGGGGB', 'HHHHHH'],
+    settings: { initialHp: 99, initialMoney: 999, autoMoney: false },
+    lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [{ id: 'b', enemyId: 'RT', count: 1, interval: 1, startTime: 0 }] }],
+  });
+  const target = normalizeEnemy({ id: 'RT', maxHp: 10000, speed: 0.01, canAttack: false, def: 10, res: 50 });
+  const sk = (id: string, eff: object) => normalizeSkill({ id, name: id, spMax: 1, spInitial: 1, spGain: 'auto', spRate: 0, trigger: 'manual', duration: 5, effects: [eff] });
+  const hot = sk('HOT', { kind: 'regen', target: 'self', amount: 30, duration: 5 });
+  const dotP = sk('DOTP', { kind: 'regen', target: 'enemies', scope: 'all', amount: -50, damageType: 'physical', duration: 5 });
+  const dotM = sk('DOTM', { kind: 'regen', target: 'enemies', scope: 'all', amount: -50, damageType: 'magic', duration: 0 });
+  const dotA = sk('DOTA', { kind: 'regen', target: 'enemies', scope: 'all', amount: -10, regenMode: 'atk', damageType: 'true', duration: 3 });
+  check(hot.effects[0].kind === 'regen' && dotA.effects[0].regenMode === 'atk', '持续治疗效果可以保存 / 读取');
+  const caster = (skill: string) => normalizeCharacter({ id: 'RC', placement: 'high', cost: 0, atk: 200, maxHp: 1000, range: 0, skills: [skill], skillSlots: 1 });
+  const run = (eng: GameEngine, sec: number) => {
+    for (let t = 0; t < sec; t += FIXED_DT) eng.step(FIXED_DT);
+  };
+
+  const e1 = new GameEngine(lvR, [caster('HOT')], [target], { skills: [hot] });
+  e1.deploy('RC', { x: 0, y: 1 });
+  const u = e1.units[0];
+  u.hp = 500;
+  e1.activateSkill(u.uid, 0);
+  run(e1, 0.9);
+  check(u.hp === 500 && u.regens.length === 1, '施加后第 1 秒才开始治疗');
+  run(e1, 4.3);
+  check(u.hp === 650 && u.regens.length === 0, `每秒 +30，持续 5 秒 = 5 次：500 → ${u.hp}`);
+
+  const e2 = new GameEngine(lvR, [caster('DOTP')], [target], { skills: [dotP] });
+  e2.step(FIXED_DT);
+  e2.deploy('RC', { x: 0, y: 1 });
+  e2.activateSkill(e2.units[0].uid, 0);
+  run(e2, 5.2);
+  check(e2.enemies[0].hp === 10000 - 5 * 40, `持续物伤 50 / 秒，物抗 10：5 次共 ${10000 - e2.enemies[0].hp}`);
+
+  const e3 = new GameEngine(lvR, [caster('DOTM')], [target], { skills: [dotM] });
+  e3.step(FIXED_DT);
+  e3.deploy('RC', { x: 0, y: 1 });
+  e3.activateSkill(e3.units[0].uid, 0);
+  run(e3, 5.2);
+  check(e3.enemies[0].hp === 10000 - 5 * 25, `持续法伤 50 / 秒，法抗 50%，持续时间跟随技能（5 秒）：共 ${10000 - e3.enemies[0].hp}`);
+
+  const e4 = new GameEngine(lvR, [caster('DOTA')], [target], { skills: [dotA] });
+  e4.step(FIXED_DT);
+  e4.deploy('RC', { x: 0, y: 1 });
+  e4.activateSkill(e4.units[0].uid, 0);
+  run(e4, 3.2);
+  check(e4.enemies[0].hp === 10000 - 3 * 20, `攻击力 10% 的真伤（攻击力 200）：3 次共 ${10000 - e4.enemies[0].hp}`);
+}
+
+console.log('\n[12] 召唤物');
+{
+  const lvS = normalizeLevel({
+    id: 'T_10',
+    width: 7,
+    height: 3,
+    grid: ['HHHHHHH', 'SGGGGGB', 'HHHHHHH'],
+    settings: { initialHp: 99, initialMoney: 999, autoMoney: false },
+    lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 1 } }, blocks: [{ id: 'b', enemyId: 'SD', count: 1, interval: 1, startTime: 0 }] }],
+  });
+  const dummyS = normalizeEnemy({ id: 'SD', maxHp: 100000, speed: 0.01, canAttack: true, atk: 500, attackRange: 9, attackInterval: 0.5 });
+  const m1 = normalizeSummon({ id: 'M1', name: '小狼', placement: 'any', cost: 2, maxHp: 300, atk: 40, range: 1, maxDeploy: 2, inherit: { maxHp: 50, atk: 50 } });
+  const m2 = normalizeSummon({ id: 'M2', name: '盾', placement: 'any', cost: 0, maxHp: 100, attackType: 'none', invincible: true, nearSummoner: true, keepAfterSummoner: true });
+  check(isSummonDef(m1) && m2.attackType === 'none' && m2.invincible && m2.nearSummoner, '召唤物可以保存 / 读取（不攻击、无敌、部署范围、离场保留）');
+  const caller = normalizeCharacter({ id: 'SC', name: '召唤师', placement: 'high', cost: 0, maxHp: 1000, atk: 100, range: 1, attackType: 'summon', summonAttack: 'none', summons: ['M1', 'M2'] });
+  check(caller.attackType === 'summon' && caller.summonAttack === 'none' && caller.summons.join() === 'M1,M2', '角色的攻击方式可以是「召唤」');
+  const run = (eng: GameEngine, sec: number) => {
+    for (let t = 0; t < sec; t += FIXED_DT) eng.step(FIXED_DT);
+  };
+
+  const eng = new GameEngine(lvS, [caller], [dummyS], { skills: [], summons: [m1, m2] });
+  check(eng.activeSummons.length === 0 && eng.deploy('M1', { x: 2, y: 1 }) !== null, '召唤者不在场时，召唤物不在部署栏里，不能部署');
+  eng.deploy('SC', { x: 3, y: 0 });
+  check(eng.activeSummons.map((s) => s.id).join() === 'M1', '召唤者部署后，默认的召唤物（第一个）出现在部署栏');
+  check(eng.deploy('M1', { x: 2, y: 1 }) === null, '把召唤物部署到地图上');
+  const wolf = eng.units.find((x) => x.def.id === 'M1')!;
+  check(wolf.base.maxHp === 800 && wolf.base.atk === 90 && wolf.summonerUid === eng.units[0].uid, `继承召唤者 50% 的生命和攻击：生命 ${wolf.base.maxHp}（300 + 500），攻击 ${wolf.base.atk}（40 + 50）`);
+  eng.deploy('M1', { x: 4, y: 1 });
+  check(!!eng.deploy('M1', { x: 5, y: 1 }), '召唤物也有同时部署上限');
+  eng.step(FIXED_DT);
+  run(eng, 1);
+  check(eng.projectiles.every((p) => p.sourceUid !== eng.units[0].uid), '召唤者的「自身攻击」设为不攻击时，自己不攻击');
+  eng.retreat(eng.units[0].uid);
+  check(!eng.units.some((x) => x.def.id === 'M1') && eng.activeSummons.length === 0, '召唤者撤退后，召唤物一起离场，部署栏里的召唤物也消失');
+
+  const eng2 = new GameEngine(lvS, [caller], [dummyS], { skills: [], summons: [m1, m2], summonChoice: { SC: 'M2' } });
+  eng2.deploy('SC', { x: 3, y: 0 });
+  check(eng2.activeSummons.map((s) => s.id).join() === 'M2', '玩家选择了第二个召唤物时，部署栏里出现的是它');
+  const far = eng2.deploy('M2', { x: 6, y: 0 });
+  check(!!far && far.includes('攻击范围'), `只能放在召唤者攻击范围内：${far}`);
+  check(eng2.deploy('M2', { x: 3, y: 1 }) === null, '放在召唤者攻击范围内可以部署');
+  run(eng2, 3);
+  const shield = eng2.units.find((x) => x.def.id === 'M2')!;
+  check(shield.hp === shield.stats.maxHp, '无敌的召唤物不会受到伤害');
+  eng2.units[0].hp = 0;
+  eng2.step(FIXED_DT);
+  check(eng2.units.some((x) => x.def.id === 'M2'), '设置了「召唤者离场后保留」的召唤物，召唤者被击败后仍然在场');
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

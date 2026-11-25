@@ -45,6 +45,17 @@ function describeMoney(e: SkillEffect, skillDuration: number, side: 'ally' | 'en
 export function describeEffect(e: SkillEffect, skillDuration: number, side: 'ally' | 'enemy' = 'ally'): string {
   if (e.kind === 'money') return describeMoney(e, skillDuration, side);
   const t = targetText(e);
+  if (e.kind === 'regen') {
+    const dur = e.duration > 0 ? e.duration : skillDuration;
+    if (!e.amount) return `${t}：（未设置数值）`;
+    if (dur <= 0) return `${t}：持续${e.amount > 0 ? '治疗' : '伤害'}（无持续时间，不生效）`;
+    const v = Math.abs(e.amount);
+    const per = e.regenMode === 'atk' ? `攻击力 ${formatNumber(v)}% 的` : ` ${formatNumber(v)} 点`;
+    const ticks = Math.floor(dur + 1e-6);
+    return e.amount > 0
+      ? `持续治疗：${t}每秒恢复${per}生命，持续 ${formatNumber(dur)} 秒（共 ${ticks} 次）`
+      : `持续伤害：${t}每秒受到${per}${DAMAGE_TYPE_LABEL[e.damageType]}，持续 ${formatNumber(dur)} 秒（共 ${ticks} 次）`;
+  }
   if (e.kind === 'damage') {
     if (e.amount < 0) return `治疗${t}，治疗量为攻击力的 ${formatNumber(-e.amount)}%`;
     return `对${t}造成攻击力 ${formatNumber(e.amount)}% 的${DAMAGE_TYPE_LABEL[e.damageType]}`;
@@ -65,15 +76,36 @@ export function describeAttack(opts: {
   attackTarget: AttackTarget;
   targetCount: number;
   attackType?: string;
+  summonAttack?: string;
   canAttack?: boolean;
 }): string {
-  if (opts.canAttack === false) return '不攻击';
+  if (opts.canAttack === false || opts.attackType === 'none') return '不攻击';
+  // 召唤：部署后召唤物出现在部署栏；自己按「自身攻击」攻击
+  if (opts.attackType === 'summon') {
+    const own = opts.summonAttack === 'none' ? '自身不攻击' : `自身：${describeAttack({ ...opts, attackType: opts.summonAttack || 'basic' })}`;
+    return `召唤 · ${own}`;
+  }
   const area = opts.attackType === 'area';
   const count = area ? '范围（射程内全部）' : opts.targetCount < 0 ? '子弹 · 射程内全部目标' : opts.targetCount === 1 ? '子弹 · 单个目标' : `子弹 · ${opts.targetCount} 个目标`;
   if (opts.attackTarget === 'ally') {
     return opts.atk < 0 ? `治疗队友 · ${count}` : `攻击队友（${DAMAGE_TYPE_LABEL[opts.damageType]}）· ${count}`;
   }
   return `${DAMAGE_TYPE_LABEL[opts.damageType]} · ${count}`;
+}
+
+/** 召唤物继承的说明，例如「继承召唤者：攻击 50% · 生命 30%」 */
+export function describeInherit(inh: { maxHp: number; atk: number; def: number; res: number }): string {
+  const parts = (
+    [
+      ['生命', inh.maxHp],
+      ['攻击', inh.atk],
+      ['物抗', inh.def],
+      ['法抗', inh.res],
+    ] as const
+  )
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k} ${formatNumber(v)}%`);
+  return parts.length ? `继承召唤者：${parts.join(' · ')}` : '不继承召唤者的数值';
 }
 
 export function describeOnHit(h: OnHitEffect | null): string | null {

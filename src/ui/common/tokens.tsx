@@ -14,7 +14,8 @@ export function UnitToken({
   label = true,
   dim = false,
 }: {
-  kind: 'character' | 'enemy';
+  /** summon = 召唤物（比角色小，中间没有字） */
+  kind: 'character' | 'enemy' | 'summon';
   def: CharacterDef | EnemyDef;
   size?: number;
   angle?: number;
@@ -32,10 +33,10 @@ export function UnitToken({
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
-    if (kind === 'character') {
-      drawCharacterToken(ctx, def as CharacterDef, size / 2, size / 2 - size * 0.04, size * 0.38, {
+    if (kind === 'character' || kind === 'summon') {
+      drawCharacterToken(ctx, def as CharacterDef, size / 2, size / 2 - size * 0.04, size * (kind === 'summon' ? 0.29 : 0.38), {
         icon,
-        label: label ? def.name.slice(0, 1) : undefined,
+        label: label && kind === 'character' ? def.name.slice(0, 1) : undefined,
         alpha: dim ? 0.45 : 1,
       });
     } else {

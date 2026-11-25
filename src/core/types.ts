@@ -4,6 +4,7 @@
  *   data/characters.json   角色列表
  *   data/enemies.json      敌人列表
  *   data/skills.json       技能库（角色和敌人通过技能 ID 引用）
+ *   data/summons.json      召唤物（攻击方式为「召唤」的角色引用）
  *   data/chapters.json     章节顺序
  *   data/settings.json     全局设置（主页音乐等）
  *   data/currency.json     货币编辑：游戏外货币、经验书、升级经验、基础通关奖励
@@ -68,9 +69,10 @@ export interface OnHitEffect {
 export interface SkillEffect {
   /**
    * modify = 增益 / 减益（修改属性一段时间）；damage = 伤害 / 治疗（立即生效）；
-   * money = 金钱（释放时立即获得 + 持续期间每秒获得；敌人释放时玩家失去对应金钱）
+   * money = 金钱（释放时立即获得 + 持续期间每秒获得；敌人释放时玩家失去对应金钱）；
+   * regen = 持续治疗（每秒治疗）/ 持续伤害（数值为负数时每秒受到伤害，按伤害类型结算物抗 / 法抗）
    */
-  kind: 'modify' | 'damage' | 'money';
+  kind: 'modify' | 'damage' | 'money' | 'regen';
   /** 作用对象：自身 / 友方 / 敌方（money 不使用） */
   target: 'self' | 'allies' | 'enemies';
   /** range = 半径内；all = 全场 */
@@ -81,10 +83,15 @@ export interface SkillEffect {
   maxTargets: number;
   /** modify：属性修改列表（可同时有增益和减益） */
   modifiers: StatModifier[];
-  /** modify / money：持续时间（秒），0 = 跟随技能持续时间 */
+  /** modify / money / regen：持续时间（秒），0 = 跟随技能持续时间 */
   duration: number;
-  /** damage：数值为攻击力（绝对值）的百分比；正数 = 伤害，负数 = 治疗 */
+  /**
+   * damage：数值为攻击力（绝对值）的百分比；正数 = 伤害，负数 = 治疗
+   * regen：每秒的数值；正数 = 每秒治疗，负数 = 每秒受到伤害
+   */
   amount: number;
+  /** regen：数值是固定值（flat）还是施放者攻击力的百分比（atk） */
+  regenMode: 'flat' | 'atk';
   damageType: SkillDamageType;
   /** money：释放时立即获得的金钱（负数 = 消耗） */
   money: number;
@@ -163,8 +170,15 @@ export interface CharacterDef {
   maxDeploy: number;
   /** 部署冷却（秒）：部署后这段时间内不能再次部署同一个角色，0 = 没有冷却 */
   deployCooldown: number;
-  /** 攻击方式：basic = 发射子弹（默认）；area = 范围伤害（同时攻击射程内全部目标，不发射子弹） */
+  /**
+   * 攻击方式：basic = 发射子弹（默认）；area = 范围伤害（同时攻击射程内全部目标，不发射子弹）；
+   * summon = 召唤（部署后召唤物出现在部署栏，角色自己按 summonAttack 攻击）；none = 不攻击（只有召唤物可以选）
+   */
   attackType: string;
+  /** 攻击方式为「召唤」时，角色自己的攻击方式：basic / area / none */
+  summonAttack: string;
+  /** 可以召唤的召唤物 ID（玩家在角色设定中选择 1 个，默认第一个） */
+  summons: string[];
   /** 可用技能 ID（按顺序，默认携带前 skillSlots 个） */
   skills: string[];
   /** 战斗中可以携带的技能数量 */
@@ -174,6 +188,30 @@ export interface CharacterDef {
   /** 升级成长（等级上限和升级经验在「货币编辑」中设置） */
   growth: CharacterGrowth;
   description?: string;
+}
+
+/** 召唤物从召唤者继承的数值（%）：召唤者（按等级）的数值 × 百分比，加到召唤物自己的数值上 */
+export interface SummonInherit {
+  maxHp: number;
+  atk: number;
+  def: number;
+  res: number;
+}
+
+/**
+ * 召唤物（data/summons.json，在「召唤物编辑」中编辑）：几乎和角色一样（数值、攻击方式、技能……）。
+ * 攻击方式为「召唤」的角色部署后，它选择的召唤物出现在部署栏里，可以像角色一样拖到地图上。
+ * 不使用角色的 growth / summons / summonAttack（召唤物不升级，按继承的数值变强）。
+ */
+export interface SummonDef extends CharacterDef {
+  /** 从召唤者继承的数值（%） */
+  inherit: SummonInherit;
+  /** 无敌：不会受到伤害 */
+  invincible: boolean;
+  /** 只能部署在召唤者的攻击范围内 */
+  nearSummoner: boolean;
+  /** 召唤者离场（撤退 / 被击败）后召唤物仍然留在场上 */
+  keepAfterSummoner: boolean;
 }
 
 /** 敌人外形边数 */
@@ -446,4 +484,6 @@ export interface ProgressData {
   levels: Record<string, CharacterProgress>;
   /** 无尽模式的最好成绩（没有玩过 = null） */
   endlessBest: EndlessRecord | null;
+  /** 召唤物选择：角色 ID → 召唤物 ID（固定只能选 1 个，没有选择 = 第一个） */
+  summonChoice: Record<string, string>;
 }

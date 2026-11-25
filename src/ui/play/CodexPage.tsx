@@ -1,10 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { describeAttack, describeOnHit } from '../../core/describe';
 import { DAMAGE_TYPE_LABEL } from '../../core/stats';
-import { loadDatabase, type GameDatabase } from '../../core/storage/repository';
-import type { CharacterDef, EnemyDef, SkillDef } from '../../core/types';
+import { loadDatabase, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
+import type { CharacterDef, EnemyDef, SkillDef, SummonDef } from '../../core/types';
 import { RangeGrid } from '../common/rangeGrid';
 import { SkillCard } from '../common/skillCard';
+import { SummonList } from '../common/summonList';
+import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
 import { navigate } from '../router';
 
@@ -23,6 +25,18 @@ export function CodexPage() {
   const list: (CharacterDef | EnemyDef)[] = tab === 'characters' ? db.characters : db.enemies;
   const current = list.find((d) => d.id === sel) ?? list[0];
   const skillMap = new Map(db.skills.map((s) => [s.id, s]));
+  const summonMap = new Map(db.summons.map((s) => [s.id, s]));
+  /** 在图鉴中也可以选择召唤物（和角色设定中的选择是同一个） */
+  const chooseSummon = async (charId: string, summonId: string) => {
+    try {
+      const p = await loadProgress();
+      const next = { ...p, summonChoice: { ...p.summonChoice, [charId]: summonId } };
+      await saveProgress(next);
+      setDb({ ...db, progress: next });
+    } catch (err) {
+      toast(`保存失败：${String(err)}`, 'error');
+    }
+  };
 
   return (
     <div className="select-page codex">
@@ -54,7 +68,13 @@ export function CodexPage() {
         {current && (
           <section className="codex-detail">
             {tab === 'characters' ? (
-              <CharacterDetail def={current as CharacterDef} skills={skillMap} />
+              <CharacterDetail
+                def={current as CharacterDef}
+                skills={skillMap}
+                summons={summonMap}
+                choice={db.progress.summonChoice}
+                onChoose={(id) => void chooseSummon(current.id, id)}
+              />
             ) : (
               <EnemyDetail def={current as EnemyDef} skills={skillMap} />
             )}
@@ -104,7 +124,19 @@ function Head({ kind, def }: { kind: 'character' | 'enemy'; def: CharacterDef | 
   );
 }
 
-function CharacterDetail({ def, skills }: { def: CharacterDef; skills: Map<string, SkillDef> }) {
+function CharacterDetail({
+  def,
+  skills,
+  summons,
+  choice,
+  onChoose,
+}: {
+  def: CharacterDef;
+  skills: Map<string, SkillDef>;
+  summons: Map<string, SummonDef>;
+  choice: Record<string, string>;
+  onChoose: (summonId: string) => void;
+}) {
   const healer = def.attackTarget === 'ally' && def.atk < 0;
   return (
     <>
@@ -135,6 +167,7 @@ function CharacterDetail({ def, skills }: { def: CharacterDef; skills: Map<strin
       </div>
       {describeOnHit(def.onHit) && <div className="codex-note">{describeOnHit(def.onHit)}</div>}
       <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} />
+      <SummonList def={def} summons={summons} skills={skills} choice={choice} onChoose={onChoose} />
     </>
   );
 }

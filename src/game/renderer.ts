@@ -2,7 +2,8 @@ import { rangeOffsets } from '../core/range';
 import { tileInfo, type TileGrid } from '../core/tiles';
 import type { CharacterDef, GridPos } from '../core/types';
 import type { GameEngine } from './engine';
-import { UNIT_RADIUS, enemyRadius, type Combatant } from './entities';
+import { isSummonDef } from '../core/defaults';
+import { SUMMON_RADIUS, UNIT_RADIUS, enemyRadius, type Combatant } from './entities';
 import { getIcon } from './icons';
 import { drawCharacterToken, drawEnemyToken, drawHpBar, drawTile, outlineColor, withAlpha } from './shapes';
 
@@ -249,7 +250,9 @@ export class BattleRenderer {
     for (const u of eng.units) {
       const cx = vp.ox + u.x * vp.scale;
       const cy = vp.oy + u.y * vp.scale;
-      const r = UNIT_RADIUS * vp.scale * (1 + u.attackAnim * 0.5);
+      // 召唤物比角色小，中间没有字
+      const summon = isSummonDef(u.def);
+      const r = (summon ? SUMMON_RADIUS : UNIT_RADIUS) * vp.scale * (1 + u.attackAnim * 0.5);
       if (sel === u) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
@@ -267,7 +270,18 @@ export class BattleRenderer {
         ctx.stroke();
         ctx.restore();
       }
-      drawCharacterToken(ctx, u.def, cx, cy, r, { icon: getIcon(u.def.icon), label: u.def.name.slice(0, 1), flash: u.flash });
+      drawCharacterToken(ctx, u.def, cx, cy, r, { icon: getIcon(u.def.icon), label: summon ? undefined : u.def.name.slice(0, 1), flash: u.flash });
+      if (summon && isSummonDef(u.def) && u.def.invincible) {
+        // 无敌：金色虚线圈
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,214,102,0.9)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       const hpTop = cy - r - Math.max(6, vp.scale * 0.14);
       drawHpBar(ctx, cx, hpTop, vp.scale * 0.7, u.hp / u.stats.maxHp, '#4cd08a');
       this.drawStatusMarks(ctx, u, cx, hpTop, vp.scale * 0.7);
@@ -345,9 +359,10 @@ export class BattleRenderer {
 
   /** HP 条左侧绿色 ▲ = 有增益，右侧红色 ▼ = 有减益 */
   private drawStatusMarks(ctx: CanvasRenderingContext2D, c: Combatant, cx: number, hpTop: number, w: number) {
-    if (!c.statuses.length) return;
-    const buff = c.statuses.some((s) => s.hasBuff);
-    const debuff = c.statuses.some((s) => s.hasDebuff);
+    if (!c.statuses.length && !c.regens.length) return;
+    // 持续治疗算增益，持续伤害算减益
+    const buff = c.statuses.some((s) => s.hasBuff) || c.regens.some((r) => r.perSecond > 0);
+    const debuff = c.statuses.some((s) => s.hasDebuff) || c.regens.some((r) => r.perSecond < 0);
     const s = Math.max(4, w * 0.12);
     const y = hpTop + 2;
     ctx.save();
@@ -421,10 +436,13 @@ export class BattleRenderer {
   private drawPlacement(ctx: CanvasRenderingContext2D, vp: Viewport, def: CharacterDef, hover: GridPos | null) {
     const eng = this.engine;
     const g = eng.grid;
+    // 只能放在召唤者攻击范围内的召唤物：只高亮能放的方块
+    const near = isSummonDef(def) && def.nearSummoner;
     ctx.save();
     for (let y = 0; y < g.height; y++) {
       for (let x = 0; x < g.width; x++) {
         if (!g.canPlace(x, y, def.placement) || eng.unitAt(x, y)) continue;
+        if (near && eng.checkDeploy(def, { x, y })) continue;
         ctx.fillStyle = 'rgba(90, 220, 140, 0.22)';
         ctx.fillRect(vp.ox + x * vp.scale + 2, vp.oy + y * vp.scale + 2, vp.scale - 4, vp.scale - 4);
       }
@@ -439,9 +457,10 @@ export class BattleRenderer {
       if (!err) {
         ctx.restore();
         this.drawRange(ctx, vp, hover.x + 0.5, hover.y + 0.5, def.range, def.color);
-        drawCharacterToken(ctx, def, sx + vp.scale / 2, sy + vp.scale / 2, UNIT_RADIUS * vp.scale, {
+        const summon = isSummonDef(def);
+        drawCharacterToken(ctx, def, sx + vp.scale / 2, sy + vp.scale / 2, (summon ? SUMMON_RADIUS : UNIT_RADIUS) * vp.scale, {
           icon: getIcon(def.icon),
-          label: def.name.slice(0, 1),
+          label: summon ? undefined : def.name.slice(0, 1),
           alpha: 0.6,
         });
         return;

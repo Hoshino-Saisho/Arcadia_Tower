@@ -1,10 +1,10 @@
-import { LEAK_DAMAGE, resolveLoadout, retreatRefund } from '../core/defaults';
+import { LEAK_DAMAGE, isSummonDef, resolveLoadout, retreatRefund } from '../core/defaults';
 import { planWave } from '../core/endless';
 import { leveledCharacter } from '../core/leveling';
 import { tileInRange, tileOf } from '../core/range';
 import { applyModifiers, computeDamage, isBuff } from '../core/stats';
 import { TileGrid } from '../core/tiles';
-import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, SkillDamageType, SkillDef, SkillEffect, StatModifier } from '../core/types';
+import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, SkillDamageType, SkillDef, SkillEffect, StatModifier, SummonDef } from '../core/types';
 import { attackBehavior, tileOfCombatant } from './attacks';
 import {
   BLOCK_DISTANCE,
@@ -56,6 +56,15 @@ export interface EngineOptions {
   rng?: () => number;
   /** 角色试用（训练场）：只有一个来回移动的敌人，被击败后重新出现，战斗不会结束 */
   training?: TrainingOptions;
+  /** 召唤物库 */
+  summons?: SummonDef[];
+  /** 玩家的召唤物选择：角色 ID → 召唤物 ID（没有选择 = 第一个） */
+  summonChoice?: Record<string, string>;
+}
+
+/** 攻击方式：召唤者按「自身攻击」攻击；none = 不攻击 */
+export function attackTypeOf(def: Pick<CharacterDef, 'attackType' | 'summonAttack'>): string {
+  return def.attackType === 'summon' ? def.summonAttack || 'basic' : def.attackType;
 }
 
 export interface TrainingOptions {
@@ -88,6 +97,7 @@ export class GameEngine {
   readonly levels: Record<string, number>;
   readonly enemyDefs: Map<string, EnemyDef>;
   readonly skillDefs: Map<string, SkillDef>;
+  readonly summonDefs: Map<string, SummonDef>;
   readonly loadouts: Record<string, string[]>;
   readonly routes: RouteInfo[];
   readonly warnings: string[];
@@ -125,6 +135,7 @@ export class GameEngine {
   moneyFlows: MoneyFlow[] = [];
 
   private schedule: SpawnEvent[];
+  private summonChoice: Record<string, string>;
   private nextEvent = 0;
   /** 无尽模式生成的敌人（按时间排序） */
   private queue: SpawnEvent[] = [];
@@ -142,6 +153,8 @@ export class GameEngine {
     this.roster = (allowed.length ? characters.filter((c) => allowed.includes(c.id)) : characters).map((c) => leveledCharacter(c, this.levelOf(c.id)));
     this.enemyDefs = new Map(enemies.map((e) => [e.id, e]));
     this.skillDefs = new Map((opts.skills ?? []).map((s) => [s.id, s]));
+    this.summonDefs = new Map((opts.summons ?? []).map((s) => [s.id, s]));
+    this.summonChoice = opts.summonChoice ?? {};
     this.loadouts = opts.loadouts ?? {};
     this.endless = opts.endless ?? null;
     this.training = opts.training && opts.training.path.length >= 2 ? opts.training : null;
@@ -293,6 +306,7 @@ export class GameEngine {
       base,
       stats: { ...base },
       statuses: [],
+      regens: [],
       skills: this.makeSkillStates(def.skills.slice(0, def.skillSlots)),
       attackCd: def.attackInterval * 0.5,
       blockedBy: null,
@@ -324,11 +338,43 @@ export class GameEngine {
       }
       // 效果结束（时间到）：生命上限变回去时当前生命不减少，只是不超过新的上限
       this.refreshStats(c, false);
+      if (c.regens.length) this.tickRegens(c, dt);
+      if (c.hp <= 0) continue;
       if (c.stats.hpRegen !== 0) {
         if (c.stats.hpRegen > 0) c.hp = Math.min(c.stats.maxHp, c.hp + c.stats.hpRegen * dt);
         else c.hp += c.stats.hpRegen * dt;
       }
       if (c.hp > c.stats.maxHp) c.hp = c.stats.maxHp;
+    }
+  }
+
+  /** 持续治疗 / 持续伤害：施加后每过 1 秒结算一次（持续 5 秒 = 5 次） */
+  private tickRegens(c: Combatant, dt: number) {
+    for (const r of c.regens) {
+      r.tick -= dt;
+      r.remaining -= dt;
+      if (r.tick <= 1e-6 && c.hp > 0) {
+        r.tick += 1;
+        if (r.perSecond > 0) this.heal(null, c, r.perSecond);
+        else if (r.perSecond < 0) {
+          const dmg = this.dealDamage(c, -r.perSecond, r.damageType);
+          if (dmg >= 1) this.addEffect({ kind: 'text', x: c.x - 0.15, y: c.y - 0.45, duration: 0.8, color: '#ff8a65', text: `-${Math.round(dmg)}` });
+        }
+      }
+    }
+    c.regens = c.regens.filter((r) => r.remaining > 1e-6);
+  }
+
+  /** 施加持续治疗 / 持续伤害（同一来源再次施加时刷新时间和数值） */
+  addRegen(target: Combatant, r: { key: string; name: string; color: string; perSecond: number; damageType: SkillDamageType; duration: number }) {
+    if (target.hp <= 0 || r.duration <= 0 || !r.perSecond) return;
+    const existing = target.regens.find((x) => x.key === r.key);
+    if (existing) {
+      existing.perSecond = r.perSecond;
+      existing.damageType = r.damageType;
+      existing.remaining = existing.total = r.duration;
+    } else {
+      target.regens.push({ key: r.key, name: r.name, color: r.color, perSecond: r.perSecond, damageType: r.damageType, remaining: r.duration, total: r.duration, tick: 1 });
     }
   }
 
@@ -489,9 +535,12 @@ export class GameEngine {
       c.attackAnim = Math.max(0, c.attackAnim - dt);
       if (c.hp <= 0) continue;
       if (c.side === 'enemy' && !c.def.canAttack) continue;
+      const type = c.side === 'ally' ? attackTypeOf(c.def) : c.def.attackType;
+      // 不攻击（召唤物可以设置；召唤者可以只召唤不攻击）
+      if (type === 'none') continue;
       c.attackCd -= dt;
       if (c.attackCd > 0) continue;
-      const behavior = attackBehavior(c.def.attackType);
+      const behavior = attackBehavior(type);
       const targets = behavior.pickTargets(this, c);
       if (targets.length) {
         behavior.execute(this, c, targets);
@@ -552,9 +601,11 @@ export class GameEngine {
       }
       this.enemies = this.enemies.filter((e) => e.hp > 0);
     }
+    for (const u of this.units) if (u.hp <= 0 && isSummonDef(u.def) && u.def.invincible) u.hp = 1;
     const fallen = this.units.filter((u) => u.hp <= 0);
     if (fallen.length) {
       for (const u of fallen) {
+        this.dismissSummons(u.uid);
         this.releaseBlocked(u);
         this.addEffect({ kind: 'death', x: u.x, y: u.y, duration: 0.5, color: u.def.color, size: UNIT_RADIUS });
       }
@@ -611,6 +662,8 @@ export class GameEngine {
   /** 造成伤害（按伤害类型结算物抗 / 法抗），返回实际伤害 */
   dealDamage(target: Combatant, atk: number, type: SkillDamageType): number {
     if (target.hp <= 0) return 0;
+    // 无敌的召唤物不会受到伤害
+    if (target.side === 'ally' && isSummonDef(target.def) && target.def.invincible) return 0;
     const dmg = computeDamage(atk, type, target.stats.def, target.stats.res);
     if (this.training && target.side === 'enemy') this.damageDealt += Math.min(dmg, target.hp);
     target.hp -= dmg;
@@ -709,7 +762,7 @@ export class GameEngine {
   private worthCasting(c: Combatant, skill: SkillDef): boolean {
     const offensive = skill.effects.filter((e) => e.kind !== 'money' && e.target === 'enemies');
     if (offensive.length) return offensive.some((e) => this.effectTargets(c, e).length > 0);
-    const heals = skill.effects.filter((e) => e.kind === 'damage' && e.amount < 0);
+    const heals = skill.effects.filter((e) => (e.kind === 'damage' && e.amount < 0) || (e.kind === 'regen' && e.amount > 0));
     if (heals.length) return heals.some((e) => this.effectTargets(c, e).some((t) => t.hp < t.stats.maxHp - 0.01));
     return true;
   }
@@ -735,6 +788,13 @@ export class GameEngine {
         return;
       }
       const targets = this.effectTargets(c, eff);
+      if (eff.kind === 'regen') {
+        // 持续治疗 / 持续伤害：固定值或施放者攻击力的百分比（每秒）
+        const perSecond = eff.regenMode === 'atk' ? (Math.abs(c.stats.atk) * eff.amount) / 100 : eff.amount;
+        const duration = eff.duration > 0 ? eff.duration : skill.duration;
+        for (const t of targets) this.addRegen(t, { key, name: skill.name, color: skill.color, perSecond, damageType: eff.damageType, duration });
+        return;
+      }
       if (eff.kind === 'damage') {
         const value = (Math.abs(c.stats.atk) * eff.amount) / 100;
         for (const t of targets) {
@@ -795,10 +855,50 @@ export class GameEngine {
     return t == null ? 0 : Math.max(0, t - this.time);
   }
 
+  /** 角色选择的召唤物（攻击方式不是「召唤」= null；没有选择 = 第一个有效的召唤物） */
+  chosenSummon(def: CharacterDef): SummonDef | null {
+    if (def.attackType !== 'summon' || isSummonDef(def)) return null;
+    const pick = this.summonChoice[def.id];
+    const id = pick && def.summons.includes(pick) && this.summonDefs.has(pick) ? pick : def.summons.find((x) => this.summonDefs.has(x));
+    return id ? this.summonDefs.get(id) ?? null : null;
+  }
+
+  /** 场上可以召唤这个召唤物的角色（按部署顺序） */
+  summonersOf(summonId: string): Unit[] {
+    return this.units.filter((u) => u.hp > 0 && this.chosenSummon(u.def)?.id === summonId);
+  }
+
+  /** 现在出现在部署栏里的召唤物（召唤者在场时才出现） */
+  get activeSummons(): SummonDef[] {
+    const out: SummonDef[] = [];
+    for (const u of this.units) {
+      const s = u.hp > 0 ? this.chosenSummon(u.def) : null;
+      if (s && !out.includes(s)) out.push(s);
+    }
+    return out;
+  }
+
+  /** 部署栏里的角色或召唤物 */
+  deployable(id: string): CharacterDef | undefined {
+    return this.roster.find((c) => c.id === id) ?? this.activeSummons.find((s) => s.id === id);
+  }
+
+  /** 召唤者离场：召唤物一起离场（设置了「召唤者离场后保留」的除外），不返还费用 */
+  private dismissSummons(summonerUid: number) {
+    const gone = this.units.filter((u) => u.summonerUid === summonerUid && !(isSummonDef(u.def) && u.def.keepAfterSummoner));
+    if (!gone.length) return;
+    for (const u of gone) {
+      this.releaseBlocked(u);
+      this.addEffect({ kind: 'death', x: u.x, y: u.y, duration: 0.4, color: u.def.color, size: 0.26 });
+    }
+    this.units = this.units.filter((u) => !gone.includes(u));
+  }
+
   /** 当前是否买得起 / 还能部署（不看位置） */
   cardState(def: CharacterDef): CardState {
     const cooldown = this.cooldownLeft(def.id);
     if (this.status !== 'running') return { ok: false, reason: '战斗已结束', cooldown };
+    if (isSummonDef(def) && !this.summonersOf(def.id).length) return { ok: false, reason: '召唤者不在场', cooldown };
     if (def.maxDeploy > 0 && this.deployedCount(def.id) >= def.maxDeploy) return { ok: false, reason: '已达部署上限', cooldown };
     if (cooldown > 1e-9) return { ok: false, reason: `部署冷却中（还需 ${Math.ceil(cooldown - 1e-6)} 秒）`, cooldown };
     if (Math.floor(this.money + 1e-9) < def.cost) return { ok: false, reason: '金钱不足', cooldown };
@@ -816,11 +916,14 @@ export class GameEngine {
       return def.placement === 'ground' ? '该角色只能放在地面上' : '该角色只能放在高台上';
     }
     if (this.unitAt(tile.x, tile.y)) return '该位置已有角色';
+    if (isSummonDef(def) && def.nearSummoner && !this.summonersOf(def.id).some((u) => tileInRange(u.tile, tile, u.stats.range))) {
+      return '召唤物只能放在召唤者的攻击范围内';
+    }
     return null;
   }
 
   deploy(charId: string, tile: GridPos): string | null {
-    const def = this.roster.find((c) => c.id === charId);
+    const def = this.deployable(charId);
     if (!def) return '本关不能使用该角色';
     const err = this.checkDeploy(def, tile);
     if (err) return err;
@@ -831,18 +934,34 @@ export class GameEngine {
     const c = tileCenter(tile);
     const t = this.grid.get(tile.x, tile.y)!;
     const base = unitBaseStats(def);
+    // 召唤物：属于最早部署的召唤者（只能放在召唤者攻击范围内时，属于范围包含这个方块的召唤者），并继承召唤者的数值
+    let summoner: Unit | undefined;
+    if (isSummonDef(def)) {
+      const list = this.summonersOf(def.id);
+      summoner = (def.nearSummoner ? list.find((u) => tileInRange(u.tile, tile, u.stats.range)) : undefined) ?? list[0];
+      if (summoner) {
+        const sb = summoner.base;
+        const r = (v: number) => Math.round(v * 100) / 100;
+        base.maxHp = r(Math.max(1, base.maxHp + (sb.maxHp * def.inherit.maxHp) / 100));
+        base.atk = r(base.atk + (sb.atk * def.inherit.atk) / 100);
+        base.def = r(base.def + (sb.def * def.inherit.def) / 100);
+        base.res = r(Math.min(100, base.res + (sb.res * def.inherit.res) / 100));
+      }
+    }
     this.units.push({
       uid: this.seq++,
       side: 'ally',
       def,
-      level: this.levelOf(def.id),
+      level: summoner ? summoner.level : this.levelOf(def.id),
+      summonerUid: summoner?.uid,
       tile: { ...tile },
       x: c.x,
       y: c.y,
-      hp: def.maxHp,
+      hp: base.maxHp,
       base,
       stats: { ...base },
       statuses: [],
+      regens: [],
       skills: this.makeSkillStates(this.loadoutOf(def).map((s) => s.id)),
       attackCd: 0,
       canBlock: t.walkable,
@@ -862,6 +981,7 @@ export class GameEngine {
     const u = this.unitByUid(uid);
     if (!u || this.status !== 'running') return 0;
     const change = this.changeMoney(retreatRefund(u.def.cost));
+    this.dismissSummons(u.uid);
     this.releaseBlocked(u);
     this.units = this.units.filter((x) => x !== u);
     this.moneyText({ x: u.x - 0.2, y: u.y + 0.15 }, change);

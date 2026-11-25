@@ -29,6 +29,7 @@ import type {
   SpawnBlock,
   StatKey,
   StatModifier,
+  SummonDef,
 } from './types';
 
 export const LEVEL_FORMAT_VERSION = 2;
@@ -73,11 +74,36 @@ export function newCharacter(id: string): CharacterDef {
     maxDeploy: 0,
     deployCooldown: 0,
     attackType: 'basic',
+    summonAttack: 'basic',
+    summons: [],
     skills: [],
     skillSlots: 1,
     onHit: null,
     growth: defaultGrowth(base),
   };
+}
+
+/** 新的召唤物：比角色弱一些，继承召唤者 50% 的攻击力 */
+export function newSummon(id: string): SummonDef {
+  const base = { maxHp: 600, atk: 30, def: 30, res: 0 };
+  return {
+    ...newCharacter(id),
+    name: '新召唤物',
+    color: '#8bc34a',
+    cost: 3,
+    ...base,
+    growth: { maxHp: 0, atk: 0, def: 0, res: 0 },
+    maxDeploy: 2,
+    inherit: { maxHp: 0, atk: 50, def: 0, res: 0 },
+    invincible: false,
+    nearSummoner: false,
+    keepAfterSummoner: false,
+  };
+}
+
+/** 是否是召唤物（召唤物有「继承」设置） */
+export function isSummonDef(def: unknown): def is SummonDef {
+  return !!def && typeof def === 'object' && 'inherit' in def;
 }
 
 /** 默认的升级成长：每级增加基础生命 / 攻击（治疗量）/ 物抗的 5%（取整），法抗不增加 */
@@ -129,13 +155,14 @@ export function endlessDefaults(maxHp: number): Pick<EnemyDef, 'endlessScore' | 
 export function newEffect(kind: SkillEffect['kind'] = 'modify'): SkillEffect {
   return {
     kind,
-    target: kind === 'damage' ? 'enemies' : 'self',
+    target: kind === 'damage' ? 'enemies' : kind === 'regen' ? 'allies' : 'self',
     scope: 'range',
     radius: 0,
     maxTargets: -1,
     modifiers: kind === 'modify' ? [{ stat: 'atk', mode: 'percent', value: 30 }] : [],
-    duration: 0,
-    amount: kind === 'damage' ? 150 : 0,
+    duration: kind === 'regen' ? 5 : 0,
+    amount: kind === 'damage' ? 150 : kind === 'regen' ? 30 : 0,
+    regenMode: 'flat',
     damageType: 'physical',
     money: kind === 'money' ? 10 : 0,
     moneyRate: 0,
@@ -320,7 +347,9 @@ export function normalizeCharacter(raw: any): CharacterDef {
     blockCount: Math.round(num(raw?.blockCount, d.blockCount, 0, 10)),
     maxDeploy: Math.round(num(raw?.maxDeploy, d.maxDeploy, 0, 99)),
     deployCooldown: num(raw?.deployCooldown, 0, 0, 3600),
-    attackType: str(raw?.attackType, 'basic'),
+    attackType: raw?.attackType === 'summon' ? 'summon' : raw?.attackType === 'area' ? 'area' : str(raw?.attackType, 'basic') === 'none' ? 'basic' : str(raw?.attackType, 'basic'),
+    summonAttack: raw?.summonAttack === 'area' || raw?.summonAttack === 'none' ? raw.summonAttack : 'basic',
+    summons: strList(raw?.summons),
     skills: strList(raw?.skills),
     skillSlots: Math.round(num(raw?.skillSlots, 1, 0, 9)),
     onHit: normalizeOnHit(raw?.onHit),
@@ -341,6 +370,28 @@ function normalizeGrowth(raw: any, base: { maxHp: number; atk: number; def: numb
     atk: num(raw.atk, 0, -99999, 99999),
     def: num(raw.def, 0, -99999, 99999),
     res: num(raw.res, 0, -100, 100),
+  };
+}
+
+/** 召唤物：和角色一样的字段 + 继承 / 无敌 / 部署位置；攻击方式只能是子弹 / 范围 / 不攻击 */
+export function normalizeSummon(raw: any): SummonDef {
+  const d = newSummon(str(raw?.id, 'M000'));
+  const c = normalizeCharacter({ ...d, ...(raw && typeof raw === 'object' ? raw : {}), growth: { maxHp: 0, atk: 0, def: 0, res: 0 } });
+  const inh = raw?.inherit ?? {};
+  return {
+    ...c,
+    attackType: raw?.attackType === 'area' || raw?.attackType === 'none' ? raw.attackType : 'basic',
+    summonAttack: 'basic',
+    summons: [],
+    inherit: {
+      maxHp: num(inh.maxHp, d.inherit.maxHp, -1000, 1000),
+      atk: num(inh.atk, d.inherit.atk, -1000, 1000),
+      def: num(inh.def, d.inherit.def, -1000, 1000),
+      res: num(inh.res, d.inherit.res, -1000, 1000),
+    },
+    invincible: raw?.invincible === true,
+    nearSummoner: raw?.nearSummoner === true,
+    keepAfterSummoner: raw?.keepAfterSummoner === true,
   };
 }
 
@@ -389,7 +440,7 @@ function normalizeEndlessEnemy(raw: any, maxHp: number): Pick<EnemyDef, 'endless
 }
 
 export function normalizeEffect(raw: any): SkillEffect {
-  const kind: SkillEffect['kind'] = raw?.kind === 'damage' || raw?.kind === 'money' ? raw.kind : 'modify';
+  const kind: SkillEffect['kind'] = raw?.kind === 'damage' || raw?.kind === 'money' || raw?.kind === 'regen' ? raw.kind : 'modify';
   const d = newEffect(kind);
   return {
     kind,
@@ -400,6 +451,7 @@ export function normalizeEffect(raw: any): SkillEffect {
     modifiers: modList(raw?.modifiers),
     duration: num(raw?.duration, 0, 0, 3600),
     amount: num(raw?.amount, d.amount, -100000, 100000),
+    regenMode: raw?.regenMode === 'atk' ? 'atk' : 'flat',
     damageType: raw?.damageType === 'magic' || raw?.damageType === 'true' ? raw.damageType : 'physical',
     money: num(raw?.money, d.money, -100000, 100000),
     moneyRate: num(raw?.moneyRate, 0, -100000, 100000),
@@ -586,7 +638,14 @@ export function normalizeProgress(raw: any): ProgressData {
     books,
     levels,
     endlessBest: normalizeRecord(raw?.endlessBest),
+    summonChoice: strMap(raw?.summonChoice),
   };
+}
+
+function strMap(v: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (typeof x === 'string' && x) out[k] = x;
+  return out;
 }
 
 function normalizeRecord(raw: any): EndlessRecord | null {

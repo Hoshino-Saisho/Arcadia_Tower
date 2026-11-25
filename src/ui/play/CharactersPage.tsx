@@ -8,6 +8,7 @@ import type { CharacterDef, CurrencyConfig, ProgressData, SkillDef } from '../..
 import { SkillCard } from '../common/skillCard';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
+import { SummonList } from '../common/summonList';
 import { CurrencyBadge, Wallet } from '../common/wallet';
 import { navigate } from '../router';
 
@@ -30,6 +31,7 @@ export function CharactersPage() {
   const cfg = db.currency;
   const def = db.characters.find((c) => c.id === sel) ?? db.characters[0];
   const skillMap = new Map(db.skills.map((s) => [s.id, s]));
+  const summonMap = new Map(db.summons.map((s) => [s.id, s]));
   const loadouts = progress.loadouts;
 
   /** 读取最新的进度再修改后保存（避免覆盖其他页面的修改） */
@@ -160,6 +162,13 @@ export function CharactersPage() {
                 恢复默认（携带前 {def.skillSlots} 个技能）
               </button>
             )}
+            <SummonList
+              def={def}
+              summons={summonMap}
+              skills={skillMap}
+              choice={progress.summonChoice}
+              onChoose={(id) => void persist((p) => ({ ...p, summonChoice: { ...p.summonChoice, [def.id]: id } }))}
+            />
           </section>
         )}
       </div>

@@ -8,9 +8,10 @@ import {
   normalizeProgress,
   normalizeSettings,
   normalizeSkill,
+  normalizeSummon,
 } from '../defaults';
 import { parseLevelCode } from '../ids';
-import type { ChapterDef, CharacterDef, CurrencyConfig, EndlessConfig, EnemyDef, GameSettings, LevelDef, ProgressData, SkillDef } from '../types';
+import type { ChapterDef, CharacterDef, CurrencyConfig, EndlessConfig, EnemyDef, GameSettings, LevelDef, ProgressData, SkillDef, SummonDef } from '../types';
 import { getBackend } from './backend';
 
 /**
@@ -22,6 +23,7 @@ export const FILES = {
   characters: 'characters.json',
   enemies: 'enemies.json',
   skills: 'skills.json',
+  summons: 'summons.json',
   chapters: 'chapters.json',
   settings: 'settings.json',
   currency: 'currency.json',
@@ -85,7 +87,9 @@ export async function saveCharacters(list: CharacterDef[], renames: Map<string, 
     for (const [k, v] of Object.entries(prog.loadouts)) loadouts[renames.get(k) ?? k] = v;
     const levels: ProgressData['levels'] = {};
     for (const [k, v] of Object.entries(prog.levels)) levels[renames.get(k) ?? k] = v;
-    await saveProgress({ ...prog, loadouts, levels });
+    const summonChoice: Record<string, string> = {};
+    for (const [k, v] of Object.entries(prog.summonChoice)) summonChoice[renames.get(k) ?? k] = v;
+    await saveProgress({ ...prog, loadouts, levels, summonChoice });
     const endless = await loadEndless();
     const avail = endless.map.settings.availableCharacters;
     if (avail.some((id) => renames.has(id))) {
@@ -102,6 +106,32 @@ export async function saveCharacters(list: CharacterDef[], renames: Map<string, 
       return changed;
     });
   }
+}
+
+/* ---------- 召唤物 ---------- */
+
+export async function loadSummons(): Promise<SummonDef[]> {
+  try {
+    const raw = await readJson(FILES.summons);
+    const list = Array.isArray(raw?.summons) ? raw.summons : Array.isArray(raw) ? raw : [];
+    return list.map(normalizeSummon);
+  } catch {
+    return [];
+  }
+}
+
+/** 保存召唤物；renames 为 旧 ID → 新 ID，会同步更新角色的召唤物列表和玩家的召唤物选择 */
+export async function saveSummons(list: SummonDef[], renames: Map<string, string> = new Map()) {
+  await writeJson(FILES.summons, { summons: list });
+  if (!renames.size) return;
+  const chars = await loadCharacters();
+  if (chars.some((c) => c.summons.some((id) => renames.has(id)))) {
+    await writeJson(FILES.characters, { characters: chars.map((c) => ({ ...c, summons: c.summons.map((id) => renames.get(id) ?? id) })) });
+  }
+  const prog = await loadProgress();
+  const summonChoice: Record<string, string> = {};
+  for (const [k, v] of Object.entries(prog.summonChoice)) summonChoice[k] = renames.get(v) ?? v;
+  await saveProgress({ ...prog, summonChoice });
 }
 
 /* ---------- 敌人 ---------- */
@@ -160,6 +190,8 @@ export async function saveSkills(list: SkillDef[], renames: Map<string, string> 
   await writeJson(FILES.characters, { characters: chars.map((c) => ({ ...c, skills: swap(c.skills) })) });
   const ens = await loadEnemies();
   await writeJson(FILES.enemies, { enemies: ens.map((e) => ({ ...e, skills: swap(e.skills) })) });
+  const sms = await loadSummons();
+  if (sms.some((m) => m.skills.some((id) => renames.has(id)))) await writeJson(FILES.summons, { summons: sms.map((m) => ({ ...m, skills: swap(m.skills) })) });
   const prog = await loadProgress();
   const loadouts: Record<string, string[]> = {};
   for (const [k, v] of Object.entries(prog.loadouts)) loadouts[k] = swap(v);
@@ -345,6 +377,7 @@ export interface GameDatabase {
   characters: CharacterDef[];
   enemies: EnemyDef[];
   skills: SkillDef[];
+  summons: SummonDef[];
   chapters: ChapterDef[];
   settings: GameSettings;
   currency: CurrencyConfig;
@@ -354,10 +387,11 @@ export interface GameDatabase {
 }
 
 export async function loadDatabase(): Promise<GameDatabase> {
-  const [characters, enemies, skills, chapters, settings, currency, endless, codes, progress] = await Promise.all([
+  const [characters, enemies, skills, summons, chapters, settings, currency, endless, codes, progress] = await Promise.all([
     loadCharacters(),
     loadEnemies(),
     loadSkills(),
+    loadSummons(),
     loadChapters(),
     loadSettings(),
     loadCurrency(),
@@ -365,5 +399,5 @@ export async function loadDatabase(): Promise<GameDatabase> {
     listLevelCodes(),
     loadProgress(),
   ]);
-  return { characters, enemies, skills, chapters, settings, currency, endless, levelCodes: new Set(codes), progress };
+  return { characters, enemies, skills, summons, chapters, settings, currency, endless, levelCodes: new Set(codes), progress };
 }
