@@ -211,10 +211,7 @@
       "summons": [],
       "skills": ["S020"],
       "skillSlots": 0,
-      "onHit": {
-        "modifiers": [{"stat":"speed","mode":"percent","value":-50},{"stat":"def","mode":"add","value":-30}],
-        "duration": 2
-      },
+      "onHit": null,
       "growth": {"maxHp":33,"atk":4,"def":0,"res":0},
       "description": "爆！"
     },
