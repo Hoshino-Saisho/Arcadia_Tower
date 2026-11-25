@@ -83,7 +83,7 @@
       "speed": 1,
       "sides": 5,
       "size": 1,
-      "reward": 0,
+      "reward": 10,
       "endlessScore": 0,
       "summonFirst": 3,
       "summonInterval": 20,
