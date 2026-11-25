@@ -15,6 +15,7 @@ import { ColorInput, Field, IconPicker, NumberInput, Segmented, TextInput } from
 import { IconFramer } from '../common/iconFramer';
 import { RangeGrid } from '../common/rangeGrid';
 import { UnitToken } from '../common/tokens';
+import { CharacterTrial } from './CharacterTrial';
 import { DefListPanel, SaveBar } from './DefListPanel';
 import type { EditorTabProps } from './EditorApp';
 import { OnHitEditor, SkillPicker } from './effectEditors';
@@ -40,6 +41,8 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
   });
   const [skills, setSkills] = useState<SkillDef[]>([]);
   const [maxLevel, setMaxLevel] = useState(20);
+  /** 正在试用的角色（打开训练场） */
+  const [trial, setTrial] = useState<string | null>(null);
   useEffect(() => {
     void loadSkills().then(setSkills);
     void loadCurrency().then((c) => setMaxLevel(c.maxLevel));
@@ -213,7 +216,10 @@ export function CharacterEditor({ onDirtyChange }: EditorTabProps) {
         <section className="def-form empty-hint">选择或新建一个角色</section>
       )}
 
-      {c && <CharacterPreview def={c} healer={!!healer} skills={skills} />}
+      {c && <CharacterPreview def={c} healer={!!healer} skills={skills} onTrial={() => setTrial(c.id)} />}
+      {trial != null && draft.items && (
+        <CharacterTrial characters={draft.items.map((d) => d.value)} focusId={trial} onClose={() => setTrial(null)} />
+      )}
     </div>
   );
 }
@@ -237,7 +243,7 @@ function GrowthPreview({ def, maxLevel }: { def: CharacterDef; maxLevel: number 
 }
 
 /** 右侧预览：7×7 方块中心放置角色，并画出攻击范围 */
-function CharacterPreview({ def, healer, skills }: { def: CharacterDef; healer: boolean; skills: SkillDef[] }) {
+function CharacterPreview({ def, healer, skills, onTrial }: { def: CharacterDef; healer: boolean; skills: SkillDef[]; onTrial: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const icon = useIcon(def.icon);
   const size = 252;
@@ -274,6 +280,9 @@ function CharacterPreview({ def, healer, skills }: { def: CharacterDef; healer: 
   return (
     <aside className="def-preview">
       <div className="panel-head">预览</div>
+      <button className="btn btn-primary btn-block" onClick={onTrial} title="在训练场里试用这个角色（使用编辑中的数值，不需要先保存）">
+        ▶ 角色试用
+      </button>
       <canvas ref={ref} style={{ width: size, height: size }} className="preview-canvas" />
       <div className="preview-caption muted small">高亮方块 = 射程（{def.range} 格，按方块计算）</div>
       <div className="row gap-s center">

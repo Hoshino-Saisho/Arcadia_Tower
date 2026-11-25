@@ -78,6 +78,8 @@ export interface Enemy extends CombatantBase {
   spawnedAt: number;
   /** 已进入基地（不算击杀） */
   leaked?: boolean;
+  /** 角色试用：在路线上来回移动（走到头就掉头，不会进入基地） */
+  patrol?: boolean;
 }
 
 export type Combatant = Unit | Enemy;

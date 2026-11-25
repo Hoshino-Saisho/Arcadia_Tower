@@ -4,7 +4,7 @@ import type { CharacterDef, GridPos } from '../core/types';
 import type { GameEngine } from './engine';
 import { UNIT_RADIUS, enemyRadius, type Combatant } from './entities';
 import { getIcon } from './icons';
-import { drawCharacterToken, drawEnemyToken, drawHpBar, drawTile, withAlpha } from './shapes';
+import { drawCharacterToken, drawEnemyToken, drawHpBar, drawTile, outlineColor, withAlpha } from './shapes';
 
 /** 世界坐标（格）→ 屏幕像素：sx = ox + x * scale */
 export interface Viewport {
@@ -524,16 +524,20 @@ export class BattleRenderer {
           break;
         case 'skill': {
           ctx.globalAlpha = 1 - k;
-          ctx.strokeStyle = fx.color;
-          ctx.lineWidth = 4;
+          // 先画一圈描边，深色的技能颜色也看得清
+          ctx.strokeStyle = outlineColor(fx.color);
+          ctx.lineWidth = 6;
           ctx.beginPath();
           ctx.arc(cx, cy, vp.scale * (0.3 + k * 1.1), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = fx.color;
+          ctx.lineWidth = 4;
           ctx.stroke();
           ctx.globalAlpha = k < 0.7 ? 1 : (1 - k) / 0.3;
           ctx.font = `bold ${Math.max(12, Math.round(vp.scale * 0.3))}px "PingFang SC","Microsoft YaHei",sans-serif`;
           ctx.textAlign = 'center';
           ctx.lineWidth = 4;
-          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.strokeStyle = outlineColor(fx.color);
           const ty = cy - vp.scale * (0.75 + k * 0.3);
           ctx.strokeText(fx.text ?? '', cx, ty);
           ctx.fillStyle = fx.color;
@@ -549,7 +553,7 @@ export class BattleRenderer {
           ctx.fillStyle = fx.color;
           ctx.font = `bold ${Math.max(12, Math.round(vp.scale * 0.32))}px sans-serif`;
           ctx.textAlign = 'center';
-          ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+          ctx.strokeStyle = outlineColor(fx.color);
           ctx.lineWidth = 3;
           ctx.strokeText(fx.text ?? '', cx, cy - k * vp.scale * 0.5);
           ctx.fillText(fx.text ?? '', cx, cy - k * vp.scale * 0.5);

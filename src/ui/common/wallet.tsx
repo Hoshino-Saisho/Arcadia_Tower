@@ -1,10 +1,11 @@
 import { formatCount, formatDrop, type LevelRewardInfo, type RolledRewards } from '../../core/leveling';
 import type { CurrencyConfig, DropDisplay, ExpBookDef } from '../../core/types';
+import { outlinedText } from '../../game/shapes';
 
 /** 游戏外货币的数量，例如「◆ 1,250 金币」 */
 export function CurrencyBadge({ name, color, amount, prefix = '' }: { name: string; color: string; amount: number; prefix?: string }) {
   return (
-    <span className="currency-badge" style={{ color }} title={name}>
+    <span className="currency-badge" style={outlinedText(color)} title={name}>
       <span className="currency-icon" style={{ background: color }} />
       {prefix}
       {formatCount(amount)} <small>{name}</small>

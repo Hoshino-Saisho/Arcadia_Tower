@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SELECT_SLOW_FACTOR, retreatRefund } from '../../core/defaults';
 import { describeSkill, describeSkillTrigger } from '../../core/describe';
 import { levelCode } from '../../core/ids';
@@ -10,6 +10,7 @@ import type { CharacterDef, GridPos, LevelDef } from '../../core/types';
 import { FIXED_DT, GameEngine } from '../../game/engine';
 import type { Unit } from '../../game/entities';
 import { preloadIcons } from '../../game/icons';
+import { outlinedText } from '../../game/shapes';
 import { music } from '../../game/music';
 import { BattleRenderer, screenToTile, type Viewport } from '../../game/renderer';
 import { clientToLocal } from '../common/stage';
@@ -98,16 +99,46 @@ interface CardPress {
   mode: 'press' | 'drag' | 'pan' | 'blocked';
 }
 
-function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; level: LevelDef; test: boolean; endless: boolean; onRestart: () => void }) {
+/** 角色试用（训练场）：编辑器里打开，只有一个来回移动的敌人，试用的角色一开始就在场上 */
+export interface BattleTraining {
+  /** 试用的角色（一开始就部署在场上） */
+  focusId: string;
+  /** 来回移动的敌人和路线 */
+  enemyId: string;
+  path: GridPos[];
+  /** 全部角色的等级 */
+  level: number;
+  /** HUD 中额外的控件（选择敌人 / 等级） */
+  controls?: ReactNode;
+  onExit: () => void;
+}
+
+export function Battle({
+  db,
+  level,
+  test,
+  endless = false,
+  training,
+  onRestart,
+}: {
+  db: GameDatabase;
+  level: LevelDef;
+  test: boolean;
+  endless?: boolean;
+  training?: BattleTraining;
+  onRestart: () => void;
+}) {
   const engineRef = useRef<GameEngine>(null as unknown as GameEngine);
   if (!engineRef.current) {
     engineRef.current = new GameEngine(level, db.characters, db.enemies, {
       skills: db.skills,
-      loadouts: db.progress.loadouts,
-      // 角色等级（玩家用经验书升级）提高基础数值
-      levels: levelMap(db.currency, db.progress),
+      loadouts: training ? {} : db.progress.loadouts,
+      // 角色等级（玩家用经验书升级）提高基础数值；试用时全部角色使用选择的等级
+      levels: training ? Object.fromEntries(db.characters.map((c) => [c.id, training.level])) : levelMap(db.currency, db.progress),
       endless: endless ? db.endless : undefined,
+      training: training ? { enemyId: training.enemyId, path: training.path } : undefined,
     });
+    if (training) deployFocus(engineRef.current, training.focusId);
   }
   const engine = engineRef.current;
 
@@ -117,7 +148,8 @@ function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; lev
   const hoverRef = useRef<GridPos | null>(null);
   const sizeRef = useRef({ w: 800, h: 500, dpr: 1 });
 
-  const [started, setStarted] = useState(false);
+  // 角色试用：直接开始
+  const [started, setStarted] = useState(!!training);
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [placing, setPlacing] = useState<string | null>(null);
@@ -248,7 +280,9 @@ function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; lev
   });
 
   const exit = useCallback(() => {
-    if (test) {
+    if (training) {
+      training.onExit();
+    } else if (test) {
       window.close();
       window.setTimeout(() => navigate('/game'), 150);
     } else if (endless) {
@@ -256,7 +290,7 @@ function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; lev
     } else {
       navigate(`/game/chapter/${encodeURIComponent(level.chapterId)}`);
     }
-  }, [test, endless, level.chapterId]);
+  }, [test, endless, training, level.chapterId]);
 
   const selectCard = useCallback(
     (id: string) => {
@@ -463,14 +497,17 @@ function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; lev
       <header className="battle-hud">
         <div className="row gap-s">
           <button className="btn btn-ghost" onClick={exit}>
-            ← 退出
+            {training ? '← 退出试用' : '← 退出'}
           </button>
           <div className="hud-level">
-            <span className="mono accent">{endless ? '∞' : level.id}</span>
-            <span>{endless ? db.endless.name : settings.name}</span>
+            <span className="mono accent">{training ? '试用' : endless ? '∞' : level.id}</span>
+            <span>{training ? engine.roster.find((c) => c.id === training.focusId)?.name ?? '' : endless ? db.endless.name : settings.name}</span>
             {test && <span className="badge badge-warn">试玩模式 · 不计进度</span>}
           </div>
         </div>
+        {training ? (
+          <TrainingHud engine={engine} />
+        ) : (
         <div className="hud-stats">
           <div className={`hud-stat hp${engine.hp <= Math.ceil(engine.maxHp * 0.3) ? ' danger' : ''}`} title="血量：敌人进入基地扣 1 点">
             <span className="hud-icon">❤</span>
@@ -507,8 +544,9 @@ function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; lev
             {formatTime(engine.time)}
           </div>
         </div>
+        )}
         <div className="row gap-s">
-          <MusicControl compact />
+          {!training && <MusicControl compact />}
           <button className={`btn btn-s${showRoutes ? ' active' : ''}`} onClick={() => setShowRoutes((v) => !v)} title="显示敌人路线">
             路线
           </button>
@@ -534,6 +572,21 @@ function Battle({ db, level, test, endless, onRestart }: { db: GameDatabase; lev
           )}
         </div>
       </header>
+      {training && (
+        <div className="trial-bar">
+          {training.controls}
+          <span className="grow" />
+          <button className="btn btn-s" onClick={() => engine.refillEnemies()} title="敌人回满生命（已被击败时立即重新出现）">
+            ♻ 刷新血量
+          </button>
+          <button className={`btn btn-s${engine.frozen ? ' active' : ''}`} onClick={() => (engine.frozen = !engine.frozen)} title="让敌人停在原地 / 继续来回移动">
+            {engine.frozen ? '▶ 继续移动' : '■ 停止移动'}
+          </button>
+          <button className="btn btn-s btn-ghost" onClick={() => engine.resetMeter()} title="伤害 / 治疗统计从现在重新开始">
+            重置统计
+          </button>
+        </div>
+      )}
 
       <div className="battle-field" ref={wrapRef}>
         <canvas
@@ -891,7 +944,7 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
             return (
               <div key={sk.def.id} className={`skill-btn${ready ? ' ready' : ''}${sk.active ? ' active' : ''}`} style={{ borderColor: sk.def.color }}>
                 <div className="row gap-s">
-                  <strong style={{ color: sk.def.color }}>{sk.def.name}</strong>
+                  <strong style={outlinedText(sk.def.color)}>{sk.def.name}</strong>
                   <span className="grow" />
                   <span className="mono small">{sk.active ? `持续 ${sk.remaining.toFixed(1)}s` : `SP ${Math.floor(sk.sp)}/${sk.def.spMax}`}</span>
                 </div>
@@ -930,4 +983,46 @@ function formatTime(t: number) {
   const m = Math.floor(t / 60);
   const s = Math.floor(t % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** 角色试用：把试用的角色部署到路线中间（地面角色放在路上，高台角色放在路旁），放不下时找第一个能放的方块 */
+function deployFocus(engine: GameEngine, id: string) {
+  const def = engine.roster.find((c) => c.id === id);
+  if (!def) return;
+  const g = engine.grid;
+  const midX = Math.floor(g.width / 2);
+  const midY = Math.floor(g.height / 2);
+  const prefer = def.placement === 'ground' ? [{ x: midX, y: midY }] : [{ x: midX, y: midY - 1 }, { x: midX, y: midY + 1 }, { x: midX, y: midY }];
+  for (const t of prefer) if (!engine.deploy(id, t)) return;
+  for (let y = 0; y < g.height; y++) for (let x = 0; x < g.width; x++) if (!engine.deploy(id, { x, y })) return;
+}
+
+/** 角色试用的 HUD：伤害 / 治疗统计 */
+function TrainingHud({ engine }: { engine: GameEngine }) {
+  const secs = Math.max(1, engine.time - engine.meterStart);
+  const enemy = engine.enemies.find((e) => e.hp > 0);
+  return (
+    <div className="hud-stats">
+      <div className="hud-stat" title="试用中可以随意部署">
+        <span className="hud-icon">◆</span>
+        {Math.floor(engine.money)}
+      </div>
+      <div className="hud-stat" title="对敌人造成的伤害（从开始或上次「重置统计」算起）">
+        <span className="hud-icon">⚔</span>
+        {formatNumber(Math.round(engine.damageDealt))}
+        <small>{formatNumber(Math.round((engine.damageDealt / secs) * 10) / 10)}/秒</small>
+      </div>
+      {engine.healingDone > 0 && (
+        <div className="hud-stat" title="对队友的治疗量">
+          <span className="hud-icon">✚</span>
+          {formatNumber(Math.round(engine.healingDone))}
+          <small>{formatNumber(Math.round((engine.healingDone / secs) * 10) / 10)}/秒</small>
+        </div>
+      )}
+      <div className="hud-stat" title="敌人的生命">
+        <span className="hud-icon">☠</span>
+        {enemy ? `${Math.ceil(enemy.hp)}/${Math.round(enemy.stats.maxHp)}` : '重新出现中…'}
+      </div>
+    </div>
+  );
 }

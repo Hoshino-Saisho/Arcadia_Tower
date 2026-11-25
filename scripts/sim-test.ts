@@ -10,6 +10,7 @@
  *  7. 升级与通关奖励：升级经验表、经验书、升级成长、掉落（基础奖励 × 关卡倍数）
  *  8. 负数数值：负数物抗 / 法抗、负数成长、负数费用 / 击杀奖励 / 金钱回复
  *  9. 无尽模式：难度、出现位列、波次、敌人强化、分数和兑换
+ * 10. 角色试用（训练场）：敌人来回移动、停止移动、刷新血量、重新出现、伤害统计
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -251,7 +252,8 @@ console.log('\n[4] 战斗机制');
     st('a', 'maxHp', 'percent', 20);
     check(u.stats.maxHp === 120 && Math.abs(u.hp - 60) < 1e-6, `生命上限 +20%：100 上限 / 40 生命 → ${u.stats.maxHp} / ${u.hp}`);
     runSkills(engH, 1.2);
-    check(u.stats.maxHp === 100 && Math.abs(u.hp - 40) < 1e-6, `效果结束后恢复：→ ${u.stats.maxHp} / ${Math.round(u.hp)}`);
+    check(u.stats.maxHp === 100 && Math.abs(u.hp - 60) < 1e-6, `效果结束后生命不减少（不超过上限）：120 / 60 → ${u.stats.maxHp} / ${Math.round(u.hp)}`);
+    u.hp = 40;
     st('b', 'maxHp', 'add', -30);
     check(u.stats.maxHp === 70 && Math.abs(u.hp - 10) < 1e-6, `生命上限 −30（固定值）：100 / 40 → ${u.stats.maxHp} / ${u.hp}`);
     st('c', 'maxHp', 'add', -50);
@@ -259,6 +261,12 @@ console.log('\n[4] 战斗机制');
     u.hp = u.stats.maxHp;
     st('d', 'maxHp', 'add', 50);
     check(u.stats.maxHp === 70 && u.hp === 70, '满血时提高上限，生命同样增加（仍然满血）');
+    runSkills(engH, 1.2);
+    check(u.stats.maxHp === 100 && u.hp === 70, `全部效果结束：上限回到 ${u.stats.maxHp}，生命保持 ${u.hp}（减少上限的效果结束时也不改变生命）`);
+    st('e', 'maxHp', 'percent', 50);
+    u.hp = 150;
+    runSkills(engH, 1.2);
+    check(u.stats.maxHp === 100 && u.hp === 100, '效果结束时生命超过新的上限 → 降到上限');
   }
 
   // 金钱技能：立即获得 + 持续期间每秒获得；敌人释放时玩家失去金钱；施放者离场后停止
@@ -643,6 +651,51 @@ console.log('\n[9] 无尽模式');
   check(ne.waveInterval === 1 && ne.hpGrowth === -20 && ne.bookRates.length === 0 && ne.map.id === 'ENDLESS_1' && ne.map.chapterId === 'ENDLESS', '读取无尽模式设置时修正非法的数值（每波生命可以是负数）');
   const de = normalizeEnemy({ id: 'D', maxHp: 1400 });
   check(de.endlessScore === 14 && de.endlessDifficulty === 3 && de.endlessRank === 1, `没有设置的敌人按生命值估算：分数 ${de.endlessScore} · 难度 ${de.endlessDifficulty} · 位列 ${de.endlessRank}`);
+}
+
+console.log('\n[10] 角色试用（训练场）');
+{
+  const grid = ['HHHHHHH', 'GGGGGGG', 'HHHHHHH'];
+  const lvT = normalizeLevel({ id: 'TRIAL_1', width: 7, height: 3, grid, settings: { initialHp: 99, initialMoney: 99999, autoMoney: false }, lines: [] });
+  const path = Array.from({ length: 7 }, (_, x) => ({ x, y: 1 }));
+  const dummyT = normalizeEnemy({ id: 'DM', maxHp: 1000, speed: 2, canAttack: false });
+  const shooter = normalizeCharacter({ id: 'SH', placement: 'high', cost: 0, atk: 100, range: 2, attackInterval: 1, damageType: 'true' });
+  const engT = new GameEngine(lvT, [shooter], [dummyT], { skills: [], training: { enemyId: 'DM', path, respawnDelay: 1 } });
+  check(engT.enemies.length === 1 && engT.enemies[0].patrol === true, '一开始就有一个来回移动的敌人');
+  let maxX = 0;
+  let back = false;
+  let lastX = engT.enemies[0].x;
+  for (let t = 0; t < 8; t += FIXED_DT) {
+    engT.step(FIXED_DT);
+    const e = engT.enemies[0];
+    maxX = Math.max(maxX, e.x);
+    if (e.x < lastX - 1e-9) back = true;
+    lastX = e.x;
+  }
+  check(engT.leaked === 0 && engT.status === 'running' && Math.abs(maxX - 6.5) < 1e-6 && back, `走到头（x = ${maxX}）就掉头往回走，不会进入基地，试用不会结束`);
+  engT.frozen = true;
+  const fx = engT.enemies[0].x;
+  for (let t = 0; t < 1; t += FIXED_DT) engT.step(FIXED_DT);
+  check(engT.enemies[0].x === fx, '停止移动后敌人停在原地');
+  engT.frozen = false;
+  check(engT.deploy('SH', { x: 3, y: 0 }) === null, '可以再部署角色');
+  engT.frozen = true;
+  engT.enemies[0].x = 3.5;
+  engT.resetMeter();
+  for (let t = 0; t < 3.05; t += FIXED_DT) engT.step(FIXED_DT);
+  const hurt = engT.enemies[0].hp;
+  check(hurt < 1000 && Math.abs(engT.damageDealt - (1000 - hurt)) < 1e-6, `伤害统计：${engT.damageDealt}（敌人 1000 → ${hurt}）`);
+  engT.refillEnemies();
+  check(engT.enemies[0].hp === engT.enemies[0].stats.maxHp, '刷新血量：敌人回满生命');
+  engT.enemies[0].hp = 0;
+  engT.step(FIXED_DT);
+  check(engT.enemies.length === 0, '敌人被击败后暂时消失');
+  for (let t = 0; t < 1.05; t += FIXED_DT) engT.step(FIXED_DT);
+  check(engT.enemies.length === 1 && engT.enemies[0].hp === 1000, '1 秒后重新出现（满血）');
+  engT.enemies[0].hp = 0;
+  engT.step(FIXED_DT);
+  engT.refillEnemies();
+  check(engT.enemies.length === 1, '被击败后点「刷新血量」立即重新出现');
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

@@ -54,6 +54,17 @@ export interface EngineOptions {
   endless?: EndlessConfig;
   /** 随机数（无尽模式选敌人 / 路线；测试时传入可重复的随机数） */
   rng?: () => number;
+  /** 角色试用（训练场）：只有一个来回移动的敌人，被击败后重新出现，战斗不会结束 */
+  training?: TrainingOptions;
+}
+
+export interface TrainingOptions {
+  /** 来回移动的敌人 */
+  enemyId: string;
+  /** 来回移动的路线（至少 2 格） */
+  path: GridPos[];
+  /** 被击败后多少秒重新出现 */
+  respawnDelay?: number;
 }
 
 /** 卡片状态：能否部署；冷却中时附带剩余时间 */
@@ -84,6 +95,8 @@ export class GameEngine {
   readonly lastSpawnTime: number;
   /** 无尽模式设置（普通关卡为 null） */
   readonly endless: EndlessConfig | null;
+  /** 角色试用设置（普通关卡为 null） */
+  readonly training: TrainingOptions | null;
 
   time = 0;
   hp: number;
@@ -98,6 +111,12 @@ export class GameEngine {
   score = 0;
   nextWaveAt = Infinity;
   finishedByPlayer = false;
+  /** 角色试用：敌人停止移动；伤害 / 治疗统计（从 meterStart 开始计算） */
+  frozen = false;
+  damageDealt = 0;
+  healingDone = 0;
+  meterStart = 0;
+  private respawnAt = 0;
 
   units: Unit[] = [];
   enemies: Enemy[] = [];
@@ -125,6 +144,7 @@ export class GameEngine {
     this.skillDefs = new Map((opts.skills ?? []).map((s) => [s.id, s]));
     this.loadouts = opts.loadouts ?? {};
     this.endless = opts.endless ?? null;
+    this.training = opts.training && opts.training.path.length >= 2 ? opts.training : null;
     this.rng = opts.rng ?? Math.random;
     const sched = buildSchedule(level, this.grid, this.enemyDefs, !!this.endless);
     this.schedule = sched.events;
@@ -140,6 +160,28 @@ export class GameEngine {
       if (!this.lineRoutes.length) this.warnings.push('无尽模式的地图没有可以使用的敌人路线，敌人不会出现');
       if (!this.enemyDefs.size) this.warnings.push('还没有任何敌人');
     }
+    if (this.training) this.spawnTraining();
+  }
+
+  /** 角色试用：生成来回移动的敌人 */
+  private spawnTraining() {
+    const t = this.training!;
+    const count = this.enemies.length;
+    this.spawnEnemy({ time: this.time, enemyId: t.enemyId, lineId: 'training', path: t.path, waits: [] });
+    for (const e of this.enemies.slice(count)) e.patrol = true;
+  }
+
+  /** 角色试用：敌人回满生命（已经被击败时立即重新出现） */
+  refillEnemies() {
+    for (const e of this.enemies) if (e.hp > 0) e.hp = e.stats.maxHp;
+    if (this.training && !this.enemies.some((e) => e.hp > 0)) this.spawnTraining();
+  }
+
+  /** 角色试用：重新开始统计伤害 / 治疗 */
+  resetMeter() {
+    this.damageDealt = 0;
+    this.healingDone = 0;
+    this.meterStart = this.time;
   }
 
   /** 角色等级（没有记录 = 1 级） */
@@ -164,6 +206,8 @@ export class GameEngine {
     this.updateMoneyFlows(dt);
 
     if (this.endless) this.updateEndless();
+    // 角色试用：敌人被击败（并清理掉）后，过一会儿重新出现
+    if (this.training && this.enemies.length === 0 && this.time + 1e-9 >= this.respawnAt) this.spawnTraining();
     this.spawnDue();
     this.updateStatuses(dt);
     this.updateSkills(dt);
@@ -278,7 +322,8 @@ export class GameEngine {
         for (const s of c.statuses) s.remaining -= dt;
         c.statuses = c.statuses.filter((s) => s.remaining > 0);
       }
-      this.refreshStats(c);
+      // 效果结束（时间到）：生命上限变回去时当前生命不减少，只是不超过新的上限
+      this.refreshStats(c, false);
       if (c.stats.hpRegen !== 0) {
         if (c.stats.hpRegen > 0) c.hp = Math.min(c.stats.maxHp, c.hp + c.stats.hpRegen * dt);
         else c.hp += c.stats.hpRegen * dt;
@@ -289,14 +334,15 @@ export class GameEngine {
 
   /**
    * 按当前的增益 / 减益重算属性。
-   * 生命上限变化时，当前生命同步增加 / 减少同样的数值（例如 100 上限、40 生命，+20% → 120 上限、60 生命；
-   * 效果结束 → 100 上限、40 生命）。上限降低不会直接致死，最少保留 1 点生命。
+   * sync = true（施加效果时）：生命上限变化多少，当前生命就同步增加 / 减少多少
+   *   （例如 100 上限、40 生命，+20% → 120 上限、60 生命）；上限降低不会直接致死，最少保留 1 点生命。
+   * sync = false（效果结束时）：当前生命不变，只是不超过新的上限（120 / 60 → 100 / 60；120 / 120 → 100 / 100）。
    */
-  private refreshStats(c: Combatant) {
+  private refreshStats(c: Combatant, sync = true) {
     const prevMax = c.stats.maxHp;
     c.stats = c.statuses.length ? applyModifiers(c.base, c.statuses.map((s) => s.modifiers)) : { ...c.base };
     const delta = c.stats.maxHp - prevMax;
-    if (c.hp > 0 && Math.abs(delta) > 1e-9) c.hp = Math.max(Math.min(1, c.hp), c.hp + delta);
+    if (sync && c.hp > 0 && Math.abs(delta) > 1e-9) c.hp = Math.max(Math.min(1, c.hp), c.hp + delta);
     if (c.hp > c.stats.maxHp) c.hp = c.stats.maxHp;
   }
 
@@ -355,6 +401,8 @@ export class GameEngine {
   }
 
   private moveEnemies(dt: number) {
+    // 角色试用：可以让敌人停止移动
+    if (this.frozen) return;
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
       // 停留点：停留时间照常计时（被阻挡时也一样），停留结束后的下一帧继续前进
@@ -375,12 +423,18 @@ export class GameEngine {
           e.distLeft = Math.max(0, e.distLeft - d);
           const tile = e.path[e.waypoint];
           // 敌人中心与基地方块中心重合 → 扣血
-          if (this.grid.isType(tile.x, tile.y, 'base')) {
+          if (!e.patrol && this.grid.isType(tile.x, tile.y, 'base')) {
             this.leak(e);
             break;
           }
           const wait = e.waits[e.waypoint] ?? 0;
           e.waypoint++;
+          if (e.patrol && e.waypoint >= e.path.length) {
+            // 来回移动：走到头就掉头
+            e.path = [...e.path].reverse();
+            e.waypoint = 1;
+            e.distLeft = pathLength(e.path);
+          }
           if (wait > 0) {
             // 到达停留点：停在方块中心
             e.waitLeft = e.waitTotal = wait;
@@ -489,6 +543,7 @@ export class GameEngine {
         }
         if (!e.leaked) {
           this.killed++;
+          if (this.training) this.respawnAt = this.time + (this.training.respawnDelay ?? 1.5);
           if (this.endless) this.score += e.def.endlessScore;
           // 击杀奖励可以是负数（击败时扣除金钱）
           if (e.def.reward) this.moneyText({ x: e.x - 0.2, y: e.y + 0.2 }, this.changeMoney(e.def.reward));
@@ -518,7 +573,8 @@ export class GameEngine {
       this.status = 'lost';
       return;
     }
-    // 无尽模式没有胜利，只会在血量归零或玩家结束挑战时结束
+    // 无尽模式没有胜利，只会在血量归零或玩家结束挑战时结束；角色试用不会结束
+    if (this.training) return;
     if (!this.endless && this.nextEvent >= this.schedule.length && this.enemies.length === 0) {
       this.status = 'won';
     }
@@ -556,6 +612,7 @@ export class GameEngine {
   dealDamage(target: Combatant, atk: number, type: SkillDamageType): number {
     if (target.hp <= 0) return 0;
     const dmg = computeDamage(atk, type, target.stats.def, target.stats.res);
+    if (this.training && target.side === 'enemy') this.damageDealt += Math.min(dmg, target.hp);
     target.hp -= dmg;
     target.flash = 0.12;
     return dmg;
@@ -566,6 +623,7 @@ export class GameEngine {
     const before = target.hp;
     target.hp = Math.min(target.stats.maxHp, target.hp + amount);
     const healed = target.hp - before;
+    if (this.training && target.side === 'ally') this.healingDone += healed;
     target.healFlash = 0.35;
     this.addEffect({ kind: 'heal', x: target.x, y: target.y, duration: 0.7, color: '#5dff9d' });
     if (healed >= 1) {

@@ -26,6 +26,40 @@ export function withAlpha(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/** 深色（例如黑色、深蓝）：在深色的界面上看不清，需要浅色描边 */
+export function isDarkColor(hex: string): boolean {
+  const [r, g, b] = parseColor(hex);
+  return r * 0.299 + g * 0.587 + b * 0.114 < 90;
+}
+
+/** 描边颜色：深色文字 / 线条用浅色描边，其他用深色描边 */
+export function outlineColor(hex: string): string {
+  return isDarkColor(hex) ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.8)';
+}
+
+/** CSS 文字描边（text-shadow）：任何颜色的文字在深色界面上都看得清 */
+export function textOutline(hex: string): string {
+  if (!isDarkColor(hex)) return '0 1px 2px rgba(0,0,0,0.85), 0 0 1px rgba(0,0,0,0.9)';
+  const c = 'rgba(255,255,255,0.85)';
+  return [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+  ]
+    .map(([x, y]) => `${x}px ${y}px 0 ${c}`)
+    .join(', ');
+}
+
+/** 彩色文字的样式（颜色 + 描边） */
+export function outlinedText(hex: string): { color: string; textShadow: string } {
+  return { color: hex, textShadow: textOutline(hex) };
+}
+
 /** 文字颜色：深色背景用白字，浅色背景用黑字 */
 export function contrastText(hex: string): string {
   const [r, g, b] = parseColor(hex);
@@ -108,7 +142,8 @@ export function drawCharacterToken(
     ctx.fill();
   }
   ctx.lineWidth = Math.max(1.5, r * 0.14);
-  ctx.strokeStyle = shade(def.color, -0.45);
+  // 深色的角色用浅色描边，否则在地图上看不清
+  ctx.strokeStyle = isDarkColor(def.color) ? 'rgba(235,240,250,0.75)' : shade(def.color, -0.45);
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.stroke();
@@ -167,7 +202,7 @@ export function drawEnemyToken(
   }
   ctx.lineWidth = Math.max(1.5, r * 0.13);
   ctx.lineJoin = 'round';
-  ctx.strokeStyle = shade(def.color, -0.55);
+  ctx.strokeStyle = isDarkColor(def.color) ? 'rgba(235,240,250,0.75)' : shade(def.color, -0.55);
   ctx.stroke();
 
   if (opt.flash && opt.flash > 0) {
