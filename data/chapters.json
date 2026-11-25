@@ -1,6 +1,6 @@
 {
   "chapters": [
-    {"id":"ZH","name":"中国老当当","levelCount":3,"description":"防线初建","battleMusic":"sample_battle.wav"},
+    {"id":"ZH","name":"牢大","levelCount":3,"description":"防线初建","battleMusic":"sample_battle.wav"},
     {
       "id": "EX",
       "name": "以下犯上",
