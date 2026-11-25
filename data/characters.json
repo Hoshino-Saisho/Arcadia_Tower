@@ -283,7 +283,8 @@
       "skills": ["S014","S015"],
       "skillSlots": 1,
       "onHit": null,
-      "growth": {"maxHp":50,"atk":0,"def":3,"res":0}
+      "growth": {"maxHp":50,"atk":0,"def":3,"res":0},
+      "description": "暴力榨金"
     },
     {
       "id": "C011",
