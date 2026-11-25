@@ -140,7 +140,7 @@
       "skills": ["S011"],
       "skillSlots": 1,
       "onHit": null,
-      "endlessScore": 5,
+      "endlessScore": 15,
       "endlessDifficulty": 2,
       "endlessRank": 2,
       "description": "治疗附近受伤的敌人，并让它们加速"
