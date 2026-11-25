@@ -275,7 +275,7 @@
       "range": 0,
       "blockCount": 0,
       "maxDeploy": 0,
-      "deployCooldown": 0,
+      "deployCooldown": 20,
       "attackType": "area",
       "skills": ["S018"],
       "skillSlots": 1,
