@@ -128,7 +128,7 @@
           "scope": "range",
           "radius": 0,
           "maxTargets": 1,
-          "modifiers": [{"stat":"def","mode":"add","value":100},{"stat":"res","mode":"add","value":100}],
+          "modifiers": [{"stat":"def","mode":"add","value":1000},{"stat":"res","mode":"add","value":100}],
           "duration": 10,
           "amount": 0,
           "regenMode": "flat",
