@@ -22,6 +22,9 @@
       "skills": [],
       "skillSlots": 1,
       "onHit": null,
+      "endlessScore": 4,
+      "endlessDifficulty": 1,
+      "endlessRank": 3,
       "description": "普通近战敌人"
     },
     {
@@ -46,6 +49,9 @@
       "skills": ["S017"],
       "skillSlots": 1,
       "onHit": null,
+      "endlessScore": 2,
+      "endlessDifficulty": 1,
+      "endlessRank": 4,
       "description": "移动很快，不会攻击角色"
     },
     {
@@ -70,6 +76,9 @@
       "skills": ["S010"],
       "skillSlots": 1,
       "onHit": null,
+      "endlessScore": 14,
+      "endlessDifficulty": 3,
+      "endlessRank": 1,
       "description": "又慢又硬，物抗高但法抗低；会释放盾墙"
     },
     {
@@ -94,6 +103,9 @@
       "skills": ["S012"],
       "skillSlots": 1,
       "onHit": null,
+      "endlessScore": 5,
+      "endlessDifficulty": 1,
+      "endlessRank": 2,
       "description": "远程法伤，攻击 2 格内的角色，会施放毒雾"
     },
     {
@@ -118,6 +130,9 @@
       "skills": ["S011"],
       "skillSlots": 1,
       "onHit": null,
+      "endlessScore": 5,
+      "endlessDifficulty": 1,
+      "endlessRank": 2,
       "description": "治疗附近受伤的敌人，并让它们加速"
     },
     {
@@ -141,7 +156,36 @@
       "attackType": "basic",
       "skills": ["S016"],
       "skillSlots": 1,
-      "onHit": null
+      "onHit": null,
+      "endlessScore": 5,
+      "endlessDifficulty": 1,
+      "endlessRank": 2
+    },
+    {
+      "id": "E007",
+      "name": "无知者",
+      "color": "#ffffff",
+      "sides": 5,
+      "size": 1,
+      "maxHp": 2500,
+      "atk": 50,
+      "def": 500,
+      "res": 90,
+      "speed": 0.1,
+      "canAttack": true,
+      "damageType": "physical",
+      "attackTarget": "enemy",
+      "targetCount": 1,
+      "attackInterval": 3.5,
+      "attackRange": 1.5,
+      "reward": 30,
+      "attackType": "basic",
+      "skills": [],
+      "skillSlots": 1,
+      "onHit": null,
+      "endlessScore": 100,
+      "endlessDifficulty": 6,
+      "endlessRank": 1
     }
   ]
 }
