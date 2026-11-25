@@ -23,7 +23,9 @@
     "autoMoney": true,
     "moneyPerMinute": 30,
     "availableCharacters": [],
-    "battleMusic": ""
+    "battleMusic": "",
+    "rewardCurrency": null,
+    "rewardBooks": null
   },
   "lines": [
     {
@@ -52,7 +54,8 @@
           {"x":3,"y":3},
           {"x":2,"y":3},
           {"x":1,"y":3}
-        ]
+        ],
+        "waits": []
       },
       "blocks": [
         {"id":"Bc7mtz3lfvm","enemyId":"E001","count":3,"interval":2,"startTime":1},
@@ -91,12 +94,14 @@
           {"x":3,"y":1},
           {"x":2,"y":1},
           {"x":1,"y":1}
-        ]
+        ],
+        "waits": []
       },
       "blocks": [
         {"id":"Bc8qtt3mj9s","enemyId":"E002","count":3,"interval":0.2,"startTime":1},
         {"id":"Bcb8kh3sb93","enemyId":"E001","count":3,"interval":2,"startTime":15},
-        {"id":"Bcaf013rn6z","enemyId":"E002","count":5,"interval":5,"startTime":26.5}
+        {"id":"Bcaf013rn6z","enemyId":"E002","count":5,"interval":5,"startTime":26.5},
+        {"id":"B06dz5379py","enemyId":"E006","count":3,"interval":2,"startTime":40.5}
       ]
     },
     {
@@ -135,7 +140,8 @@
           {"x":3,"y":7},
           {"x":2,"y":7},
           {"x":1,"y":7}
-        ]
+        ],
+        "waits": []
       },
       "blocks": [
         {"id":"Bc9ihy3p2pp","enemyId":"E003","count":2,"interval":2,"startTime":39},
