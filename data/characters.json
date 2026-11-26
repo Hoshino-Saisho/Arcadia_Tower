@@ -277,9 +277,6 @@
         "duration": 10
       },
       "growth": {"maxHp":50,"atk":-2,"def":3,"res":3},
-      "icon": "icons/C009_mwxso7zv.webp",
-      "iconCenter": {"x":0.108,"y":0.405},
-      "iconZoom": 2.35,
       "description": "等我100级就让你看看什么叫做神辅助！"
     },
     {
