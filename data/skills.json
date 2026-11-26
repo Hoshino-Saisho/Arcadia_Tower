@@ -256,7 +256,7 @@
           "duration": 0,
           "amount": 1500,
           "regenMode": "flat",
-          "damageType": "true",
+          "damageType": "physical",
           "money": 0,
           "moneyRate": 0,
           "cooldown": 0
