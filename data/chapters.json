@@ -1,13 +1,7 @@
 {
   "chapters": [
     {"id":"ZH","name":"牢大","levelCount":3,"description":"防线初建","battleMusic":"sample_battle.wav"},
-    {
-      "id": "EX",
-      "name": "以下犯上",
-      "levelCount": 2,
-      "description": "通关主线第一章后解锁",
-      "battleMusic": "sample_battle.wav"
-    },
+    {"id":"EX","name":"以下犯上","levelCount":2,"description":"真的假的？","battleMusic":"sample_battle.wav"},
     {"id":"CH1","name":"杨永信","levelCount":3,"description":"电死你","battleMusic":"sample_battle.wav"},
     {
       "id": "CH2",
