@@ -254,7 +254,7 @@
           "maxTargets": -1,
           "modifiers": [],
           "duration": 0,
-          "amount": 1000,
+          "amount": 1500,
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
