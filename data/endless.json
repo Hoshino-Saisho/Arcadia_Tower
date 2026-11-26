@@ -149,7 +149,7 @@
         "description": "全体角色的攻击力提升",
         "weight": 10,
         "copies": 2,
-        "effects": [{"kind":"ally","stat":"atk","mode":"percent","value":3,"perLevel":2}]
+        "effects": [{"kind":"ally","stat":"atk","mode":"percent","value":10,"perLevel":10}]
       },
       {
         "id": "K002",
@@ -159,7 +159,7 @@
         "weight": 10,
         "copies": 3,
         "effects": [
-          {"kind":"ally","stat":"maxHp","mode":"percent","value":5,"perLevel":5},
+          {"kind":"ally","stat":"maxHp","mode":"percent","value":15,"perLevel":10},
           {"kind":"ally","stat":"def","mode":"add","value":10,"perLevel":5}
         ]
       },
@@ -170,7 +170,7 @@
         "description": "全体角色攻击更快",
         "weight": 8,
         "copies": 3,
-        "effects": [{"kind":"ally","stat":"attackInterval","mode":"percent","value":-4,"perLevel":-2}]
+        "effects": [{"kind":"ally","stat":"attackInterval","mode":"percent","value":-10,"perLevel":-4}]
       },
       {
         "id": "K004",
@@ -178,7 +178,7 @@
         "color": "#fab005",
         "description": "稀有：全体角色的攻击范围变大（每 2 张升 1 级）",
         "weight": 4,
-        "copies": 3,
+        "copies": 5,
         "effects": [{"kind":"ally","stat":"range","mode":"add","value":0.5,"perLevel":0.5}]
       },
       {
@@ -188,7 +188,7 @@
         "description": "全体敌人走得更慢",
         "weight": 8,
         "copies": 3,
-        "effects": [{"kind":"enemy","stat":"speed","mode":"percent","value":-10,"perLevel":-4}]
+        "effects": [{"kind":"enemy","stat":"speed","mode":"percent","value":-15,"perLevel":-3}]
       },
       {
         "id": "K006",
@@ -210,7 +210,7 @@
         "weight": 10,
         "copies": 1,
         "effects": [
-          {"kind":"moneyRate","stat":"atk","mode":"add","value":20,"perLevel":15},
+          {"kind":"moneyRate","stat":"atk","mode":"add","value":10,"perLevel":15},
           {"kind":"money","stat":"atk","mode":"add","value":10,"perLevel":5}
         ]
       },
@@ -221,7 +221,7 @@
         "description": "击败敌人额外获得金钱",
         "weight": 6,
         "copies": 1,
-        "effects": [{"kind":"killMoney","stat":"atk","mode":"add","value":1,"perLevel":1}]
+        "effects": [{"kind":"killMoney","stat":"atk","mode":"add","value":2,"perLevel":3}]
       },
       {
         "id": "K009",
@@ -230,7 +230,7 @@
         "description": "稀有：全体部署费用降低（每 2 张升 1 级）",
         "weight": 3,
         "copies": 2,
-        "effects": [{"kind":"cost","stat":"atk","mode":"add","value":-1,"perLevel":-1}]
+        "effects": [{"kind":"cost","stat":"atk","mode":"add","value":-3,"perLevel":-1}]
       },
       {
         "id": "K010",
