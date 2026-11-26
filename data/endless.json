@@ -172,7 +172,14 @@
         "copies": 3,
         "effects": [{"kind":"ally","stat":"attackInterval","mode":"percent","value":-10,"perLevel":-4}]
       },
-      {"id":"K012","name":"新的牌","color":"#7c9cff","weight":10,"copies":1,"effects":[]},
+      {
+        "id": "K012",
+        "name": "安可",
+        "color": "#7c9cff",
+        "weight": 4,
+        "copies": 4,
+        "effects": [{"kind":"cooldown","stat":"atk","mode":"add","value":10,"perLevel":5}]
+      },
       {
         "id": "K004",
         "name": "鹰眼",
