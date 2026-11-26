@@ -411,7 +411,7 @@ export class GameEngine {
     if (!this.offer) this.nextOffer();
   }
 
-  /** 抽出下一次要选择的牌；没有可以抽的牌（全部满级 / 持有的种类已满并且都满级）时跳过 */
+  /** 抽出下一次要选择的牌；牌组里没有可以抽到的牌（权重都是 0 / 没有牌）时跳过 */
   private nextOffer() {
     while (!this.offer && this.drawsQueued > 0 && this.rogue) {
       this.drawsQueued--;

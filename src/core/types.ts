@@ -455,15 +455,17 @@ export interface BookScoreRate extends ScoreRate {
  */
 export type RogueEffectKind = 'ally' | 'enemy' | 'money' | 'moneyRate' | 'killMoney' | 'cost' | 'baseHp' | 'score';
 
-/** 肉鸽牌的一个效果 */
+/** 肉鸽牌的一个效果：Lv.N 的数值 = value + perLevel × (N − 1)（等级没有上限） */
 export interface RogueEffect {
   kind: RogueEffectKind;
   /** ally / enemy：修改的属性 */
   stat: StatKey;
   /** ally / enemy：固定值（add）或百分比（percent） */
   mode: 'add' | 'percent';
-  /** 每一级的数值：第 i 项 = Lv.(i+1)（负数 = 减少） */
-  values: number[];
+  /** Lv.1 的数值（负数 = 减少） */
+  value: number;
+  /** 每次升级增加的数值（负数 = 每级减少） */
+  perLevel: number;
 }
 
 /** 肉鸽牌（无尽模式的牌组） */
@@ -475,14 +477,14 @@ export interface RogueCard {
   description?: string;
   /** 抽牌权重：越大越容易被抽到，0 = 不会被抽到 */
   weight: number;
-  /** 升级：第 i 项 = 从 Lv.(i+1) 升到 Lv.(i+2) 需要再抽到几张同样的牌（最高等级 = 长度 + 1） */
-  copies: number[];
+  /** 每次升级需要再抽到几张同样的牌（等级没有上限） */
+  copies: number;
   effects: RogueEffect[];
 }
 
 /**
  * 无尽模式的肉鸽玩法：开局和每隔几波暂停，从牌组里随机抽出几张牌，玩家选择 1 张。
- * 再次选择持有的牌 = 积累升级进度，凑够数量就升级；持有的种类达到上限后只会抽到已经持有、还能升级的牌。
+ * 再次选择持有的牌 = 积累升级进度，凑够数量就升级（等级没有上限）；持有的种类达到上限后只会抽到已经持有的牌。
  */
 export interface RogueConfig {
   enabled: boolean;
@@ -492,7 +494,7 @@ export interface RogueConfig {
   startDraw: boolean;
   /** 每次抽出几张（选择 1 张） */
   choices: number;
-  /** 最多持有几种不同的牌（0 = 不限） */
+  /** 最多持有几种不同的牌（0 = 不限）；达到上限后只会抽到已经持有的牌 */
   maxHeld: number;
   cards: RogueCard[];
 }

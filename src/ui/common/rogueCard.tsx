@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { maxLevelOf, rogueEffectLabel, rogueValueText } from '../../core/rogue';
+import { rogueEffectLabel, rogueStepText, rogueValueText } from '../../core/rogue';
 import type { RogueCard } from '../../core/types';
 import { outlinedText } from '../../game/shapes';
 
 /**
  * 一张肉鸽牌（战斗中的三选一、持有的牌、无尽模式介绍、编辑器预览共用）：
- * 名称、等级、每个效果的数值（升级时显示「原来 → 升级后」）、升级进度、描述。
+ * 名称、等级、每个效果的数值（升级时显示「原来 → 升级后」）和每次升级增加多少、升级进度、描述。
+ * 等级没有上限。
  */
 export function RogueCardFace({
   card,
@@ -32,8 +33,7 @@ export function RogueCardFace({
   compact?: boolean;
   onClick?: () => void;
 }) {
-  const max = maxLevelOf(card);
-  const need = level < max ? card.copies[level - 1] ?? 1 : 0;
+  const need = Math.max(1, card.copies);
   const upgrading = from != null && from !== level;
   const body = (
     <>
@@ -42,43 +42,39 @@ export function RogueCardFace({
         <span className="rogue-card-name" style={outlinedText(card.color)}>
           {card.name}
         </span>
-        <span className="rogue-card-lv mono">{level >= max && max > 1 ? `Lv.${level} MAX` : `Lv.${level}`}</span>
+        <span className="rogue-card-lv mono">Lv.{level}</span>
         {badge && <span className="rogue-card-badge">{badge}</span>}
       </span>
       <span className="rogue-card-effects">
-        {card.effects.map((e, i) => (
-          <span key={i} className="rogue-card-effect">
-            <span className="rogue-effect-label">{rogueEffectLabel(e)}</span>
-            <span className={`rogue-effect-value mono${upgrading ? ' up' : ''}`}>
-              {upgrading && (
-                <>
-                  <s>{rogueValueText(e, from!)}</s> →{' '}
-                </>
-              )}
-              {rogueValueText(e, level)}
+        {card.effects.map((e, i) => {
+          const step = rogueStepText(e);
+          return (
+            <span key={i} className="rogue-card-effect">
+              <span className="rogue-effect-label">{rogueEffectLabel(e)}</span>
+              <span className={`rogue-effect-value mono${upgrading ? ' up' : ''}`}>
+                {upgrading && (
+                  <>
+                    <s>{rogueValueText(e, from!)}</s> →{' '}
+                  </>
+                )}
+                {rogueValueText(e, level)}
+              </span>
+              {step && <small className="rogue-effect-step">每级 {step}</small>}
             </span>
-          </span>
-        ))}
+          );
+        })}
         {!card.effects.length && <span className="muted small">（没有效果）</span>}
       </span>
-      {max > 1 && (
-        <span className="rogue-card-progress small" title={level < max ? `再抽到 ${need - copies} 张同样的牌升到 Lv.${level + 1}` : '已经是最高等级'}>
-          {level < max ? (
-            <>
-              <span className="rogue-pips">
-                {Array.from({ length: need }, (_, i) => (
-                  <span key={i} className={`rogue-pip${i < copies ? ' on' : ''}`} style={i < copies ? { background: card.color } : undefined} />
-                ))}
-              </span>
-              <span className="muted">
-                升到 Lv.{level + 1}：{copies}/{need}
-              </span>
-            </>
-          ) : (
-            <span className="muted">已经是最高等级</span>
-          )}
+      <span className="rogue-card-progress small" title={`再抽到 ${need - copies} 张同样的牌升到 Lv.${level + 1}（等级没有上限）`}>
+        <span className="rogue-pips">
+          {Array.from({ length: Math.min(need, 12) }, (_, i) => (
+            <span key={i} className={`rogue-pip${i < copies ? ' on' : ''}`} style={i < copies ? { background: card.color } : undefined} />
+          ))}
         </span>
-      )}
+        <span className="muted">
+          升到 Lv.{level + 1}：{copies}/{need}
+        </span>
+      </span>
       {!compact && card.description && <span className="rogue-card-desc muted small">{card.description}</span>}
     </>
   );

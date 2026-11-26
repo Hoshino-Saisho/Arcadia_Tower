@@ -15,7 +15,7 @@
  * 12. 召唤物：出现在部署栏、继承数值、部署范围、离场、无敌、召唤者自身攻击
  * 13. 编队：最多 12 个、顺序、和关卡可用角色的组合
  * 14. 敌人的召唤物：召唤节奏、同时存在上限、继承、沿路线前进、进入基地、击败奖励、随召唤者消失、无敌、阵营限制
- * 15. 无尽模式 · 肉鸽抽牌：抽牌时机、三选一、升级、持有上限、满级、每种效果
+ * 15. 无尽模式 · 肉鸽抽牌：抽牌时机、三选一、升级（等级没有上限）、持有上限、每种效果
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,7 +50,7 @@ import {
 import { describeAttack } from '../src/core/describe';
 import { checkManualPath, findPath, resolveRoute, resolveWaits, visitNumbers } from '../src/core/pathfinding';
 import { eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount } from '../src/core/endless';
-import { drawOffer, drawPool, gainCard, nextDrawWave, sampleRogueCards, type HeldCard } from '../src/core/rogue';
+import { drawOffer, drawPool, gainCard, nextDrawWave, sampleRogueCards, valueAt, type HeldCard } from '../src/core/rogue';
 import { battleRoster, resolveSquad } from '../src/core/squad';
 import { ProgressView } from '../src/core/progress';
 import { rangeOffsets, tileInRange } from '../src/core/range';
@@ -155,7 +155,7 @@ check(
   if (endlessCfg.rogue.enabled) {
     const cards = endlessCfg.rogue.cards;
     warn(cards.some((c) => c.weight > 0), `肉鸽牌组：${cards.length} 张牌，其中 ${cards.filter((c) => c.weight > 0).length} 张可以抽到`);
-    check(cards.every((c) => c.effects.every((e) => e.values.length === c.copies.length + 1)), '肉鸽牌组：每个效果在每一级都有数值');
+    check(cards.every((c) => c.copies >= 1 && c.effects.every((e) => Number.isFinite(e.value) && Number.isFinite(e.perLevel))), '肉鸽牌组：每张牌的升级数量和效果数值都有效');
   }
 }
 
@@ -958,48 +958,49 @@ console.log('\n[15] 无尽模式 · 肉鸽抽牌');
 {
   const def = normalizeEndless({});
   check(def.rogue.enabled && def.rogue.startDraw && def.rogue.choices === 3 && def.rogue.cards.length === sampleRogueCards().length, `旧数据没有牌组时：默认开启，三选一，使用样本牌组（${def.rogue.cards.length} 张）`);
-  const nr = normalizeRogue({ everyWaves: 0, choices: 9, cards: [{ id: 'A', copies: [2, 0], effects: [{ kind: 'ally', stat: 'atk', values: [5] }, { kind: 'bad' }] }, { id: 'A' }] });
+  const nr = normalizeRogue({ everyWaves: 0, choices: 9, cards: [{ id: 'A', copies: 0, effects: [{ kind: 'ally', stat: 'atk', value: 5, perLevel: 3 }, { kind: 'bad' }] }, { id: 'A' }] });
   check(nr.everyWaves === 1 && nr.choices === 5, '每隔几波最少 1，每次最多抽 5 张');
-  check(nr.cards[0].copies.join() === '2,1' && nr.cards[0].effects[0].values.join() === '5,5,5' && nr.cards[1].id === 'A_2', '升级至少需要 1 张，缺少的等级数值用最后一级补上，重复的 ID 自动改名');
+  check(nr.cards[0].copies === 1 && nr.cards[0].effects[0].value === 5 && nr.cards[0].effects[0].perLevel === 3 && nr.cards[1].id === 'A_2', '每次升级至少需要 1 张，重复的 ID 自动改名');
+  const old = normalizeRogue({ cards: [{ id: 'O', copies: [2, 3], effects: [{ kind: 'ally', stat: 'atk', values: [10, 18, 28] }] }] }).cards[0];
+  check(old.copies === 2 && old.effects[0].value === 10 && old.effects[0].perLevel === 8, '旧格式（每一级一个数值）读取为：Lv.1 = 10，每级 +8，每 2 张升 1 级');
   check(normalizeRogue({ cards: [] }).cards.length === 0, '牌组可以清空（不会被样本牌组填回去）');
 
-  const fx = (kind: RogueCard['effects'][number]['kind'], values: number[], stat: RogueCard['effects'][number]['stat'] = 'atk', mode: 'add' | 'percent' = 'add') => ({ kind, stat, mode, values });
-  const card = (id: string, copies: number[], effects: RogueCard['effects'], weight = 10): RogueCard => ({ id, name: id, color: '#888888', weight, copies, effects });
-  const A = card('A', [1, 2], [fx('ally', [10, 20, 30], 'atk', 'percent')]);
+  const fx = (kind: RogueCard['effects'][number]['kind'], value: number, perLevel = 0, stat: RogueCard['effects'][number]['stat'] = 'atk', mode: 'add' | 'percent' = 'add') => ({ kind, stat, mode, value, perLevel });
+  const card = (id: string, copies: number, effects: RogueCard['effects'], weight = 10): RogueCard => ({ id, name: id, color: '#888888', weight, copies, effects });
+  const A = card('A', 1, [fx('ally', 10, 8, 'atk', 'percent')]);
+  check(valueAt(A.effects[0], 1) === 10 && valueAt(A.effects[0], 2) === 18 && valueAt(A.effects[0], 25) === 202, 'Lv.N 的数值 = Lv.1 + 每级增加 × (N − 1)：10 / 18 / … / Lv.25 = 202');
   let held: HeldCard[] = [];
   let r = gainCard(held, A);
   check(r.isNew && r.level === 1, '第一次选择：获得 Lv.1');
   held = r.held;
-  r = gainCard(held, A);
-  check(r.leveled && r.level === 2 && r.copies === 0, '升到 Lv.2 需要再抽到 1 张：选择后升级');
-  held = r.held;
-  r = gainCard(held, A);
-  check(!r.leveled && r.level === 2 && r.copies === 1, '升到 Lv.3 需要再抽到 2 张：第 1 张只增加升级进度（1/2）');
-  held = r.held;
-  r = gainCard(held, A);
-  check(r.leveled && r.level === 3, '第 2 张：升到 Lv.3（满级）');
-  held = r.held;
-  const B = card('B', [1], [fx('money', [5, 10])]);
-  const C = card('C', [], [fx('score', [10])]);
-  const Z = card('Z', [], [fx('cost', [-1])], 0);
+  for (let i = 0; i < 30; i++) held = gainCard(held, A).held;
+  check(held[0].level === 31, `等级没有上限：再选择 30 次 → Lv.${held[0].level}`);
+  const B = card('B', 3, [fx('money', 5, 5)]);
+  let hb: HeldCard[] = gainCard([], B).held;
+  r = gainCard(hb, B);
+  check(!r.leveled && r.copies === 1, '每次升级需要再抽到 3 张：第 1 张只增加升级进度（1/3）');
+  hb = gainCard(gainCard(r.held, B).held, B).held;
+  check(hb[0].level === 2 && hb[0].copies === 0, '凑够 3 张升到 Lv.2，进度清零');
+  const C = card('C', 1, [fx('score', 10)]);
+  const Z = card('Z', 1, [fx('cost', -1)], 0);
   const rc = { enabled: true, everyWaves: 2, startDraw: true, choices: 3, maxHeld: 2, cards: [A, B, C, Z] };
-  check(!drawPool(rc, held).some((c) => c.id === 'A' || c.id === 'Z'), '满级的牌和权重为 0 的牌不会被抽到');
+  check(drawPool(rc, held).some((c) => c.id === 'A') && !drawPool(rc, held).some((c) => c.id === 'Z'), '高等级的牌照样可以抽到；权重为 0 的牌不会被抽到');
   const full: HeldCard[] = [
     { id: 'B', level: 1, copies: 0 },
-    { id: 'C', level: 1, copies: 0 },
+    { id: 'C', level: 9, copies: 0 },
   ];
-  check(drawPool(rc, full).map((c) => c.id).join() === 'B', '持有的种类达到上限后，只会抽到已经持有、还能升级的牌');
+  check(drawPool(rc, full).map((c) => c.id).join() === 'B,C', '持有的种类达到上限后，只会抽到已经持有的牌');
   const offer = drawOffer({ ...rc, maxHeld: 0 }, [], seededRng(3));
   check(offer.length === 3 && new Set(offer).size === 3 && !offer.includes('Z'), `一次抽出 3 张不同的牌：${offer.join(' / ')}`);
   check(nextDrawWave(rc, 0) === 2 && nextDrawWave(rc, 2) === 4 && nextDrawWave(rc, 3) === 4, '每 2 波抽一次：第 2、4、6… 波');
 
   // 战斗：牌组 5 张、每次抽 5 张 → 每次都能选到想测试的牌
   const deck: RogueCard[] = [
-    card('ATK', [1], [fx('ally', [50, 100], 'atk', 'percent')]),
-    card('SLOW', [], [fx('enemy', [-50], 'speed', 'percent')]),
-    card('CASH', [], [fx('money', [100]), fx('moneyRate', [60])]),
-    card('COST', [], [fx('cost', [-2])]),
-    card('BASE', [], [fx('baseHp', [3]), fx('score', [100]), fx('killMoney', [5])]),
+    card('ATK', 1, [fx('ally', 50, 50, 'atk', 'percent')]),
+    card('SLOW', 1, [fx('enemy', -50, 0, 'speed', 'percent')]),
+    card('CASH', 1, [fx('money', 100, 50), fx('moneyRate', 60)]),
+    card('COST', 1, [fx('cost', -2)]),
+    card('BASE', 1, [fx('baseHp', 3), fx('score', 100), fx('killMoney', 5)]),
   ];
   const cfgR = {
     ...newEndlessConfig(),
@@ -1040,30 +1041,37 @@ console.log('\n[15] 无尽模式 · 肉鸽抽牌');
   untilOffer(12);
   check(!!engR.offer && engR.wave === 2, `第 2 波开始时暂停抽牌（第 ${engR.wave} 波，${engR.time.toFixed(2)} 秒）`);
   engR.pickCard('ATK');
-  check(engR.lastPick?.leveled === true && gun.stats.atk === 200, `再次选择「ATK」：升到 Lv.2，场上角色的攻击变成 ${gun.stats.atk}`);
+  check(engR.lastPick?.leveled === true && gun.stats.atk === 200, `再次选择「ATK」：升到 Lv.2（+50% → +100%），场上角色的攻击变成 ${gun.stats.atk}`);
   untilOffer(22);
-  check(!!engR.offer && engR.wave === 4 && !engR.offer.cards.includes('ATK'), '第 4 波：满级的「ATK」不会再被抽到');
+  check(!!engR.offer && engR.wave === 4 && engR.offer.cards.includes('ATK'), '第 4 波：「ATK」照样可以抽到（等级没有上限）');
+  engR.pickCard('ATK');
+  check(engR.held[0].level === 3 && gun.stats.atk === 250, `第三次选择「ATK」：Lv.3，攻击 ${gun.stats.atk}（+150%）`);
+  untilOffer(32);
   engR.pickCard('SLOW');
   const slowed = engR.enemies.filter((e) => e.hp > 0);
   check(slowed.length > 0 && slowed.every((e) => Math.abs(e.stats.speed - e.base.speed * 0.5) < 1e-9), `「SLOW」：全体敌人移动速度 −50%（${slowed.length} 个敌人）`);
-  untilOffer(32);
+  untilOffer(42);
   const m0 = engR.money;
   engR.pickCard('CASH');
   check(Math.abs(engR.money - m0 - 100) < 1e-9 && Math.abs(engR.moneyPerSecond - 1) < 1e-9, `「CASH」：立即 +100 金钱，每分钟 +60（每秒 ${engR.moneyPerSecond}）`);
-  untilOffer(42);
+  untilOffer(52);
+  const m0b = engR.money;
+  engR.pickCard('CASH');
+  check(Math.abs(engR.money - m0b - 150) < 1e-9, '再次选择「CASH」升到 Lv.2：立即获得的金钱按 Lv.2（100 + 50）');
+  untilOffer(62);
   engR.pickCard('COST');
   const m1 = engR.money;
   check(engR.costOf(gunner) === 8 && engR.deploy('GN', { x: 3, y: 0 }) === null && Math.abs(m1 - engR.money - 8) < 1e-9, '「COST」：部署费用 −2（10 → 8）');
   const gun2 = engR.units[1];
   check(gun2.cost === 8 && Math.abs(engR.retreat(gun2.uid) - 4) < 1e-9, '撤退按部署时付的费用返还一半（8 → 4）');
-  untilOffer(52);
-  const heldBefore = engR.held.length;
-  check(engR.offer?.cards.join() === 'BASE' && engR.pickCard(null) === null && engR.held.length === heldBefore && !engR.offer, '第 10 波：只剩「BASE」可以抽，可以跳过这次抽牌');
-  untilOffer(62);
+  untilOffer(72);
+  const heldBefore = engR.held.map((h) => `${h.id}${h.level}.${h.copies}`).join();
+  check(engR.pickCard(null) === null && engR.held.map((h) => `${h.id}${h.level}.${h.copies}`).join() === heldBefore && !engR.offer, '可以跳过这次抽牌（持有的牌不变）');
+  untilOffer(82);
   const hp0 = engR.hp;
   const max0 = engR.maxHp;
   engR.pickCard('BASE');
-  check(engR.maxHp === max0 + 3 && engR.hp === hp0 + 3, `第 12 波「BASE」：基地血量 +3（${hp0}/${max0} → ${engR.hp}/${engR.maxHp}）`);
+  check(engR.maxHp === max0 + 3 && engR.hp === hp0 + 3, `「BASE」：基地血量 +3（${hp0}/${max0} → ${engR.hp}/${engR.maxHp}）`);
   const victim = engR.enemies.find((e) => e.hp > 0)!;
   const s0 = engR.score;
   const m2 = engR.money;
@@ -1071,9 +1079,12 @@ console.log('\n[15] 无尽模式 · 肉鸽抽牌');
   engR.step(FIXED_DT);
   check(Math.abs(engR.score - s0 - 6) < 1e-9, `分数 +100%：击败敌人获得 ${engR.score - s0} 分（3 × 2）`);
   check(Math.abs(engR.money - m2 - (2 + 5 + 1 / 60)) < 1e-6, '每击败 1 个敌人额外 +5 金钱（奖励 2 + 5，再加上每秒 1 的金钱回复）');
-  check(engR.held.map((h) => `${h.id}${h.level}`).join() === 'ATK2,SLOW1,CASH1,COST1,BASE1', `持有的牌：${engR.held.map((h) => `${h.id} Lv.${h.level}`).join('、')}`);
-  untilOffer(68);
-  check(!engR.offer && engR.skippedDraws === 1 && engR.wave === 14, '第 14 波：全部满级，没有可以抽的牌 → 这次跳过，战斗不会卡住');
+  check(engR.held.map((h) => `${h.id}${h.level}`).join() === 'ATK3,SLOW1,CASH2,COST1,BASE1', `持有的牌：${engR.held.map((h) => `${h.id} Lv.${h.level}`).join('、')}`);
+
+  // 牌组里没有可以抽到的牌（权重都是 0）：跳过，战斗不会卡住
+  const engZ = new GameEngine(lvR, [], [walker], { skills: [], endless: { ...cfgR, rogue: { ...cfgR.rogue, cards: deck.map((c) => ({ ...c, weight: 0 })) } }, rng: seededRng(2) });
+  for (let t = 0; t < 12; t += FIXED_DT) engZ.step(FIXED_DT);
+  check(!engZ.offer && engZ.skippedDraws === 2 && engZ.wave >= 2, `牌组里没有可以抽到的牌：开局和第 2 波都跳过（${engZ.skippedDraws} 次），战斗继续`);
 
   // 两次抽牌同时到了：依次选择
   const engQ = new GameEngine(lvR, [], [walker], { skills: [], endless: { ...cfgR, firstWave: 0, waveInterval: 1, rogue: { ...cfgR.rogue, everyWaves: 1, startDraw: false } }, rng: seededRng(9) });

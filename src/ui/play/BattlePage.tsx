@@ -371,12 +371,12 @@ export function Battle({
     },
     [engine],
   );
-  // 肉鸽：没有可以抽的牌（都已满级）时提示一下
+  // 肉鸽：牌组里没有可以抽到的牌时提示一下
   const skippedRef = useRef(0);
   useEffect(() => {
     if (engine.skippedDraws > skippedRef.current) {
       skippedRef.current = engine.skippedDraws;
-      toast('牌组里没有可以抽的牌了（都已满级），这次没有抽牌', 'info', 2500);
+      toast('牌组里没有可以抽到的牌（权重都是 0），这次没有抽牌', 'info', 2500);
     }
   });
 
@@ -705,7 +705,7 @@ export function Battle({
                   {engine.rogue && (
                     <>
                       <br />
-                      <span className="accent">❖ 抽牌</span>：{engine.rogue.startDraw ? '开局和' : ''}每 {engine.rogue.everyWaves} 波开始时暂停，从抽到的 {engine.rogue.choices} 张牌里选 1 张；再次选择持有的牌可以升级
+                      <span className="accent">❖ 抽牌</span>：{engine.rogue.startDraw ? '开局和' : ''}每 {engine.rogue.everyWaves} 波开始时暂停，从抽到的 {engine.rogue.choices} 张牌里选 1 张；再次选择持有的牌可以升级（等级没有上限）
                       {engine.rogue.maxHeld > 0 ? `，最多持有 ${engine.rogue.maxHeld} 种` : ''}。
                     </>
                   )}

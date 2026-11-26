@@ -4072,3 +4072,20 @@ button.hud-stat:hover {
 .rogue-deck-preview .rogue-card:not(.compact) {
   align-self: center;
 }
+/* 肉鸽牌：每次升级增加的数值（等级没有上限） */
+.rogue-card-effect {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.rogue-effect-step {
+  flex-basis: 100%;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+.rogue-level-sample {
+  color: var(--muted);
+  white-space: nowrap;
+  padding: 0 6px;
+}

@@ -40,7 +40,7 @@ export function RogueDraw({ engine, onPick }: { engine: GameEngine; onPick: (id:
         <div className="rogue-draw-foot">
           <span className="muted small">
             持有 {engine.held.length}
-            {cfg.maxHeld > 0 ? `/${cfg.maxHeld}` : ''} 种{full ? '（已满：只会抽到持有的牌）' : ''} · 再次选择持有的牌可以升级 · 数字键选择
+            {cfg.maxHeld > 0 ? `/${cfg.maxHeld}` : ''} 种{full ? '（已满：只会抽到持有的牌）' : ''} · 再次选择持有的牌可以升级（等级没有上限）· 数字键选择
           </span>
           <button className="btn btn-s btn-ghost" onClick={() => onPick(null)} title="这次不要任何牌">
             跳过
@@ -69,7 +69,7 @@ export function RogueHand({ engine, onClose }: { engine: GameEngine; onClose: ()
       </div>
       <div className="muted small">
         {next != null ? `下一次抽牌：第 ${next} 波开始时` : '不会再抽牌'}
-        {engine.skippedDraws > 0 ? ` · 已跳过 ${engine.skippedDraws} 次（没有可以抽的牌）` : ''}
+        {engine.skippedDraws > 0 ? ` · 已跳过 ${engine.skippedDraws} 次（牌组里没有可以抽到的牌）` : ''}
       </div>
       <div className="rogue-hand-list">
         {engine.held.map((h) => {
@@ -89,5 +89,5 @@ export function pickMessage(engine: GameEngine): string | null {
   if (!p || !card) return null;
   if (p.isNew) return `获得「${card.name}」`;
   if (p.leveled) return `「${card.name}」升到 Lv.${p.level}`;
-  return `「${card.name}」升级进度 ${p.copies}/${card.copies[p.level - 1] ?? 1}`;
+  return `「${card.name}」升级进度 ${p.copies}/${Math.max(1, card.copies)}`;
 }

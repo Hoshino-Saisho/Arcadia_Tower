@@ -773,36 +773,45 @@ export function newRogueConfig(): RogueConfig {
   return { enabled: true, everyWaves: 3, startDraw: true, choices: 3, maxHeld: 6, cards: sampleRogueCards() };
 }
 
-/** 新的效果：每一级的数值按种类给一个合理的起点（第 1 级的值 × 等级） */
-export function newRogueEffect(kind: RogueEffectKind, levels: number): RogueEffect {
-  const base: Record<RogueEffectKind, number> = { ally: 10, enemy: -10, money: 10, moneyRate: 20, killMoney: 1, cost: -1, baseHp: 2, score: 20 };
+/** 新的效果：按种类给一个合理的 Lv.1 数值和每次升级增加的数值 */
+export function newRogueEffect(kind: RogueEffectKind): RogueEffect {
+  const base: Record<RogueEffectKind, [number, number]> = {
+    ally: [10, 5],
+    enemy: [-10, -5],
+    money: [10, 5],
+    moneyRate: [20, 10],
+    killMoney: [1, 1],
+    cost: [-1, -1],
+    baseHp: [2, 1],
+    score: [20, 10],
+  };
   const stat: StatKey = kind === 'enemy' ? 'speed' : 'atk';
-  return { kind, stat, mode: kind === 'ally' || kind === 'enemy' ? 'percent' : 'add', values: Array.from({ length: Math.max(1, levels) }, (_, i) => base[kind] * (i + 1)) };
+  return { kind, stat, mode: kind === 'ally' || kind === 'enemy' ? 'percent' : 'add', value: base[kind][0], perLevel: base[kind][1] };
 }
 
-/** 新的牌：3 级（升级各需要再抽到 1 / 2 张），全体角色攻击力 +10% / +20% / +30% */
+/** 新的牌：每次升级需要再抽到 1 张，全体角色攻击力 +10%（每级 +5%） */
 export function newRogueCard(id: string): RogueCard {
-  return { id, name: '新的牌', color: '#7c9cff', weight: 10, copies: [1, 2], effects: [newRogueEffect('ally', 3)] };
+  return { id, name: '新的牌', color: '#7c9cff', weight: 10, copies: 1, effects: [newRogueEffect('ally')] };
 }
 
 const ROGUE_KINDS: RogueEffectKind[] = ['ally', 'enemy', 'money', 'moneyRate', 'killMoney', 'cost', 'baseHp', 'score'];
 
-function normalizeRogueEffect(raw: any, levels: number): RogueEffect | null {
+function normalizeRogueEffect(raw: any): RogueEffect | null {
   if (!raw || typeof raw !== 'object') return null;
   const kind: RogueEffectKind = ROGUE_KINDS.includes(raw.kind) ? raw.kind : 'ally';
   const stat: StatKey = STATS.some((x) => x.key === raw.stat) ? raw.stat : kind === 'enemy' ? 'speed' : 'atk';
-  const list: number[] = Array.isArray(raw.values) ? raw.values.map((v: unknown) => num(v, 0, -99999, 99999)) : [];
-  // 每一级都要有数值：缺少的等级用最后一级的数值补上，多出来的去掉
-  const values = Array.from({ length: levels }, (_, i) => list[Math.min(i, list.length - 1)] ?? 0);
-  return { kind, stat, mode: raw.mode === 'add' ? 'add' : 'percent', values };
+  // 旧格式（每一级一个数值）：Lv.1 的数值 + 前两级的差作为每次升级增加的数值
+  const old: number[] = Array.isArray(raw.values) ? raw.values.map((v: unknown) => num(v, 0, -99999, 99999)) : [];
+  const value = num(raw.value, old[0] ?? 0, -99999, 99999);
+  const perLevel = num(raw.perLevel, old.length > 1 ? old[1] - old[0] : 0, -99999, 99999);
+  return { kind, stat, mode: raw.mode === 'add' ? 'add' : 'percent', value, perLevel };
 }
 
 function normalizeRogueCard(raw: any, fallbackId: string): RogueCard | null {
   if (!raw || typeof raw !== 'object') return null;
-  // 升级需要的数量：每一级至少 1 张，最多 19 次升级（20 级）
-  const copies: number[] = Array.isArray(raw.copies) ? raw.copies.slice(0, 19).map((v: unknown) => Math.round(num(v, 1, 1, 99))) : [];
-  const levels = copies.length + 1;
-  const effects: RogueEffect[] = Array.isArray(raw.effects) ? raw.effects.map((e: any) => normalizeRogueEffect(e, levels)).filter((e: RogueEffect | null): e is RogueEffect => !!e) : [];
+  // 每次升级需要再抽到几张（至少 1 张）；旧格式（每一级一个数量）用第一个
+  const copies = Math.round(num(Array.isArray(raw.copies) ? raw.copies[0] : raw.copies, 1, 1, 99));
+  const effects: RogueEffect[] = Array.isArray(raw.effects) ? raw.effects.map(normalizeRogueEffect).filter((e: RogueEffect | null): e is RogueEffect => !!e) : [];
   return {
     id: str(raw.id, fallbackId).trim() || fallbackId,
     name: str(raw.name, '牌').trim() || '牌',

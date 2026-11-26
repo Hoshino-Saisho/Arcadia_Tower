@@ -60,7 +60,7 @@ export function EndlessPage() {
             {rogue.enabled && (
               <li>
                 <span className="accent">❖ 抽牌</span>：{rogue.startDraw ? '开局和' : ''}每 {rogue.everyWaves} 波开始时暂停，从随机抽到的 {rogue.choices} 张牌里选 1 张。
-                再次选择已经持有的牌会积累升级进度，凑够数量就升级
+                再次选择已经持有的牌会积累升级进度，凑够数量就升级（等级没有上限，每升一级效果按牌上写的「每级」增加）
                 {rogue.maxHeld > 0 ? `；最多持有 ${rogue.maxHeld} 种不同的牌，满了以后只会抽到已经持有的牌` : ''}。
               </li>
             )}

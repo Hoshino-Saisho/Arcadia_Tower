@@ -1,8 +1,9 @@
 /**
  * 无尽模式的肉鸽玩法（纯逻辑，战斗引擎、游戏界面、编辑器和测试共用）：
  *  - 开局和每隔几波，从牌组里按权重随机抽出几张不同的牌，玩家选择 1 张
- *  - 再次选择持有的牌 = 升级进度 +1，凑够这一级需要的数量就升级（数值按每一级的设置）
- *  - 持有的种类达到上限后，只会抽到已经持有、还能升级的牌；满级的牌不会再被抽到
+ *  - 再次选择持有的牌 = 升级进度 +1，凑够「每次升级需要的数量」就升 1 级；等级没有上限，
+ *    每个效果的数值 = Lv.1 的数值 + 每次升级增加的数值 × (等级 − 1)
+ *  - 持有的种类达到上限后，只会抽到已经持有的牌
  */
 import { formatModifier, formatNumber, statInfo } from './stats';
 import type { RogueCard, RogueConfig, RogueEffect, RogueEffectKind, StatModifier } from './types';
@@ -46,18 +47,23 @@ export const ROGUE_EFFECT_KINDS: { kind: RogueEffectKind; label: string; hint: s
   { kind: 'score', label: '分数加成', hint: '击败敌人获得的分数增加（%）' },
 ];
 
-/** 牌的最高等级 */
-export function maxLevelOf(card: Pick<RogueCard, 'copies'>): number {
-  return card.copies.length + 1;
-}
-
-/** 效果在某一级的数值（超过设置的等级时用最后一级） */
-export function valueAt(e: Pick<RogueEffect, 'values'>, level: number): number {
-  if (!e.values.length) return 0;
-  return e.values[Math.max(0, Math.min(level, e.values.length) - 1)];
+/** 效果在某一级的数值：Lv.1 的数值 + 每次升级增加的数值 × (等级 − 1) */
+export function valueAt(e: Pick<RogueEffect, 'value' | 'perLevel'>, level: number): number {
+  return Math.round((e.value + e.perLevel * Math.max(0, level - 1)) * 1000) / 1000;
 }
 
 const signed = (v: number) => (v >= 0 ? `+${formatNumber(v)}` : `−${formatNumber(Math.abs(v))}`);
+
+/** 数值加上单位，例如「+10%」「+20」「−5 点」「+0.5 格」 */
+function withUnit(e: RogueEffect, v: number): string {
+  if (e.kind === 'ally' || e.kind === 'enemy') {
+    const info = statInfo(e.stat);
+    // 和 formatModifier 一样：法抗本身是百分数，固定值修改显示为「点」
+    const unit = e.mode === 'percent' ? '%' : info.unit === '%' ? ' 点' : info.unit ? ` ${info.unit}` : '';
+    return `${signed(v)}${unit}`;
+  }
+  return e.kind === 'score' ? `${signed(v)}%` : signed(v);
+}
 
 /** 效果说明（某一级），例如「全体角色 攻击力 +10%」「每分钟金钱 +20」 */
 export function describeRogueEffect(e: RogueEffect, level: number): string {
@@ -82,19 +88,17 @@ export function describeRogueEffect(e: RogueEffect, level: number): string {
   }
 }
 
-/** 只有数值的部分（升级预览用），例如「+10%」「+20」「−5 点」 */
+/** 只有数值的部分（某一级），例如「+10%」「+20」「−5 点」 */
 export function rogueValueText(e: RogueEffect, level: number): string {
-  const v = valueAt(e, level);
-  if (e.kind === 'ally' || e.kind === 'enemy') {
-    const info = statInfo(e.stat);
-    // 和 formatModifier 一样：法抗本身是百分数，固定值修改显示为「点」
-    const unit = e.mode === 'percent' ? '%' : info.unit === '%' ? ' 点' : info.unit ? ` ${info.unit}` : '';
-    return `${signed(v)}${unit}`;
-  }
-  return e.kind === 'score' ? `${signed(v)}%` : signed(v);
+  return withUnit(e, valueAt(e, level));
 }
 
-/** 效果的名称部分（升级预览用），例如「全体角色 攻击力」「每分钟金钱」 */
+/** 每次升级增加的数值，例如「+8%」；不随等级变化时为 null */
+export function rogueStepText(e: RogueEffect): string | null {
+  return e.perLevel ? withUnit(e, e.perLevel) : null;
+}
+
+/** 效果的名称部分，例如「全体角色 攻击力」「每分钟金钱」 */
 export function rogueEffectLabel(e: RogueEffect): string {
   switch (e.kind) {
     case 'ally':
@@ -136,14 +140,10 @@ export function rogueBonus(cards: Map<string, RogueCard>, held: HeldCard[]): Rog
   return b;
 }
 
-/** 现在可以抽到的牌：权重大于 0、没有满级；持有的种类达到上限时只有已经持有的牌 */
+/** 现在可以抽到的牌：权重大于 0；持有的种类达到上限时只有已经持有的牌 */
 export function drawPool(cfg: RogueConfig, held: HeldCard[]): RogueCard[] {
   const full = cfg.maxHeld > 0 && held.length >= cfg.maxHeld;
-  return cfg.cards.filter((c) => {
-    if (c.weight <= 0) return false;
-    const h = held.find((x) => x.id === c.id);
-    return h ? h.level < maxLevelOf(c) : !full;
-  });
+  return cfg.cards.filter((c) => c.weight > 0 && (!full || held.some((h) => h.id === c.id)));
 }
 
 /** 按权重抽出几张不同的牌（可以抽的牌不够时少于设置的数量，没有可以抽的牌时为空） */
@@ -174,19 +174,16 @@ export interface GainResult {
   leveled: boolean;
 }
 
-/** 选择一张牌（不修改传入的数组） */
+/** 选择一张牌（不修改传入的数组）：凑够「每次升级需要的数量」就升 1 级，等级没有上限 */
 export function gainCard(held: HeldCard[], card: RogueCard): GainResult {
   const i = held.findIndex((h) => h.id === card.id);
   if (i < 0) return { held: [...held, { id: card.id, level: 1, copies: 0 }], level: 1, copies: 0, isNew: true, leveled: false };
-  const h = { ...held[i] };
+  const h = { ...held[i], copies: held[i].copies + 1 };
   let leveled = false;
-  if (h.level < maxLevelOf(card)) {
-    h.copies++;
-    if (h.copies >= (card.copies[h.level - 1] ?? 1)) {
-      h.level++;
-      h.copies = 0;
-      leveled = true;
-    }
+  if (h.copies >= Math.max(1, card.copies)) {
+    h.level++;
+    h.copies = 0;
+    leveled = true;
   }
   const next = held.slice();
   next[i] = h;
@@ -199,12 +196,12 @@ export function drawChance(cfg: RogueConfig, card: RogueCard): number {
   if (card.weight <= 0 || !pool.length) return 0;
   const n = Math.min(Math.max(1, cfg.choices), pool.length);
   if (n >= pool.length) return 1;
-  // 近似：不放回抽 n 张，按权重比例估计（模拟太慢，编辑器里只做参考）
+  // 近似：不放回抽 n 张，按权重比例估计（编辑器里只做参考）
   const total = pool.reduce((s, c) => s + c.weight, 0);
   return Math.min(1, 1 - Math.pow(1 - card.weight / total, n));
 }
 
-/** 下一次抽牌的波次（没有开启 / 不按波次抽 = null） */
+/** 下一次抽牌的波次（没有开启 = null） */
 export function nextDrawWave(cfg: RogueConfig, wave: number): number | null {
   if (!cfg.enabled || cfg.everyWaves <= 0) return null;
   return (Math.floor(wave / cfg.everyWaves) + 1) * cfg.everyWaves;
@@ -212,51 +209,27 @@ export function nextDrawWave(cfg: RogueConfig, wave: number): number | null {
 
 /** 样本牌组：角色强化、敌人削弱、金钱、费用、基地血量、分数（带代价）各几张 */
 export function sampleRogueCards(): RogueCard[] {
-  const ally = (stat: RogueEffect['stat'], mode: RogueEffect['mode'], values: number[]): RogueEffect => ({ kind: 'ally', stat, mode, values });
-  const enemy = (stat: RogueEffect['stat'], mode: RogueEffect['mode'], values: number[]): RogueEffect => ({ kind: 'enemy', stat, mode, values });
-  const plain = (kind: RogueEffectKind, values: number[]): RogueEffect => ({ kind, stat: 'atk', mode: 'add', values });
+  const ally = (stat: RogueEffect['stat'], mode: RogueEffect['mode'], value: number, perLevel: number): RogueEffect => ({ kind: 'ally', stat, mode, value, perLevel });
+  const enemy = (stat: RogueEffect['stat'], mode: RogueEffect['mode'], value: number, perLevel: number): RogueEffect => ({ kind: 'enemy', stat, mode, value, perLevel });
+  const plain = (kind: RogueEffectKind, value: number, perLevel: number): RogueEffect => ({ kind, stat: 'atk', mode: 'add', value, perLevel });
   return [
-    { id: 'K001', name: '锋刃', color: '#e8590c', weight: 10, copies: [1, 2], effects: [ally('atk', 'percent', [10, 18, 28])], description: '全体角色的攻击力提升' },
-    {
-      id: 'K002',
-      name: '坚壁',
-      color: '#4c6ef5',
-      weight: 10,
-      copies: [1, 2],
-      effects: [ally('maxHp', 'percent', [15, 25, 40]), ally('def', 'add', [10, 20, 35])],
-      description: '全体角色更耐打',
-    },
-    { id: 'K003', name: '疾风', color: '#20c997', weight: 8, copies: [1, 2], effects: [ally('attackInterval', 'percent', [-8, -14, -20])], description: '全体角色攻击更快' },
-    { id: 'K004', name: '鹰眼', color: '#fab005', weight: 4, copies: [2], effects: [ally('range', 'add', [0.5, 1])], description: '稀有：全体角色的攻击范围变大' },
-    { id: 'K005', name: '泥沼', color: '#8d6e63', weight: 8, copies: [1, 2], effects: [enemy('speed', 'percent', [-10, -18, -25])], description: '全体敌人走得更慢' },
-    {
-      id: 'K006',
-      name: '破甲',
-      color: '#ae3ec9',
-      weight: 8,
-      copies: [1, 2],
-      effects: [enemy('def', 'percent', [-15, -25, -40]), enemy('res', 'add', [-5, -10, -15])],
-      description: '全体敌人的物抗和法抗降低',
-    },
-    {
-      id: 'K007',
-      name: '军饷',
-      color: '#f59f00',
-      weight: 10,
-      copies: [1, 1, 2],
-      effects: [plain('moneyRate', [20, 35, 50, 70]), plain('money', [10, 15, 20, 30])],
-      description: '每分钟多一些金钱，选择时立即获得一笔',
-    },
-    { id: 'K008', name: '赏金', color: '#d9480f', weight: 6, copies: [1, 2], effects: [plain('killMoney', [1, 2, 3])], description: '击败敌人额外获得金钱' },
-    { id: 'K009', name: '精简', color: '#15aabf', weight: 3, copies: [2, 3], effects: [plain('cost', [-1, -2, -3])], description: '稀有：全体部署费用降低' },
-    { id: 'K010', name: '城防', color: '#82c91e', weight: 6, copies: [1, 1], effects: [plain('baseHp', [2, 4, 6])], description: '基地血量增加' },
+    { id: 'K001', name: '锋刃', color: '#e8590c', weight: 10, copies: 1, effects: [ally('atk', 'percent', 10, 8)], description: '全体角色的攻击力提升' },
+    { id: 'K002', name: '坚壁', color: '#4c6ef5', weight: 10, copies: 1, effects: [ally('maxHp', 'percent', 15, 10), ally('def', 'add', 10, 10)], description: '全体角色更耐打' },
+    { id: 'K003', name: '疾风', color: '#20c997', weight: 8, copies: 1, effects: [ally('attackInterval', 'percent', -8, -4)], description: '全体角色攻击更快' },
+    { id: 'K004', name: '鹰眼', color: '#fab005', weight: 4, copies: 2, effects: [ally('range', 'add', 0.5, 0.5)], description: '稀有：全体角色的攻击范围变大（每 2 张升 1 级）' },
+    { id: 'K005', name: '泥沼', color: '#8d6e63', weight: 8, copies: 1, effects: [enemy('speed', 'percent', -10, -4)], description: '全体敌人走得更慢' },
+    { id: 'K006', name: '破甲', color: '#ae3ec9', weight: 8, copies: 1, effects: [enemy('def', 'percent', -15, -8), enemy('res', 'add', -5, -5)], description: '全体敌人的物抗和法抗降低' },
+    { id: 'K007', name: '军饷', color: '#f59f00', weight: 10, copies: 1, effects: [plain('moneyRate', 20, 15), plain('money', 10, 5)], description: '每分钟多一些金钱，选择时立即获得一笔' },
+    { id: 'K008', name: '赏金', color: '#d9480f', weight: 6, copies: 1, effects: [plain('killMoney', 1, 1)], description: '击败敌人额外获得金钱' },
+    { id: 'K009', name: '精简', color: '#15aabf', weight: 3, copies: 2, effects: [plain('cost', -1, -1)], description: '稀有：全体部署费用降低（每 2 张升 1 级）' },
+    { id: 'K010', name: '城防', color: '#82c91e', weight: 6, copies: 1, effects: [plain('baseHp', 2, 2)], description: '基地血量增加' },
     {
       id: 'K011',
       name: '野心',
       color: '#e64980',
       weight: 5,
-      copies: [1, 2],
-      effects: [plain('score', [30, 50, 80]), enemy('atk', 'percent', [10, 15, 20])],
+      copies: 1,
+      effects: [plain('score', 30, 20), enemy('atk', 'percent', 10, 5)],
       description: '有代价：分数大幅增加，但敌人的攻击力也提高',
     },
   ];
