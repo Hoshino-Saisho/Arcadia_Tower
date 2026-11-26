@@ -9,7 +9,7 @@
  *  6. 手机版舞台的坐标换算（缩放 / 旋转 90°）
  *  7. 升级与通关奖励：升级经验表、经验书、升级成长、掉落（基础奖励 × 关卡倍数）
  *  8. 负数数值：负数物抗 / 法抗、负数成长、负数费用 / 击杀奖励 / 金钱回复
- *  9. 无尽模式：难度、出现位列、波次、敌人强化、分数和兑换
+ *  9. 无尽模式：难度、出现位列（出现频率）、出现数量、波次、敌人强化、分数和兑换
  * 10. 角色试用（训练场）：敌人来回移动、停止移动、刷新血量、重新出现、伤害统计
  * 11. 持续治疗 / 持续伤害
  * 12. 召唤物：出现在部署栏、继承数值、部署范围、离场、无敌、召唤者自身攻击
@@ -17,6 +17,9 @@
  * 14. 敌人的召唤物：召唤节奏、同时存在上限、继承、沿路线前进、进入基地、击败奖励、随召唤者消失、无敌、阵营限制
  * 15. 无尽模式 · 肉鸽抽牌：抽牌时机、三选一、升级（等级没有上限）、持有上限、每种效果
  * 16. SP 积累速度（属性）与部署冷却（牌 / 技能 / 命中效果；角色和敌人方向相反）
+ * 17. 受击效果：更长的闪白、震动（伤害越高越厉害）、白色的延迟血条
+ * 18. 商店与角色获得：开局拥有 / 达成条件自动获得 / 商店购买、编队、出战角色、数据
+ * 19. 用图片显示的单位：3×3 格的方形取景
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,6 +37,7 @@ import {
   normalizeRogue,
   normalizeSkill,
   normalizeSummon,
+  newCharacter,
   resolveLoadout,
 } from '../src/core/defaults';
 import {
@@ -51,15 +55,18 @@ import {
 } from '../src/core/leveling';
 import { describeAttack, describeEffect, describeOnHit } from '../src/core/describe';
 import { checkManualPath, findPath, resolveRoute, resolveWaits, visitNumbers } from '../src/core/pathfinding';
-import { eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount } from '../src/core/endless';
+import { allAppearedWave, eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount, waveShares } from '../src/core/endless';
 import { describeRogueEffect, drawOffer, drawPool, gainCard, nextDrawWave, rogueBonus, rogueStepText, sampleRogueCards, valueAt, type HeldCard } from '../src/core/rogue';
 import { battleRoster, resolveSquad } from '../src/core/squad';
+import { addToSquad, buyCharacter, buyableCount, claimUnlocks, describeUnlock, isOwned, missingConditions, ownedCharacters, unlockOf } from '../src/core/unlock';
 import { ProgressView } from '../src/core/progress';
 import { rangeOffsets, tileInRange } from '../src/core/range';
 import { applyModifiers, computeDamage, formatModifier } from '../src/core/stats';
 import { TileGrid } from '../src/core/tiles';
 import type { CharacterDef, EnemyDef, GridPos, LevelDef, RogueCard, SkillDef } from '../src/core/types';
 import { FIXED_DT, GameEngine } from '../src/game/engine';
+import { HIT_FLASH, HIT_SHAKE, IMAGE_TILES, TRAIL_HOLD } from '../src/game/entities';
+import { imageBox } from '../src/game/shapes';
 import { STAGE_H, STAGE_W, clientToStage, needsStage, stage } from '../src/ui/common/stage';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -629,21 +636,38 @@ console.log('\n[8] 负数数值');
 console.log('\n[9] 无尽模式');
 {
   // 这一节只测试波次（肉鸽抽牌在 [15] 测试）
-  const cfg = { ...newEndlessConfig(), startDifficulty: 1, difficultyPerWave: 1, groupsPerWave: 2, groupsGrowth: 0.5, countPerRank: 1, intervalPerRank: 0.5, countGrowth: 0, hpGrowth: 10, atkGrowth: 0, firstWave: 2, waveInterval: 10 };
+  const cfg = { ...newEndlessConfig(), startDifficulty: 1, difficultyPerWave: 1, groupsPerWave: 2, groupsGrowth: 0.5, groupInterval: 0.5, countGrowth: 0, hpGrowth: 10, atkGrowth: 0, firstWave: 2, waveInterval: 10 };
   cfg.rogue = { ...cfg.rogue, enabled: false };
-  const mk = (id: string, d: number, rank: number, score: number) => normalizeEnemy({ id, name: id, maxHp: 100, speed: 0.2, canAttack: false, endlessDifficulty: d, endlessRank: rank, endlessScore: score });
-  const easy = mk('EA', 1, 1, 5);
-  const mid = mk('EM', 3, 3, 10);
-  const hard = mk('EH', 5, 2, 30);
+  const mk = (id: string, d: number, rank: number, score: number, count?: number) =>
+    normalizeEnemy({ id, name: id, maxHp: 100, speed: 0.2, canAttack: false, endlessDifficulty: d, endlessRank: rank, endlessScore: score, ...(count ? { endlessCount: count } : {}) });
+  const easy = mk('EA', 1, 1, 5, 4);
+  const mid = mk('EM', 3, 3, 10, 1);
+  const hard = mk('EH', 5, 2, 30, 2);
   const all = [easy, mid, hard];
   check(eligibleEnemies(cfg, all, 1).map((p) => p.def.id).join() === 'EA', '第 1 波（难度 1）只出现难度 1 的敌人');
   const w3 = eligibleEnemies(cfg, all, 3);
-  check(w3.length === 2 && w3[0].weight < w3[1].weight, `第 3 波：难度 1 和 3 的敌人都会出现，越接近当前难度权重越高（${w3.map((p) => p.weight.toFixed(2)).join(' / ')}）`);
+  check(w3.length === 2 && w3[0].weight > w3[1].weight && Math.abs(w3[0].weight / w3[1].weight - 3) < 1e-9, `第 3 波：难度 1 和 3 的敌人都会出现，出现位列越低越容易被选中（位列 1 是位列 3 的 3 倍：${w3.map((p) => p.weight.toFixed(2)).join(' / ')}）`);
   check(firstWaveOf(cfg, 5) === 5 && firstWaveOf({ ...cfg, difficultyPerWave: 0 }, 5) === null, '难度 5 的敌人从第 5 波开始出现；难度不增加时永远不出现');
-  const g1 = groupSize(cfg, 1, 1);
-  const g3 = groupSize(cfg, 3, 1);
-  check(g1.count === 1 && g3.count === 3 && g3.interval > g1.interval, `出现位列越低，每组越少、间隔越短（位列 1：${g1.count} 个；位列 3：${g3.count} 个，间隔 ${g3.interval} 秒）`);
-  check(groupSize({ ...cfg, countGrowth: 50 }, 2, 3).count === 4, '每波数量增加 50%：第 3 波位列 2 → 4 个');
+  const g1 = groupSize(cfg, easy, 1);
+  const g3 = groupSize(cfg, mid, 1);
+  check(g1.count === 4 && g3.count === 1 && g1.interval === 0.5 && g3.interval === 0.5, `每组的数量 = 敌人的出现数量（${g1.count} 个 / ${g3.count} 个），组内间隔都是 ${g1.interval} 秒`);
+  check(groupSize({ ...cfg, countGrowth: 50 }, hard, 3).count === 4, '每波数量增加 50%：第 3 波出现数量 2 → 4 个');
+  check(allAppearedWave(cfg, all) === 5, '第 5 波起全部敌人都会出现');
+  const shares = waveShares(cfg, all, 5);
+  check(
+    Math.abs((shares.get('EA') ?? 0) - 6 / 11) < 1e-9 && Math.abs((shares.get('EH') ?? 0) - 3 / 11) < 1e-9 && Math.abs((shares.get('EM') ?? 0) - 2 / 11) < 1e-9,
+    `全部出现后每组的概率：位列 1 → ${Math.round((shares.get('EA') ?? 0) * 100)}%，位列 2 → ${Math.round((shares.get('EH') ?? 0) * 100)}%，位列 3 → ${Math.round((shares.get('EM') ?? 0) * 100)}%`,
+  );
+  {
+    // 实际抽取：位列 1 出现的组数约是位列 2 的 2 倍
+    const rng = seededRng(5);
+    const tally = new Map<string, number>();
+    for (let i = 0; i < 400; i++) for (const g of planWave(cfg, all, 1, 6, rng).groups) tally.set(g.enemyId, (tally.get(g.enemyId) ?? 0) + 1);
+    const ratio = (tally.get('EA') ?? 0) / Math.max(1, tally.get('EH') ?? 0);
+    check(ratio > 1.7 && ratio < 2.3, `随机抽 400 波：位列 1 / 位列 2 的组数比 ${ratio.toFixed(2)}（约 2 倍）`);
+  }
+  check(normalizeEnemy({ id: 'OLD', endlessRank: 4 }).endlessCount === 4, '旧数据没有「出现数量」：用原来的出现位列（每组的数量不变）');
+  check(normalizeEndless({ intervalPerRank: 1.5 }).groupInterval === 1.5 && normalizeEndless({}).groupInterval === newEndlessConfig().groupInterval, '旧的「每位列间隔」变成组内间隔');
   check(waveGroupCount(cfg, 1) === 2 && waveGroupCount(cfg, 5) === 4, '组数：第 1 波 2 组，每波 +0.5 → 第 5 波 4 组');
   const plan = planWave(cfg, all, 2, 7, seededRng(3));
   check(plan.groups.length === 5 && plan.groups.every((g) => g.routeIndex >= 0 && g.routeIndex < 2), `第 7 波：${plan.groups.length} 组，每组随机选路线`);
@@ -680,7 +704,12 @@ console.log('\n[9] 无尽模式');
   const ne = normalizeEndless({ waveInterval: -5, hpGrowth: -20, bookRates: [{ bookId: '' }], map: { grid: ['SB'] } });
   check(ne.waveInterval === 1 && ne.hpGrowth === -20 && ne.bookRates.length === 0 && ne.map.id === 'ENDLESS_1' && ne.map.chapterId === 'ENDLESS', '读取无尽模式设置时修正非法的数值（每波生命可以是负数）');
   const de = normalizeEnemy({ id: 'D', maxHp: 1400 });
-  check(de.endlessScore === 14 && de.endlessDifficulty === 3 && de.endlessRank === 1, `没有设置的敌人按生命值估算：分数 ${de.endlessScore} · 难度 ${de.endlessDifficulty} · 位列 ${de.endlessRank}`);
+  check(
+    de.endlessScore === 14 && de.endlessDifficulty === 3 && de.endlessRank === 3 && de.endlessCount === 1,
+    `没有设置的敌人按生命值估算：分数 ${de.endlessScore} · 难度 ${de.endlessDifficulty} · 位列 ${de.endlessRank}（越强越少见）· 数量 ${de.endlessCount}`,
+  );
+  const weak = normalizeEnemy({ id: 'W', maxHp: 300 });
+  check(weak.endlessRank === 1 && weak.endlessCount === 3, `弱的敌人：位列 ${weak.endlessRank}（常见）· 一次 ${weak.endlessCount} 个`);
 }
 
 console.log('\n[10] 角色试用（训练场）');
@@ -1202,6 +1231,145 @@ console.log('\n[16] SP 积累速度与部署冷却');
   engH2.deploy('WT', { x: 1, y: 0 });
   runFor(engH2, 0.6);
   check(Math.abs(engH2.cooldownLeft('WT') - (10 - 0.6 + 2)) < 0.05, `敌人的命中效果：命中角色时玩家的部署冷却 +2 秒（剩余 ${engH2.cooldownLeft('WT').toFixed(2)}）`);
+}
+
+console.log('\n[17] 受击效果');
+{
+  const lvH = normalizeLevel({
+    id: 'T_H',
+    width: 4,
+    height: 1,
+    grid: ['SGGB'],
+    settings: { initialHp: 99, initialMoney: 999, autoMoney: false },
+    lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 0 } }, blocks: [{ id: 'b', enemyId: 'HB', count: 2, interval: 0, startTime: 0 }] }],
+  });
+  const bag = normalizeEnemy({ id: 'HB', maxHp: 1000, speed: 0.01, canAttack: false });
+  const eng = new GameEngine(lvH, [], [bag], { skills: [] });
+  const runFor = (g: GameEngine, sec: number) => {
+    for (let t = 0; t < sec - 1e-9; t += FIXED_DT) g.step(FIXED_DT);
+  };
+  eng.step(FIXED_DT);
+  const [e, e2] = eng.enemies;
+  check(e && e.hpTrail === 1000 && e.flash === 0 && e.shake === 0, '刚出现：没有闪白和震动，延迟血条是满的');
+  eng.dealDamage(e, 300, 'true');
+  check(e.flash === HIT_FLASH && HIT_FLASH >= 0.25, `受击闪白 ${HIT_FLASH} 秒（以前 0.12 秒）`);
+  check(e.shake === HIT_SHAKE && e.shakePower === 1, `受击震动 ${HIT_SHAKE} 秒，重击强度 ${e.shakePower}`);
+  eng.dealDamage(e2, 10, 'true');
+  check(e2.shakePower > 0.4 && e2.shakePower < 0.6, `轻轻打一下震得轻一些（强度 ${e2.shakePower.toFixed(2)}）`);
+  check(e.hp === 700 && e.hpTrail === 1000, '白色的延迟血条先停在受伤前的血量（1000），当前血量 700');
+  runFor(eng, TRAIL_HOLD - 0.05);
+  check(e.hpTrail === 1000, `受伤后 ${TRAIL_HOLD - 0.05} 秒：延迟血条还停着`);
+  check(e.flash === 0 || e.flash < HIT_FLASH - 0.3, '闪白逐渐消失');
+  runFor(eng, 0.6);
+  check(e.hpTrail === e.hp && e.shake === 0 && e.flash === 0, `再过一会儿延迟血条追上当前血量（${e.hpTrail}），震动和闪白结束`);
+  // 连续受击：延迟血条不会一直停住，差距有上限
+  let maxGap = 0;
+  for (let i = 0; i < 15; i++) {
+    eng.dealDamage(e, 40, 'true');
+    for (let t = 0; t < 0.2; t += FIXED_DT) {
+      eng.step(FIXED_DT);
+      maxGap = Math.max(maxGap, e.hpTrail - e.hp);
+    }
+  }
+  check(maxGap > 0 && maxGap <= 200, `每 0.2 秒受击一次：白色部分最多 ${Math.round(maxGap)}（不会越拉越长）`);
+  runFor(eng, TRAIL_HOLD + 0.5);
+  check(e.hpTrail === e.hp, '停手后延迟血条追上');
+  eng.heal(null, e, 100);
+  eng.step(FIXED_DT);
+  check(e.hpTrail === e.hp, '治疗时延迟血条直接跟上（不会显示白色部分）');
+}
+
+console.log('\n[18] 商店与角色获得');
+{
+  const mkC = (id: string, unlock?: unknown) => normalizeCharacter({ id, name: id, ...(unlock ? { unlock } : {}) });
+  const ids = (list: CharacterDef[]) => list.map((c) => c.id).join(',');
+  const s1 = mkC('S1');
+  const s2 = mkC('S2', { mode: 'start' });
+  const a1 = mkC('A1', { mode: 'auto', level: 'ZH_1' });
+  const a2 = mkC('A2', { mode: 'auto', score: 500 });
+  const a3 = mkC('A3', { mode: 'auto', level: 'ZH_2', score: 300 });
+  const b1 = mkC('B1', { mode: 'shop', price: 1000 });
+  const b2 = mkC('B2', { mode: 'shop', price: 2000, level: 'ZH_3' });
+  const b3 = mkC('B3', { mode: 'shop', price: 0 });
+  const list = [s1, s2, a1, a2, a3, b1, b2, b3];
+  check(unlockOf(s1).mode === 'start' && newCharacter('N').unlock?.mode === 'shop', '没有设置获得方式的旧角色 = 开局拥有；新建的角色默认在商店购买');
+  const bad = normalizeCharacter({ id: 'X', unlock: { mode: 'weird', price: -5, score: -1, level: 3 } }).unlock!;
+  check(bad.mode === 'start' && bad.price === 0 && bad.score === 0 && bad.level === '', '读取时修正非法的获得方式和数值');
+  check(normalizeSummon({ id: 'M', unlock: { mode: 'shop' } }).unlock === undefined, '召唤物没有获得方式');
+  const p0 = normalizeProgress({ currency: 1500 });
+  check(ids(ownedCharacters(list, p0)) === 'S1,S2', '新存档：只有开局拥有的角色');
+  const p1 = normalizeProgress({ currency: 1500, cleared: ['ZH_1'], endlessBest: { score: 320, wave: 9, time: 100 } });
+  check(isOwned(a1, p1) && !isOwned(a2, p1) && !isOwned(a3, p1), '通关 ZH_1 后自动获得；无尽模式分数不够的还没有');
+  const miss = missingConditions(unlockOf(a3), p1);
+  check(miss.length === 1 && miss[0] === '通关 ZH_2', `两个条件都要达成：还差「${miss.join('、')}」`);
+  check(isOwned(a2, normalizeProgress({ endlessBest: { score: 500, wave: 1, time: 1 } })), '无尽模式最高分达到 500 后自动获得');
+  const r1 = buyCharacter(b1, p1, list);
+  check(r1.ok && r1.progress.currency === 500 && isOwned(b1, r1.progress), '购买：扣 1000，获得角色');
+  const r2 = r1.ok ? buyCharacter(b1, r1.progress, list) : r1;
+  check(!r2.ok && r2.error.includes('已经拥有'), '已经拥有的角色不能再买');
+  const r3 = buyCharacter(b2, normalizeProgress({ currency: 9999 }), list);
+  check(!r3.ok && r3.error.includes('通关 ZH_3'), `条件没有达成不能买：${r3.ok ? '' : r3.error}`);
+  const r4 = buyCharacter(b2, normalizeProgress({ currency: 1999, cleared: ['ZH_3'] }), list, '金币');
+  check(!r4.ok && r4.error === '金币不够：还差 1', `货币不够不能买：${r4.ok ? '' : r4.error}`);
+  check(!buyCharacter(a2, p1, list).ok && !buyCharacter(s1, p1, list).ok, '开局拥有 / 自动获得的角色不在商店出售');
+  const r5 = buyCharacter(b3, p0, list);
+  check(r5.ok && r5.progress.currency === 1500 && isOwned(b3, r5.progress), '价格 0 = 免费领取');
+  check(buyableCount(list, p1) === 2, '首页显示现在可以购买的数量（B1 和免费的 B3）');
+  check(describeUnlock(unlockOf(b2), '金币') === '商店购买 · 2,000 金币（通关 ZH_3 后可以购买）' && describeUnlock(unlockOf(a1)) === '通关 ZH_1 后自动获得', '获得方式的说明');
+
+  // 战斗结算：记录自动获得的角色，有空位时加入编队
+  const before = normalizeProgress({ squad: ['S1'] });
+  const after = { ...before, cleared: ['ZH_1'] };
+  const cl = claimUnlocks(list, before, after);
+  check(ids(cl.gained) === 'A1' && cl.progress.owned.includes('A1') && cl.progress.squad.join() === 'S1,A1', '通关后获得新角色：记录下来，并加入编队');
+  const cl2 = claimUnlocks(list, after, after);
+  check(cl2.gained.length === 0 && cl2.progress.owned.includes('A1'), '以前就达成的条件不会再提示「获得新角色」，但会记录下来');
+  check(isOwned({ ...a1, unlock: { ...unlockOf(a1), level: 'ZH_9' } }, cl.progress), '获得以后一直拥有（以后条件改了也一样）');
+  check(addToSquad(list, normalizeProgress({ owned: ['B1'] }), ['B1']).squad.length === 0, '没有选过编队（默认前 12 个已拥有的角色）时不用加');
+  const stored = ['S1', 'B1', 'B2', 'A2', 'A3', 'X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'X7'];
+  const kept = addToSquad(list, normalizeProgress({ squad: stored, owned: ['B1'] }), ['B1']);
+  check(kept.squad.join() === stored.join(), '编队里以前就记着的角色：获得后保持原来的位置');
+  const made = addToSquad(list, normalizeProgress({ squad: stored, owned: ['B3'] }), ['B3']);
+  check(made.squad.join() === 'S1,B3', '编队记满了但大多没有获得：空位按已拥有的算，加入新角色');
+
+  // 出战：只有已拥有的角色；关卡指定的角色都没有获得时仍然可以用
+  const owned = ownedCharacters(list, p1);
+  check(ids(battleRoster(owned, [], [], list).roster) === 'S1,S2,A1', '出战的角色只有已拥有的');
+  const rB = battleRoster(owned, ['S1'], ['B1', 'B2'], list);
+  check(ids(rB.roster) === 'B1,B2' && rB.fallback, '关卡指定的角色都没有获得时，这一关仍然可以用它们');
+  const rC = battleRoster(owned, ['S1'], ['A1', 'B1'], list);
+  check(ids(rC.roster) === 'A1' && rC.fallback, '编队里没有本关可用的角色：优先用已拥有的');
+  check(ids(battleRoster(owned, ['B1', 'S2'], [], list).roster) === 'S2', '编队里没有获得的角色不会出战');
+
+  // 数据：新存档至少有一个角色；获得条件里的关卡都存在
+  const fresh = normalizeProgress({});
+  const start = ownedCharacters(characters, fresh);
+  check(start.length > 0, `新存档拥有的角色：${start.map((c) => c.name).join('、') || '（没有）'}`);
+  const codes = new Set(chapters.flatMap((ch: { id: string; levelCount: number }) => Array.from({ length: ch.levelCount }, (_, i) => `${ch.id}_${i + 1}`)));
+  for (const c of characters) {
+    const u = unlockOf(c);
+    if (u.level && !codes.has(u.level)) check(false, `${c.name}（${c.id}）的获得条件「通关 ${u.level}」：关卡不存在`);
+  }
+  const modes = { start: 0, auto: 0, shop: 0 };
+  for (const c of characters) modes[unlockOf(c).mode]++;
+  check(true, `角色的获得方式：开局拥有 ${modes.start} · 自动获得 ${modes.auto} · 商店 ${modes.shop}`);
+  for (const c of characters.filter((c) => unlockOf(c).mode === 'auto')) {
+    const u = unlockOf(c);
+    const p = normalizeProgress({ cleared: u.level ? [u.level] : [], endlessBest: u.score ? { score: u.score, wave: 1, time: 1 } : null });
+    check(isOwned(c, p), `${c.name}：${describeUnlock(u)}`);
+  }
+}
+
+console.log('\n[19] 用图片显示的单位');
+{
+  const img = { naturalWidth: 200, naturalHeight: 100, width: 200, height: 100 } as unknown as HTMLImageElement;
+  const side = IMAGE_TILES * 40;
+  const b = imageBox(img, 100, 100, side, null, null);
+  check(IMAGE_TILES === 3 && b.h === 120 && b.w === 240 && b.x === -20 && b.y === 40, `图片显示成 ${IMAGE_TILES}×${IMAGE_TILES} 格的方形：短边铺满方形，图片中心对齐单位`);
+  const b2 = imageBox(img, 100, 100, side, { x: 0.25, y: 0.5 }, 2);
+  check(b2.h === 240 && Math.abs(b2.x - (100 - 50 * 2.4)) < 1e-9 && Math.abs(b2.y - (100 - 50 * 2.4)) < 1e-9, '中心点和缩放：图片上选的中心点对齐单位，缩放 2 = 放大一倍');
+  const b3 = imageBox(img, 0, 0, side, null, 0.25);
+  check(Math.abs(b3.h - 30) < 1e-9, '缩放最小 0.25：图片可以比 3×3 格小很多');
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

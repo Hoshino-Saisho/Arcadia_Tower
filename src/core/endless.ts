@@ -2,9 +2,10 @@ import type { EndlessConfig, EnemyDef } from './types';
 
 /**
  * 无尽模式的波次规则（纯函数，战斗引擎和编辑器预览共用）：
- *  - 当前难度 = 起始难度 + (波次 − 1) × 每波增加；只出现「难度 ≤ 当前难度」的敌人，越接近当前难度的越常出现
+ *  - 当前难度 = 起始难度 + (波次 − 1) × 每波增加；只出现「难度 ≤ 当前难度」的敌人
  *  - 每波的组数 = 第 1 波组数 + (波次 − 1) × 每波增加（四舍五入，至少 1 组）
- *  - 每组只有一种敌人：数量 = 出现位列 × 每位列数量 ×（1 + 每波数量增加% × (波次 − 1)），组内间隔 = 出现位列 × 每位列间隔
+ *  - 每组随机选一种敌人，「出现位列」越低越容易被选中：机会 = 1 / 位列（位列 1 是位列 2 的 2 倍、位列 3 的 3 倍）
+ *  - 每组的数量 = 敌人的「出现数量」×（1 + 每波数量增加% × (波次 − 1)），同一组的敌人每隔「组内间隔」秒出现一个
  *  - 每波敌人的生命 / 攻击按百分比增加
  */
 
@@ -36,13 +37,18 @@ export function waveGroupCount(cfg: EndlessConfig, wave: number): number {
   return Math.max(1, Math.round(cfg.groupsPerWave + (wave - 1) * cfg.groupsGrowth));
 }
 
-/** 出现位列决定每组的数量和组内间隔：位列越低，数量越少、间隔越短 */
-export function groupSize(cfg: EndlessConfig, rank: number, wave: number): { count: number; interval: number } {
+/** 每组的数量（敌人的「出现数量」，每波按百分比增加）和组内间隔 */
+export function groupSize(cfg: EndlessConfig, enemy: Pick<EnemyDef, 'endlessCount'>, wave: number): { count: number; interval: number } {
   const growth = Math.max(0, 1 + (cfg.countGrowth / 100) * (wave - 1));
   return {
-    count: Math.max(1, Math.min(99, Math.round(rank * cfg.countPerRank * growth))),
-    interval: Math.max(0.05, Math.round(rank * cfg.intervalPerRank * 100) / 100),
+    count: Math.max(1, Math.min(99, Math.round(enemy.endlessCount * growth))),
+    interval: Math.max(0.05, Math.round(cfg.groupInterval * 100) / 100),
   };
+}
+
+/** 出现位列对应的权重：位列越低越容易被选中（1 / 位列） */
+export function rankWeight(rank: number): number {
+  return 1 / Math.max(1, rank);
 }
 
 /** 第 wave 波的敌人强化倍率（至少 5%） */
@@ -52,7 +58,7 @@ export function waveScale(cfg: EndlessConfig, wave: number): { hp: number; atk: 
 }
 
 /**
- * 第 wave 波可以出现的敌人和权重：难度 ≤ 当前难度；权重 = 1 / (1 + 当前难度 − 敌人难度)，越接近当前难度越常出现。
+ * 第 wave 波可以出现的敌人和权重：难度 ≤ 当前难度；权重 = 1 / 出现位列（位列越低出现得越频繁）。
  * 没有敌人的难度够低时，使用难度最低的敌人（保证每一波都有敌人）。
  */
 export function eligibleEnemies(cfg: EndlessConfig, enemies: EnemyDef[], wave: number): { def: EnemyDef; weight: number }[] {
@@ -62,7 +68,17 @@ export function eligibleEnemies(cfg: EndlessConfig, enemies: EnemyDef[], wave: n
     const min = Math.min(...enemies.map((e) => e.endlessDifficulty));
     pool = enemies.filter((e) => e.endlessDifficulty === min);
   }
-  return pool.map((def) => ({ def, weight: 1 / (1 + Math.max(0, d - def.endlessDifficulty)) }));
+  return pool.map((def) => ({ def, weight: rankWeight(def.endlessRank) }));
+}
+
+/**
+ * 第 wave 波每种敌人被选中的概率（0~1，每组按这个概率选敌人）；这一波不会出现的敌人没有记录。
+ * 编辑器用它显示「出现位列」的效果。
+ */
+export function waveShares(cfg: EndlessConfig, enemies: EnemyDef[], wave: number): Map<string, number> {
+  const pool = eligibleEnemies(cfg, enemies, wave);
+  const total = pool.reduce((s, p) => s + p.weight, 0);
+  return new Map(pool.map((p) => [p.def.id, total > 0 ? p.weight / total : 0]));
 }
 
 /** 敌人第一次可以出现的波次；永远不会出现返回 null */
@@ -72,6 +88,16 @@ export function firstWaveOf(cfg: EndlessConfig, difficulty: number, enemies: Ene
   if (enemies.length && difficulty <= Math.min(...enemies.map((e) => e.endlessDifficulty)) + 1e-9) return 1;
   if (cfg.difficultyPerWave <= 0) return null;
   return 1 + Math.ceil((difficulty - cfg.startDifficulty) / cfg.difficultyPerWave - 1e-9);
+}
+
+/** 全部能出现的敌人都已经出现的波次（至少第 1 波）：在这一波看「出现位列」的效果最完整 */
+export function allAppearedWave(cfg: EndlessConfig, enemies: EnemyDef[]): number {
+  let wave = 1;
+  for (const e of enemies) {
+    const w = firstWaveOf(cfg, e.endlessDifficulty, enemies);
+    if (w != null && w > wave) wave = w;
+  }
+  return wave;
 }
 
 /** 安排一波敌人：按权重随机选敌人，每组随机选一条路线，组与组在波次的前 70% 时间里依次出现 */
@@ -90,7 +116,7 @@ export function planWave(cfg: EndlessConfig, enemies: EnemyDef[], routeCount: nu
         break;
       }
     }
-    const size = groupSize(cfg, pick.endlessRank, wave);
+    const size = groupSize(cfg, pick, wave);
     groups.push({ enemyId: pick.id, ...size, offset: Math.round(((g * cfg.waveInterval * 0.7) / n) * 100) / 100, routeIndex: Math.floor(rng() * routeCount) });
   }
   const scale = waveScale(cfg, wave);

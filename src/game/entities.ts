@@ -52,10 +52,17 @@ interface CombatantBase {
   regens: RegenInstance[];
   skills: SkillState[];
   attackCd: number;
-  /** 受击闪烁 / 治疗闪烁 / 攻击动作计时（用于渲染） */
+  /** 受击闪白 / 治疗闪烁 / 攻击动作计时（用于渲染） */
   flash: number;
   healFlash: number;
   attackAnim: number;
+  /** 受击震动的剩余时间和强度（0~1，伤害越高震得越厉害） */
+  shake: number;
+  shakePower: number;
+  /** 白色的延迟血条：受伤后先停在受伤前的血量，过一会儿再追上当前血量 */
+  hpTrail: number;
+  /** 延迟血条开始追赶前的等待时间 */
+  trailHold: number;
 }
 
 /** 场上的角色（单位：格；方块 (x,y) 的中心是 (x+0.5, y+0.5)） */
@@ -149,6 +156,38 @@ export interface Effect {
   text?: string;
   angle?: number;
   size?: number;
+}
+
+/** 受击闪白的时长（秒） */
+export const HIT_FLASH = 0.3;
+/** 受击震动的时长（秒） */
+export const HIT_SHAKE = 0.32;
+/** 延迟血条停住多久再开始追赶（秒） */
+export const TRAIL_HOLD = 0.45;
+/** 用图片显示的单位：以单位为中心、边长 3 格的方形 */
+export const IMAGE_TILES = 3;
+
+/** 新单位的受击效果计时（延迟血条从满血开始） */
+export function hitFxInit(maxHp: number): Pick<CombatantBase, 'shake' | 'shakePower' | 'hpTrail' | 'trailHold'> {
+  return { shake: 0, shakePower: 0, hpTrail: maxHp, trailHold: 0 };
+}
+
+/**
+ * 每一步更新受击震动和延迟血条：治疗时延迟血条直接跟上；受伤后停 TRAIL_HOLD 秒，
+ * 然后追赶当前血量（至少每秒 80% 最大生命，差得越多追得越快）
+ */
+export function updateHpTrail(c: CombatantBase, dt: number) {
+  c.shake = Math.max(0, c.shake - dt);
+  if (c.hpTrail <= c.hp) {
+    c.hpTrail = c.hp;
+    c.trailHold = 0;
+  } else if (c.trailHold > 0) {
+    c.trailHold = Math.max(0, c.trailHold - dt);
+  } else {
+    const speed = Math.max(c.stats.maxHp * 0.8, (c.hpTrail - c.hp) * 4);
+    c.hpTrail = Math.max(c.hp, c.hpTrail - speed * dt);
+  }
+  if (c.hpTrail > c.stats.maxHp) c.hpTrail = c.stats.maxHp;
 }
 
 export const UNIT_RADIUS = 0.36;

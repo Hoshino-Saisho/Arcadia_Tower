@@ -3,6 +3,7 @@ import { describeAttack, describeOnHit } from '../../core/describe';
 import { DAMAGE_TYPE_LABEL } from '../../core/stats';
 import { loadDatabase, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
 import type { CharacterDef, EnemyDef, SkillDef, SummonDef } from '../../core/types';
+import { describeUnlock, isOwned, unlockOf } from '../../core/unlock';
 import { RangeGrid } from '../common/rangeGrid';
 import { SkillCard } from '../common/skillCard';
 import { EnemySummonList, SummonList } from '../common/summonList';
@@ -56,13 +57,17 @@ export function CodexPage() {
       </header>
       <div className="codex-body">
         <div className="codex-grid">
-          {list.map((d) => (
-            <button key={d.id} className={`codex-entry${current?.id === d.id ? ' active' : ''}`} onClick={() => setSel(d.id)}>
-              <UnitToken kind={tab === 'characters' ? 'character' : 'enemy'} def={d} size={48} />
-              <span className="codex-entry-name">{d.name}</span>
-              <span className="muted small mono">{d.id}</span>
-            </button>
-          ))}
+          {list.map((d) => {
+            const locked = tab === 'characters' && !isOwned(d as CharacterDef, db.progress);
+            return (
+              <button key={d.id} className={`codex-entry${current?.id === d.id ? ' active' : ''}`} onClick={() => setSel(d.id)}>
+                {locked && <span className="lock-badge">未获得</span>}
+                <UnitToken kind={tab === 'characters' ? 'character' : 'enemy'} def={d} size={48} />
+                <span className="codex-entry-name">{d.name}</span>
+                <span className="muted small mono">{d.id}</span>
+              </button>
+            );
+          })}
           {list.length === 0 && <div className="empty-hint">暂无数据</div>}
         </div>
         {current && (
@@ -74,6 +79,7 @@ export function CodexPage() {
                 summons={summonMap}
                 choice={db.progress.summonChoice}
                 onChoose={(id) => void chooseSummon(current.id, id)}
+                obtain={`${describeUnlock(unlockOf(current as CharacterDef), db.currency.name)}${isOwned(current as CharacterDef, db.progress) ? '（已拥有）' : '（未获得）'}`}
               />
             ) : (
               <EnemyDetail def={current as EnemyDef} skills={skillMap} summons={summonMap} />
@@ -124,24 +130,32 @@ function Head({ kind, def }: { kind: 'character' | 'enemy'; def: CharacterDef | 
   );
 }
 
-function CharacterDetail({
+/** 角色的数值、技能和召唤物（图鉴、商店共用）；extra 显示在名字下面，obtain = 获得方式 */
+export function CharacterDetail({
   def,
   skills,
   summons,
   choice,
   onChoose,
+  obtain,
+  extra,
 }: {
   def: CharacterDef;
   skills: Map<string, SkillDef>;
   summons: Map<string, SummonDef>;
   choice: Record<string, string>;
-  onChoose: (summonId: string) => void;
+  /** 选择召唤物（不传 = 只显示） */
+  onChoose?: (summonId: string) => void;
+  obtain?: string;
+  extra?: ReactNode;
 }) {
   const healer = def.attackTarget === 'ally' && def.atk < 0;
   return (
     <>
       <Head kind="character" def={def} />
+      {extra}
       <dl className="stat-grid codex-stats">
+        {obtain && <Row k="获得方式" v={obtain} />}
         <Row k="费用" v={def.cost} />
         <Row k="部署位置" v={PLACEMENT[def.placement]} />
         <Row k="生命值" v={def.maxHp} />
@@ -190,7 +204,7 @@ function EnemyDetail({ def, skills, summons }: { def: EnemyDef; skills: Map<stri
         <Row k="攻击范围" v={attacks ? (def.attackRange > 0 ? `${def.attackRange} 格` : '只攻击阻挡者') : '—'} />
         <Row k="击杀奖励" v={def.reward} />
         <Row k="外形" v={`${def.sides} 边形`} />
-        <Row k="无尽模式" v={`分数 ${def.endlessScore} · 难度 ${def.endlessDifficulty} · 出现位列 ${def.endlessRank}`} />
+        <Row k="无尽模式" v={`分数 ${def.endlessScore} · 难度 ${def.endlessDifficulty} · 出现位列 ${def.endlessRank} · 每次 ${def.endlessCount} 个`} />
       </dl>
       {attacks && def.attackRange > 0 && (
         <div className="codex-range">

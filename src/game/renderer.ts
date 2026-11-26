@@ -3,7 +3,7 @@ import { tileInfo, type TileGrid } from '../core/tiles';
 import type { CharacterDef, GridPos } from '../core/types';
 import type { GameEngine } from './engine';
 import { isSummonDef } from '../core/defaults';
-import { SUMMON_RADIUS, UNIT_RADIUS, enemyRadius, type Combatant } from './entities';
+import { HIT_FLASH, HIT_SHAKE, IMAGE_TILES, SUMMON_RADIUS, UNIT_RADIUS, enemyRadius, type Combatant } from './entities';
 import { getIcon } from './icons';
 import { drawCharacterToken, drawEnemyToken, drawHpBar, drawTile, outlineColor, withAlpha } from './shapes';
 
@@ -249,110 +249,130 @@ export class BattleRenderer {
     const sel = view.selectedUid != null ? eng.unitByUid(view.selectedUid) : undefined;
     if (sel) this.drawRange(ctx, vp, sel.x, sel.y, sel.stats.range, sel.def.color);
 
-    // 角色
-    for (const u of eng.units) {
-      const cx = vp.ox + u.x * vp.scale;
-      const cy = vp.oy + u.y * vp.scale;
-      // 召唤物比角色小，中间没有字
-      const summon = isSummonDef(u.def);
-      const r = (summon ? SUMMON_RADIUS : UNIT_RADIUS) * vp.scale * (1 + u.attackAnim * 0.5);
-      if (sel === u) {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      if (u.healFlash > 0) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, u.healFlash * 3) * 0.6;
-        ctx.strokeStyle = '#5dff9d';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 4 + (0.35 - u.healFlash) * 10, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      drawCharacterToken(ctx, u.def, cx, cy, r, { icon: getIcon(u.def.icon), label: summon ? undefined : u.def.name.slice(0, 1), flash: u.flash });
-      if (summon && isSummonDef(u.def) && u.def.invincible) {
-        // 无敌：金色虚线圈
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,214,102,0.9)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      const hpTop = cy - r - Math.max(6, vp.scale * 0.14);
-      drawHpBar(ctx, cx, hpTop, vp.scale * 0.7, u.hp / u.stats.maxHp, '#4cd08a');
-      this.drawStatusMarks(ctx, u, cx, hpTop, vp.scale * 0.7);
-      this.drawSkillBars(ctx, u, cx, cy + r + Math.max(5, vp.scale * 0.1), vp.scale * 0.62, clock);
-      if (u.canBlock && u.stats.blockCount > 0) {
-        const n = u.stats.blockCount;
-        const pr = Math.max(2, vp.scale * 0.045);
-        for (let i = 0; i < n; i++) {
-          const px = cx + (i - (n - 1) / 2) * pr * 3;
-          const py = cy - r - Math.max(6, vp.scale * 0.14) - pr * 2.6;
+    // 角色和敌人：先按位置从上到下画本体（下面的盖住上面的；用图片的单位是 3×3 格的大方形），
+    // 再统一画血条、技能条等标记，这样标记不会被别的单位的大图片挡住
+    const bars: (() => void)[] = [];
+    const order: Combatant[] = [...eng.units, ...eng.enemies].sort((a, b) => a.y - b.y || a.x - b.x);
+    for (const c of order) {
+      // 受击震动：伤害越高震得越厉害
+      const [dx, dy] = shakeOffset(c, eng.time, vp.scale);
+      const cx = vp.ox + c.x * vp.scale + dx;
+      const cy = vp.oy + c.y * vp.scale + dy;
+      const flash = c.flash / HIT_FLASH;
+      if (c.side === 'ally') {
+        const u = c;
+        // 召唤物比角色小，中间没有字
+        const summon = isSummonDef(u.def);
+        const r = (summon ? SUMMON_RADIUS : UNIT_RADIUS) * vp.scale * (1 + u.attackAnim * 0.5);
+        drawCharacterToken(ctx, u.def, cx, cy, r, {
+          icon: getIcon(u.def.icon),
+          label: summon ? undefined : u.def.name.slice(0, 1),
+          flash,
+          imageSize: IMAGE_TILES * vp.scale * (1 + u.attackAnim * 0.25),
+        });
+        if (u.healFlash > 0) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, u.healFlash * 3) * 0.6;
+          ctx.strokeStyle = '#5dff9d';
+          ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.arc(px, py, pr, 0, Math.PI * 2);
-          ctx.fillStyle = i < u.blocked.length ? '#ffcf5a' : 'rgba(255,255,255,0.35)';
-          ctx.fill();
+          ctx.arc(cx, cy, r + 4 + (0.35 - u.healFlash) * 10, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
         }
+        if (sel === u) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if (summon && isSummonDef(u.def) && u.def.invincible) {
+          // 无敌：金色虚线圈
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,214,102,0.9)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        bars.push(() => {
+          const hpTop = cy - r - Math.max(6, vp.scale * 0.14);
+          drawHpBar(ctx, cx, hpTop, vp.scale * 0.7, u.hp / u.stats.maxHp, '#4cd08a', u.hpTrail / u.stats.maxHp, flash);
+          this.drawStatusMarks(ctx, u, cx, hpTop, vp.scale * 0.7);
+          this.drawSkillBars(ctx, u, cx, cy + r + Math.max(5, vp.scale * 0.1), vp.scale * 0.62, clock);
+          if (u.canBlock && u.stats.blockCount > 0) {
+            const n = u.stats.blockCount;
+            const pr = Math.max(2, vp.scale * 0.045);
+            for (let i = 0; i < n; i++) {
+              const px = cx + (i - (n - 1) / 2) * pr * 3;
+              const py = hpTop - pr * 2.6;
+              ctx.beginPath();
+              ctx.arc(px, py, pr, 0, Math.PI * 2);
+              ctx.fillStyle = i < u.blocked.length ? '#ffcf5a' : 'rgba(255,255,255,0.35)';
+              ctx.fill();
+            }
+          }
+        });
+      } else {
+        const e = c;
+        const r = enemyRadius(e.def) * vp.scale * (1 + e.attackAnim * 0.4);
+        const fade = Math.min(1, (eng.time - e.spawnedAt) / 0.25);
+        drawEnemyToken(ctx, e.def, cx, cy, r, e.angle, {
+          icon: getIcon(e.def.icon),
+          flash,
+          alpha: fade,
+          imageSize: IMAGE_TILES * vp.scale * e.def.size * (1 + e.attackAnim * 0.2),
+        });
+        if (e.healFlash > 0) {
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, e.healFlash * 3) * 0.6;
+          ctx.strokeStyle = '#5dff9d';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        if (e.summon?.invincible) {
+          // 无敌的召唤物：金色虚线圈
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,214,102,0.9)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        if (e.waitLeft > 0 && e.waitTotal > 0) {
+          // 正在停留：外圈显示剩余的停留时间
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+          ctx.lineWidth = Math.max(3, vp.scale * 0.07);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + Math.max(4, vp.scale * 0.08), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = '#ffe08a';
+          ctx.lineWidth = Math.max(2, vp.scale * 0.045);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + Math.max(4, vp.scale * 0.08), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (e.waitLeft / e.waitTotal));
+          ctx.stroke();
+          ctx.restore();
+        }
+        bars.push(() => {
+          // 敌人的召唤物：血条更短、是橙色的
+          const barW = vp.scale * (e.summon ? 0.45 : 0.6);
+          const hpTop = cy - r - Math.max(6, vp.scale * 0.13);
+          drawHpBar(ctx, cx, hpTop, barW, e.hp / e.stats.maxHp, e.summon ? ENEMY_SUMMON_HP : '#e5484d', e.hpTrail / e.stats.maxHp, flash);
+          this.drawStatusMarks(ctx, e, cx, hpTop, barW);
+          if (e.skills.length) this.drawSkillBars(ctx, e, cx, hpTop - Math.max(4, vp.scale * 0.08), barW, clock);
+        });
       }
     }
-
-    // 敌人
-    for (const e of eng.enemies) {
-      const cx = vp.ox + e.x * vp.scale;
-      const cy = vp.oy + e.y * vp.scale;
-      const r = enemyRadius(e.def) * vp.scale * (1 + e.attackAnim * 0.4);
-      const fade = Math.min(1, (eng.time - e.spawnedAt) / 0.25);
-      if (e.healFlash > 0) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, e.healFlash * 3) * 0.6;
-        ctx.strokeStyle = '#5dff9d';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      drawEnemyToken(ctx, e.def, cx, cy, r, e.angle, { icon: getIcon(e.def.icon), flash: e.flash, alpha: fade });
-      if (e.summon?.invincible) {
-        // 无敌的召唤物：金色虚线圈
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,214,102,0.9)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      if (e.waitLeft > 0 && e.waitTotal > 0) {
-        // 正在停留：外圈显示剩余的停留时间
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-        ctx.lineWidth = Math.max(3, vp.scale * 0.07);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + Math.max(4, vp.scale * 0.08), 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = '#ffe08a';
-        ctx.lineWidth = Math.max(2, vp.scale * 0.045);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r + Math.max(4, vp.scale * 0.08), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (e.waitLeft / e.waitTotal));
-        ctx.stroke();
-        ctx.restore();
-      }
-      // 敌人的召唤物：血条更短、是橙色的
-      const barW = vp.scale * (e.summon ? 0.45 : 0.6);
-      const hpTop = cy - r - Math.max(6, vp.scale * 0.13);
-      drawHpBar(ctx, cx, hpTop, barW, e.hp / e.stats.maxHp, e.summon ? ENEMY_SUMMON_HP : '#e5484d');
-      this.drawStatusMarks(ctx, e, cx, hpTop, barW);
-      if (e.skills.length) this.drawSkillBars(ctx, e, cx, hpTop - Math.max(4, vp.scale * 0.08), barW, clock);
-    }
+    for (const draw of bars) draw();
 
     // 弹道
     for (const p of eng.projectiles) {
@@ -478,6 +498,7 @@ export class BattleRenderer {
           icon: getIcon(def.icon),
           label: summon ? undefined : def.name.slice(0, 1),
           alpha: 0.6,
+          imageSize: IMAGE_TILES * vp.scale,
         });
         return;
       }
@@ -493,11 +514,17 @@ export class BattleRenderer {
       ctx.save();
       switch (fx.kind) {
         case 'hit':
+          // 命中：白色的光点 + 向外扩散的圆环
+          ctx.globalAlpha = (1 - k) * 0.7;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(cx, cy, vp.scale * 0.16 * (1 - k), 0, Math.PI * 2);
+          ctx.fill();
           ctx.globalAlpha = 1 - k;
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = Math.max(2, vp.scale * 0.05) * (1 - k * 0.5);
           ctx.beginPath();
-          ctx.arc(cx, cy, vp.scale * (0.1 + k * 0.25), 0, Math.PI * 2);
+          ctx.arc(cx, cy, vp.scale * (0.14 + k * 0.38), 0, Math.PI * 2);
           ctx.stroke();
           break;
         case 'slash': {
@@ -597,6 +624,15 @@ export class BattleRenderer {
       ctx.restore();
     }
   }
+}
+
+/** 受击震动的偏移（像素）：震动刚开始最厉害，逐渐停下；伤害越高震得越厉害 */
+function shakeOffset(c: Combatant, time: number, scale: number): [number, number] {
+  if (c.shake <= 0) return [0, 0];
+  const k = c.shake / HIT_SHAKE;
+  const amp = scale * 0.09 * c.shakePower * k;
+  const ph = c.uid * 1.7;
+  return [Math.sin(time * 70 + ph) * amp, Math.cos(time * 53 + ph * 1.3) * amp * 0.55];
 }
 
 /** 画出某个方块周围的射程方块（游戏和编辑器预览共用） */

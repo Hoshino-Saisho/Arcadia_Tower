@@ -90,7 +90,8 @@ export async function saveCharacters(list: CharacterDef[], renames: Map<string, 
     const summonChoice: Record<string, string> = {};
     for (const [k, v] of Object.entries(prog.summonChoice)) summonChoice[renames.get(k) ?? k] = v;
     const squad = prog.squad.map((id) => renames.get(id) ?? id);
-    await saveProgress({ ...prog, loadouts, levels, summonChoice, squad });
+    const owned = prog.owned.map((id) => renames.get(id) ?? id);
+    await saveProgress({ ...prog, loadouts, levels, summonChoice, squad, owned });
     const endless = await loadEndless();
     const avail = endless.map.settings.availableCharacters;
     if (avail.some((id) => renames.has(id))) {
@@ -304,13 +305,21 @@ export async function saveChapters(list: ChapterDef[], renames: Map<string, stri
       await writeJson(levelPath(m.next), lv);
       await b.remove(levelPath(m.tmp));
     }
-    const prog = await loadProgress();
-    prog.cleared = prog.cleared.map((code) => {
+    const renameCode = (code: string) => {
       const p = parseLevelCode(code);
       const to = p && renames.get(p.chapterId);
       return to ? `${to}_${p!.index}` : code;
-    });
+    };
+    const prog = await loadProgress();
+    prog.cleared = prog.cleared.map(renameCode);
     await saveProgress(prog);
+    // 角色的获得条件（通关关卡）和无尽模式的解锁关卡也跟着改名
+    const chars = await loadCharacters();
+    if (chars.some((c) => c.unlock?.level && renameCode(c.unlock.level) !== c.unlock.level)) {
+      await writeJson(FILES.characters, { characters: chars.map((c) => (c.unlock?.level ? { ...c, unlock: { ...c.unlock, level: renameCode(c.unlock.level) } } : c)) });
+    }
+    const endless = await loadEndless();
+    if (endless.unlockAfter && renameCode(endless.unlockAfter) !== endless.unlockAfter) await saveEndless({ ...endless, unlockAfter: renameCode(endless.unlockAfter) });
   }
   await writeJson(FILES.chapters, { chapters: list });
 }

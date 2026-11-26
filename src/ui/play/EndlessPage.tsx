@@ -55,7 +55,7 @@ export function EndlessPage() {
             <li>
               敌人一波一波不断出现（每 {cfg.waveInterval} 秒一波），越往后越多、越强（每波生命 {signed(cfg.hpGrowth)}%、攻击 {signed(cfg.atkGrowth)}%）。
             </li>
-            <li>一开始只会出现难度低的敌人，难度高的敌人在后面的波次出现。</li>
+            <li>一开始只会出现难度低的敌人，难度高的敌人在后面的波次出现；常见的敌人出现得更频繁，一次也会来好几个。</li>
             <li>击败敌人获得分数；基地血量归零或主动「结束挑战」时结算，分数兑换成奖励。</li>
             {rogue.enabled && (
               <li>

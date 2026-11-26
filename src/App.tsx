@@ -9,6 +9,7 @@ import { EndlessPage } from './ui/play/EndlessPage';
 import { GameStage } from './ui/play/GameStage';
 import { HomePage } from './ui/play/HomePage';
 import { LevelSelectPage } from './ui/play/LevelSelectPage';
+import { ShopPage } from './ui/play/ShopPage';
 import { SquadPage } from './ui/play/SquadPage';
 import { navigate, useRoute } from './ui/router';
 import { IS_WEB_PLAY } from './version';
@@ -58,6 +59,7 @@ export function App() {
     else if (sub === 'codex') page = <CodexPage />;
     else if (sub === 'characters') page = <CharactersPage />;
     else if (sub === 'squad') page = <SquadPage />;
+    else if (sub === 'shop') page = <ShopPage />;
     else if (endlessBattle) page = <BattlePage key={'endless' + route.query.toString()} code="" endless test={route.query.get('test') === '1'} />;
     else if (sub === 'endless') page = <EndlessPage />;
     else if (inBattle) page = <BattlePage key={arg + route.query.toString()} code={arg} test={route.query.get('test') === '1'} />;

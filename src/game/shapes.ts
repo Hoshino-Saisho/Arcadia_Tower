@@ -79,36 +79,121 @@ export function polygonPath(ctx: CanvasRenderingContext2D, cx: number, cy: numbe
 }
 
 /**
- * 把图标画进半径 r 的圆形 / 多边形：
- * 缩放 1 = 图片短边刚好等于直径；图片上的中心点 center（宽 / 高比例）对齐到 (cx, cy)。
+ * 图片在方形里的位置（像素）：缩放 1 = 图片短边刚好等于方形的边长；
+ * 图片上的中心点 center（宽 / 高比例）对齐到 (cx, cy)。
  */
-export function drawImageCover(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  cx: number,
-  cy: number,
-  r: number,
-  center?: IconPoint | null,
-  zoom?: number | null,
-) {
-  const w = img.naturalWidth || img.width;
-  const h = img.naturalHeight || img.height;
-  if (!w || !h) return;
-  const s = ((2 * r) / Math.min(w, h)) * (zoom && zoom > 0 ? zoom : 1);
+export function imageBox(img: HTMLImageElement, cx: number, cy: number, side: number, center?: IconPoint | null, zoom?: number | null) {
+  const w = img.naturalWidth || img.width || 1;
+  const h = img.naturalHeight || img.height || 1;
+  const s = (side / Math.min(w, h)) * (zoom && zoom > 0 ? zoom : 1);
   const fx = (center?.x ?? 0.5) * w;
   const fy = (center?.y ?? 0.5) * h;
-  ctx.drawImage(img, cx - fx * s, cy - fy * s, w * s, h * s);
+  return { x: cx - fx * s, y: cy - fy * s, w: w * s, h: h * s };
+}
+
+/** 图片的白色剪影（受击闪白用；按图片缓存，最大 512 像素） */
+const silhouettes = new WeakMap<HTMLImageElement, HTMLCanvasElement | null>();
+function whiteSilhouette(img: HTMLImageElement): HTMLCanvasElement | null {
+  if (silhouettes.has(img)) return silhouettes.get(img) ?? null;
+  let out: HTMLCanvasElement | null = null;
+  try {
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (w && h && typeof document !== 'undefined') {
+      const k = Math.min(1, 512 / Math.max(w, h));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k));
+      c.height = Math.max(1, Math.round(h * k));
+      const g = c.getContext('2d');
+      if (g) {
+        g.drawImage(img, 0, 0, c.width, c.height);
+        g.globalCompositeOperation = 'source-in';
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, 0, c.width, c.height);
+        out = c;
+      }
+    }
+  } catch {
+    out = null;
+  }
+  silhouettes.set(img, out);
+  return out;
+}
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/**
+ * 用图片显示的单位：不裁成圆形，而是以 (cx, cy) 为中心、边长 side 的方形（地图上是 3×3 格）。
+ * 受击时图片的形状整体闪白，外面有一圈白光，并且稍微变大一下。
+ */
+export function drawImageToken(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  def: Pick<CharacterDef, 'iconCenter' | 'iconZoom'>,
+  cx: number,
+  cy: number,
+  side: number,
+  opt: { flash?: number; alpha?: number } = {},
+) {
+  const f = clamp01(opt.flash ?? 0);
+  const alpha = opt.alpha ?? 1;
+  const s = side * (1 + 0.06 * f);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.rect(cx - s / 2, cy - s / 2, s, s);
+  ctx.clip();
+  const b = imageBox(img, cx, cy, s, def.iconCenter, def.iconZoom);
+  const white = f > 0 ? whiteSilhouette(img) : null;
+  if (white) {
+    // 白光：模糊的白色剪影垫在图片下面
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.9 * f;
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = Math.max(6, s * 0.08) * f;
+    ctx.drawImage(white, b.x, b.y, b.w, b.h);
+    ctx.restore();
+  }
+  ctx.drawImage(img, b.x, b.y, b.w, b.h);
+  if (f > 0) {
+    ctx.globalAlpha = alpha * Math.min(1, f * 1.2) * 0.85;
+    if (white) ctx.drawImage(white, b.x, b.y, b.w, b.h);
+    else {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
+    }
+  }
+  ctx.restore();
+}
+
+/** 形状（圆形 / 多边形）受击：整体闪白 + 向外扩散的白光（path 是已经设置好的形状路径） */
+function flashShape(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, f: number, alpha: number) {
+  ctx.globalAlpha = alpha * Math.min(1, f * 1.2) * 0.85;
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  const halo = r * (1.15 + 0.6 * (1 - f));
+  const g = ctx.createRadialGradient(cx, cy, r * 0.85, cx, cy, halo);
+  g.addColorStop(0, 'rgba(255,255,255,0.6)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.globalAlpha = alpha * f;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, halo, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 export interface TokenOptions {
   icon?: HTMLImageElement | null;
   /** 在圆形里显示名称首字（没有图标时） */
   label?: string;
+  /** 受击闪白的强度（0~1） */
   flash?: number;
   alpha?: number;
+  /** 有图标时图片方形的边长（像素）：地图上 = 3 格；界面里的小图标 = 图标框的大小。没有设置 = 圆形的直径 */
+  imageSize?: number;
 }
 
-/** 角色：彩色圆形（或图标） */
+/** 角色：彩色圆形，或者图片（3×3 格的方形） */
 export function drawCharacterToken(
   ctx: CanvasRenderingContext2D,
   def: Pick<CharacterDef, 'color' | 'iconCenter' | 'iconZoom'>,
@@ -117,55 +202,46 @@ export function drawCharacterToken(
   r: number,
   opt: TokenOptions = {},
 ) {
+  if (opt.icon) return drawImageToken(ctx, opt.icon, def, cx, cy, opt.imageSize ?? r * 2, opt);
+  const f = clamp01(opt.flash ?? 0);
+  const alpha = opt.alpha ?? 1;
+  const rr = r * (1 + 0.1 * f);
   ctx.save();
-  ctx.globalAlpha = opt.alpha ?? 1;
+  ctx.globalAlpha = alpha;
   // 阴影
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.82, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + rr * 0.82, rr * 0.85, rr * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  if (opt.icon) {
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = shade(def.color, -0.5);
-    ctx.fill();
-    drawImageCover(ctx, opt.icon, cx, cy, r, def.iconCenter, def.iconZoom);
-    ctx.restore();
-  } else {
-    const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.35, r * 0.1, cx, cy, r);
-    g.addColorStop(0, shade(def.color, 0.35));
-    g.addColorStop(1, def.color);
-    ctx.fillStyle = g;
-    ctx.fill();
-  }
-  ctx.lineWidth = Math.max(1.5, r * 0.14);
+  ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+  const g = ctx.createRadialGradient(cx - rr * 0.35, cy - rr * 0.35, rr * 0.1, cx, cy, rr);
+  g.addColorStop(0, shade(def.color, 0.35));
+  g.addColorStop(1, def.color);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, rr * 0.14);
   // 深色的角色用浅色描边，否则在地图上看不清
   ctx.strokeStyle = isDarkColor(def.color) ? 'rgba(235,240,250,0.75)' : shade(def.color, -0.45);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.stroke();
 
-  if (!opt.icon && opt.label) {
+  if (opt.label) {
     ctx.fillStyle = contrastText(def.color);
-    ctx.font = `bold ${Math.round(r * 0.95)}px "PingFang SC","Microsoft YaHei",sans-serif`;
+    ctx.font = `bold ${Math.round(rr * 0.95)}px "PingFang SC","Microsoft YaHei",sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(opt.label, cx, cy + r * 0.04);
+    ctx.fillText(opt.label, cx, cy + rr * 0.04);
   }
-  if (opt.flash && opt.flash > 0) {
-    ctx.globalAlpha = Math.min(1, opt.flash * 6) * 0.6;
-    ctx.fillStyle = '#ffffff';
+  if (f > 0) {
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    flashShape(ctx, cx, cy, rr, f, alpha);
   }
   ctx.restore();
 }
 
-/** 敌人：3~6 边形（或图标），一个顶点朝向前进方向 */
+/** 敌人：3~6 边形（一个顶点朝向前进方向），或者图片（3×3 格的方形，乘以体型） */
 export function drawEnemyToken(
   ctx: CanvasRenderingContext2D,
   def: Pick<EnemyDef, 'color' | 'sides' | 'iconCenter' | 'iconZoom'>,
@@ -175,51 +251,58 @@ export function drawEnemyToken(
   angle: number,
   opt: TokenOptions = {},
 ) {
+  if (opt.icon) return drawImageToken(ctx, opt.icon, def, cx, cy, opt.imageSize ?? r * 2, opt);
+  const f = clamp01(opt.flash ?? 0);
+  const alpha = opt.alpha ?? 1;
+  const rr = r * (1 + 0.1 * f);
   ctx.save();
-  ctx.globalAlpha = opt.alpha ?? 1;
+  ctx.globalAlpha = alpha;
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.85, r * 0.8, r * 0.25, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy + rr * 0.85, rr * 0.8, rr * 0.25, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  if (opt.icon) {
-    // 图标不旋转，保持正向显示
-    polygonPath(ctx, cx, cy, r * 1.08, def.sides, -Math.PI / 2);
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = shade(def.color, -0.5);
-    ctx.fill();
-    drawImageCover(ctx, opt.icon, cx, cy, r, def.iconCenter, def.iconZoom);
-    ctx.restore();
-    polygonPath(ctx, cx, cy, r * 1.08, def.sides, -Math.PI / 2);
-  } else {
-    polygonPath(ctx, cx, cy, r, def.sides, angle);
-    const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
-    g.addColorStop(0, shade(def.color, 0.3));
-    g.addColorStop(1, shade(def.color, -0.15));
-    ctx.fillStyle = g;
-    ctx.fill();
-  }
-  ctx.lineWidth = Math.max(1.5, r * 0.13);
+  polygonPath(ctx, cx, cy, rr, def.sides, angle);
+  const g = ctx.createLinearGradient(cx - rr, cy - rr, cx + rr, cy + rr);
+  g.addColorStop(0, shade(def.color, 0.3));
+  g.addColorStop(1, shade(def.color, -0.15));
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, rr * 0.13);
   ctx.lineJoin = 'round';
   ctx.strokeStyle = isDarkColor(def.color) ? 'rgba(235,240,250,0.75)' : shade(def.color, -0.55);
   ctx.stroke();
 
-  if (opt.flash && opt.flash > 0) {
-    ctx.globalAlpha = Math.min(1, opt.flash * 6) * 0.6;
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
+  if (f > 0) {
+    polygonPath(ctx, cx, cy, rr, def.sides, angle);
+    flashShape(ctx, cx, cy, rr, f, alpha);
   }
   ctx.restore();
 }
 
-export function drawHpBar(ctx: CanvasRenderingContext2D, cx: number, top: number, w: number, ratio: number, color: string) {
+/**
+ * 血条：trail = 白色的延迟血条（受伤前的血量，过一会儿追上当前血量）；flash = 受击时血条外框闪白（0~1）
+ */
+export function drawHpBar(ctx: CanvasRenderingContext2D, cx: number, top: number, w: number, ratio: number, color: string, trail = ratio, flash = 0) {
   const h = Math.max(3, w * 0.12);
   const x = cx - w / 2;
+  const r = clamp01(ratio);
+  const t = Math.max(r, clamp01(trail));
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(x - 1, top - 1, w + 2, h + 2);
+  if (t > r) {
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillRect(x + w * r, top, w * (t - r), h);
+  }
   ctx.fillStyle = color;
-  ctx.fillRect(x, top, w * Math.max(0, Math.min(1, ratio)), h);
+  ctx.fillRect(x, top, w * r, h);
+  if (flash > 0) {
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,255,255,${0.85 * clamp01(flash)})`;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 1.75, top - 1.75, w + 3.5, h + 3.5);
+    ctx.restore();
+  }
 }
 
 /** 绘制一个地图方块（游戏与编辑器共用） */

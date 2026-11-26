@@ -5,6 +5,7 @@ import { formatNumber } from '../../core/stats';
 import { addExp, applyBooks, characterProgress, expTable, expToNext, formatCount, leveledCharacter, usefulBooks } from '../../core/leveling';
 import { loadDatabase, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
 import type { CharacterDef, CurrencyConfig, ProgressData, SkillDef } from '../../core/types';
+import { ownedCharacters } from '../../core/unlock';
 import { SkillCard } from '../common/skillCard';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
@@ -29,7 +30,10 @@ export function CharactersPage() {
   if (!db || !progress) return <div className="page-msg">加载中…</div>;
 
   const cfg = db.currency;
-  const def = db.characters.find((c) => c.id === sel) ?? db.characters[0];
+  // 只有已获得的角色可以升级、设定技能
+  const owned = ownedCharacters(db.characters, progress);
+  const lockedCount = db.characters.length - owned.length;
+  const def = owned.find((c) => c.id === sel) ?? owned[0];
   const skillMap = new Map(db.skills.map((s) => [s.id, s]));
   const summonMap = new Map(db.summons.map((s) => [s.id, s]));
   const loadouts = progress.loadouts;
@@ -87,7 +91,7 @@ export function CharactersPage() {
       </header>
       <div className="codex-body">
         <div className="codex-grid">
-          {db.characters.map((c) => {
+          {owned.map((c) => {
             const eq = resolveLoadout(c, loadouts[c.id]);
             const lv = characterProgress(cfg, progress, c.id).level;
             return (
@@ -101,6 +105,13 @@ export function CharactersPage() {
               </button>
             );
           })}
+          {lockedCount > 0 && (
+            <button className="codex-entry locked-more" onClick={() => navigate('/game/shop')} title="在商店购买，或者达成条件后获得">
+              <span className="locked-more-count">+{lockedCount}</span>
+              <span className="codex-entry-name">未获得的角色</span>
+              <span className="muted small">去商店看看 →</span>
+            </button>
+          )}
         </div>
         {def && (
           <section className="codex-detail">

@@ -22,7 +22,7 @@ export interface GridPos {
   y: number;
 }
 
-/** 图标中心点：图片宽 / 高的比例（0~1），这一点会对齐到圆形 / 多边形的中心 */
+/** 图标中心点：图片宽 / 高的比例（0~1），这一点会对齐到单位的中心（图片显示成 3×3 格的方形） */
 export interface IconPoint {
   x: number;
   y: number;
@@ -145,11 +145,14 @@ export interface CharacterDef {
   name: string;
   /** 无图标时显示为该颜色的圆形 */
   color: string;
-  /** 可选图标：data 目录下的相对路径（如 "icons/C001.png"）或 data URL。设置后优先显示图标 */
+  /**
+   * 可选图标：data 目录下的相对路径（如 "icons/C001.png"）或 data URL。
+   * 设置后显示图片（不再裁成圆形）：地图上是以单位为中心、3×3 格大小的方形
+   */
   icon?: string;
   /** 图标中心点（默认图片正中 0.5 / 0.5） */
   iconCenter?: IconPoint;
-  /** 图标缩放：1 = 短边刚好铺满圆形，>1 放大，<1 缩小（默认 1） */
+  /** 图标缩放：1 = 图片短边刚好铺满 3×3 格的方形，>1 放大，<1 缩小（默认 1） */
   iconZoom?: number;
   placement: PlacementType;
   /** 部署费用（负数 = 部署时获得金钱，撤退时扣回一半） */
@@ -194,7 +197,23 @@ export interface CharacterDef {
   onHit: OnHitEffect | null;
   /** 升级成长（等级上限和升级经验在「货币编辑」中设置） */
   growth: CharacterGrowth;
+  /** 获得方式（开局拥有 / 满足条件后自动获得 / 在商店购买）；召唤物不使用。没有设置 = 开局拥有 */
+  unlock?: CharacterUnlock;
   description?: string;
+}
+
+/** 角色的获得方式：start = 开局拥有；auto = 满足条件后自动获得；shop = 满足条件后可以在商店用游戏外货币购买 */
+export type UnlockMode = 'start' | 'auto' | 'shop';
+
+/** 角色的获得条件（在「角色编辑」中设置）。条件可以同时设置：全部满足才算达成 */
+export interface CharacterUnlock {
+  mode: UnlockMode;
+  /** 需要通关的关卡（关卡编号，例如 "ZH_1"；空 = 不需要） */
+  level: string;
+  /** 需要无尽模式的最高分达到（0 = 不需要） */
+  score: number;
+  /** 商店价格（游戏外货币，mode = shop 时使用） */
+  price: number;
 }
 
 /** 召唤物从召唤者继承的数值（%）：召唤者（按等级）的数值 × 百分比，加到召唤物自己的数值上 */
@@ -297,8 +316,10 @@ export interface EnemyDef {
   endlessScore: number;
   /** 无尽模式：敌人难度，越低越早出现（当前难度 ≥ 敌人难度时才会出现） */
   endlessDifficulty: number;
-  /** 无尽模式：出现位列，越低每组出现的数量越少、组内的出现间隔越短 */
+  /** 无尽模式：出现位列（1 起），越低出现得越频繁：位列 1 的出现机会是位列 2 的 2 倍、位列 3 的 3 倍 */
   endlessRank: number;
+  /** 无尽模式：每次出现时的数量（之后每波按「每波数量增加」变多） */
+  endlessCount: number;
   description?: string;
 }
 
@@ -510,7 +531,7 @@ export interface RogueConfig {
  * 无尽模式（data/endless.json）：
  *  - 地图和路线在无尽模式编辑器里搭建（时间线里的积木 = 额外固定出现的敌人）
  *  - 敌人一波一波自动出现：当前难度 = 起始难度 + (波次 − 1) × 每波增加，只出现难度不超过当前难度的敌人
- *  - 每组敌人的数量和组内间隔由敌人的「出现位列」决定；每波敌人越来越多、越来越强
+ *  - 每组随机选一种敌人：「出现位列」越低越容易被选中；每组的数量 = 敌人的「出现数量」；每波敌人越来越多、越来越强
  *  - 击败敌人获得分数，结束时按兑换比例换成游戏外货币和经验书
  *  - 肉鸽玩法：每隔几波三选一抽牌（见 RogueConfig）
  */
@@ -534,10 +555,8 @@ export interface EndlessConfig {
   groupsPerWave: number;
   /** 每波增加的组数（可以是小数：0.5 = 每 2 波多 1 组） */
   groupsGrowth: number;
-  /** 每组数量 = 出现位列 × 这个值 */
-  countPerRank: number;
-  /** 组内出现间隔 = 出现位列 × 这个值（秒） */
-  intervalPerRank: number;
+  /** 组内出现间隔（秒）：同一组的敌人每隔这么久出现一个 */
+  groupInterval: number;
   /** 每波每组数量增加（%） */
   countGrowth: number;
   /** 每波敌人生命增加（%） */
@@ -580,6 +599,8 @@ export interface ProgressData {
   endlessBest: EndlessRecord | null;
   /** 召唤物选择：角色 ID → 召唤物 ID（固定只能选 1 个，没有选择 = 第一个） */
   summonChoice: Record<string, string>;
-  /** 编队：出战的角色 ID（按顺序，最多 12 个；空 = 前 12 个角色） */
+  /** 编队：出战的角色 ID（按顺序，最多 12 个；空 = 前 12 个已拥有的角色） */
   squad: string[];
+  /** 已获得的角色（商店购买的、满足条件自动获得的）；「开局拥有」的角色不用记录 */
+  owned: string[];
 }

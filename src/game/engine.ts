@@ -9,12 +9,17 @@ import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, RogueCar
 import { attackBehavior, tileOfCombatant } from './attacks';
 import {
   BLOCK_DISTANCE,
+  HIT_FLASH,
+  HIT_SHAKE,
+  TRAIL_HOLD,
   UNIT_RADIUS,
   dist,
   enemyBaseStats,
   enemyRadius,
+  hitFxInit,
   tileCenter,
   unitBaseStats,
+  updateHpTrail,
   type Combatant,
   type Effect,
   type Enemy,
@@ -387,6 +392,7 @@ export class GameEngine {
       flash: 0,
       healFlash: 0,
       attackAnim: 0,
+      ...hitFxInit(base.maxHp),
       spawnedAt: this.time,
       hpScale: ev.hpScale,
       atkScale: ev.atkScale,
@@ -526,6 +532,7 @@ export class GameEngine {
       flash: 0,
       healFlash: 0,
       attackAnim: 0,
+      ...hitFxInit(base.maxHp),
       spawnedAt: this.time,
       patrol: owner.patrol,
       hpScale: owner.hpScale,
@@ -750,6 +757,7 @@ export class GameEngine {
       c.flash = Math.max(0, c.flash - dt);
       c.healFlash = Math.max(0, c.healFlash - dt);
       c.attackAnim = Math.max(0, c.attackAnim - dt);
+      updateHpTrail(c, dt);
       if (c.hp <= 0) continue;
       if (c.side === 'enemy' && !c.def.canAttack) continue;
       const type = attackTypeOf(c.def);
@@ -903,8 +911,17 @@ export class GameEngine {
     if (target.side === 'ally' ? isSummonDef(target.def) && target.def.invincible : target.summon?.invincible) return 0;
     const dmg = computeDamage(atk, type, target.stats.def, target.stats.res);
     if (this.training && target.side === 'enemy') this.damageDealt += Math.min(dmg, target.hp);
+    if (dmg > 0) {
+      // 受击效果：更大更长的闪白、震动（伤害越高越厉害）、白色的延迟血条
+      const power = Math.min(1, 0.45 + (dmg / Math.max(1, target.stats.maxHp)) * 4);
+      target.shakePower = target.shake > 0 ? Math.max(target.shakePower, power) : power;
+      target.flash = HIT_FLASH;
+      target.shake = HIT_SHAKE;
+      // 一连串攻击的第一下开始计时：延迟血条停一会儿再追（连续受击时不会一直停住）
+      if (target.hpTrail - target.hp < 1e-6) target.trailHold = TRAIL_HOLD;
+      target.hpTrail = Math.max(target.hpTrail, target.hp);
+    }
     target.hp -= dmg;
-    target.flash = 0.12;
     return dmg;
   }
 
@@ -1256,6 +1273,7 @@ export class GameEngine {
       flash: 0,
       healFlash: 0,
       attackAnim: 0,
+      ...hitFxInit(base.maxHp),
       facing: 0,
     });
     // 肉鸽：全体角色的属性加成

@@ -25,6 +25,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":60,"atk":4,"def":2,"res":0},
+      "unlock": {"mode":"start","level":"","score":0,"price":0},
       "description": "你到底守护了什么？"
     },
     {
@@ -51,7 +52,8 @@
       "skills": ["S022"],
       "skillSlots": 1,
       "onHit": null,
-      "growth": {"maxHp":50,"atk":3,"def":3,"res":0}
+      "growth": {"maxHp":50,"atk":3,"def":3,"res":0},
+      "unlock": {"mode":"shop","level":"","score":0,"price":10000}
     },
     {
       "id": "C002",
@@ -78,6 +80,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":30,"atk":3,"def":0,"res":0},
+      "unlock": {"mode":"start","level":"","score":0,"price":0},
       "description": "站得高了，看的就更远了，所以你们都去给我当前排！"
     },
     {
@@ -105,6 +108,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":25,"atk":8,"def":0,"res":0},
+      "unlock": {"mode":"shop","level":"","score":0,"price":25000},
       "description": "我是法师"
     },
     {
@@ -132,6 +136,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":130,"atk":3,"def":12,"res":0},
+      "unlock": {"mode":"auto","level":"ZH_1","score":0,"price":0},
       "description": "我很硬，只要你不是法师"
     },
     {
@@ -159,6 +164,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":40,"atk":3,"def":1,"res":0},
+      "unlock": {"mode":"start","level":"","score":0,"price":0},
       "description": "人如其名"
     },
     {
@@ -186,6 +192,7 @@
       "skillSlots": 1,
       "onHit": {"modifiers":[{"stat":"maxHp","mode":"percent","value":30}],"duration":2},
       "growth": {"maxHp":30,"atk":4,"def":2,"res":2},
+      "unlock": {"mode":"start","level":"","score":0,"price":0},
       "description": "治疗队友（真的不是攻击）"
     },
     {
@@ -213,6 +220,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":33,"atk":4,"def":0,"res":0},
+      "unlock": {"mode":"shop","level":"","score":0,"price":18000},
       "description": "爆！"
     },
     {
@@ -240,6 +248,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":50,"atk":5,"def":3,"res":3},
+      "unlock": {"mode":"shop","level":"","score":0,"price":20000},
       "description": "真伤：无视物抗和法抗，专门对付盾卫这类高防御敌人"
     },
     {
@@ -277,6 +286,7 @@
         "duration": 10
       },
       "growth": {"maxHp":50,"atk":-2,"def":3,"res":3},
+      "unlock": {"mode":"shop","level":"","score":0,"price":20000},
       "description": "等我100级就让你看看什么叫做神辅助！"
     },
     {
@@ -304,6 +314,7 @@
       "skillSlots": 2,
       "onHit": {"modifiers":[{"stat":"speed","mode":"percent","value":-30}],"duration":2},
       "growth": {"maxHp":50,"atk":3,"def":3,"res":0},
+      "unlock": {"mode":"shop","level":"","score":0,"price":35000},
       "description": "吸特乐"
     },
     {
@@ -331,6 +342,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":50,"atk":0,"def":3,"res":0},
+      "unlock": {"mode":"shop","level":"","score":0,"price":10000},
       "description": "暴力榨金"
     },
     {
@@ -358,6 +370,7 @@
       "skillSlots": 1,
       "onHit": null,
       "growth": {"maxHp":250,"atk":10,"def":3,"res":0},
+      "unlock": {"mode":"shop","level":"","score":0,"price":50000},
       "description": "你知道的"
     }
   ]

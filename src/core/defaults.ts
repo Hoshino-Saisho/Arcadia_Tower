@@ -9,6 +9,7 @@ import type {
   CharacterDef,
   CharacterGrowth,
   CharacterProgress,
+  CharacterUnlock,
   CurrencyConfig,
   EndlessConfig,
   EndlessRecord,
@@ -36,6 +37,7 @@ import type {
   StatModifier,
   SummonDef,
   SummonSide,
+  UnlockMode,
 } from './types';
 
 export const LEVEL_FORMAT_VERSION = 2;
@@ -86,8 +88,16 @@ export function newCharacter(id: string): CharacterDef {
     skillSlots: 1,
     onHit: null,
     growth: defaultGrowth(base),
+    // 新角色默认在商店购买（开局拥有的角色在角色编辑里改成「开局拥有」）
+    unlock: { mode: 'shop', level: '', score: 0, price: NEW_CHARACTER_PRICE },
   };
 }
+
+/** 新角色的默认商店价格 */
+export const NEW_CHARACTER_PRICE = 10000;
+
+/** 没有设置获得方式的角色 = 开局拥有（旧数据也是这样） */
+export const START_UNLOCK: CharacterUnlock = { mode: 'start', level: '', score: 0, price: 0 };
 
 /** 新的召唤物：比角色弱一些，继承召唤者 50% 的攻击力 */
 export function newSummon(id: string, side: SummonSide = 'ally'): SummonDef {
@@ -99,6 +109,8 @@ export function newSummon(id: string, side: SummonSide = 'ally'): SummonDef {
     cost: 3,
     ...base,
     growth: { maxHp: 0, atk: 0, def: 0, res: 0 },
+    // 召唤物不需要获得
+    unlock: undefined,
     maxDeploy: 2,
     side,
     inherit: { maxHp: 0, atk: 50, def: 0, res: 0 },
@@ -164,6 +176,7 @@ export function summonAsEnemy(s: SummonDef): EnemyDef {
     endlessScore: s.endlessScore,
     endlessDifficulty: 0,
     endlessRank: 1,
+    endlessCount: 1,
     description: s.description,
   };
 }
@@ -203,16 +216,20 @@ export function newEnemy(id: string): EnemyDef {
   };
 }
 
+type EndlessEnemyFields = Pick<EnemyDef, 'endlessScore' | 'endlessDifficulty' | 'endlessRank' | 'endlessCount'>;
+
 /**
  * 无尽模式的默认值（没有设置时按生命值估算，可以在敌人编辑中修改）：
- * 分数 = 生命 / 100；难度 = 生命 / 500（至少 1）；出现位列 = 1000 / 生命（1~5，越弱的敌人一组越多）
+ * 分数 = 生命 / 100；难度 = 生命 / 500（至少 1）；
+ * 出现位列 = 生命 / 500（1~5，越强的敌人越少见）；出现数量 = 1000 / 生命（1~5，越弱的敌人一次来得越多）
  */
-export function endlessDefaults(maxHp: number): Pick<EnemyDef, 'endlessScore' | 'endlessDifficulty' | 'endlessRank'> {
+export function endlessDefaults(maxHp: number): EndlessEnemyFields {
   const hp = Math.max(1, maxHp);
   return {
     endlessScore: Math.max(1, Math.round(hp / 100)),
     endlessDifficulty: Math.max(1, Math.round(hp / 500)),
-    endlessRank: Math.min(5, Math.max(1, Math.round(1000 / hp))),
+    endlessRank: Math.min(5, Math.max(1, Math.round(hp / 500))),
+    endlessCount: Math.min(5, Math.max(1, Math.round(1000 / hp))),
   };
 }
 
@@ -360,13 +377,13 @@ export function iconPoint(v: any): IconPoint | undefined {
   const p = { x: Math.round(Math.min(1, Math.max(0, v.x)) * 1000) / 1000, y: Math.round(Math.min(1, Math.max(0, v.y)) * 1000) / 1000 };
   return p.x === 0.5 && p.y === 0.5 ? undefined : p;
 }
-/** 图标缩放：0.5~4；默认值 1 不保存 */
+/** 图标缩放：0.25~4；默认值 1 不保存 */
 export function iconZoom(v: unknown): number | undefined {
   if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
   const z = Math.round(Math.min(ICON_ZOOM_MAX, Math.max(ICON_ZOOM_MIN, v)) * 100) / 100;
   return z === 1 ? undefined : z;
 }
-export const ICON_ZOOM_MIN = 0.5;
+export const ICON_ZOOM_MIN = 0.25;
 export const ICON_ZOOM_MAX = 4;
 const strList = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []);
 const pos = (v: any): GridPos | null =>
@@ -426,7 +443,20 @@ export function normalizeCharacter(raw: any): CharacterDef {
       atk: num(raw?.atk, d.atk, -99999, 99999),
       def: num(raw?.def, d.def, -99999, 99999),
     }),
+    unlock: normalizeUnlock(raw?.unlock),
     description: typeof raw?.description === 'string' ? raw.description : undefined,
+  };
+}
+
+/** 获得方式：没有设置 = 开局拥有 */
+export function normalizeUnlock(raw: any): CharacterUnlock {
+  if (!raw || typeof raw !== 'object') return { ...START_UNLOCK };
+  const mode: UnlockMode = raw.mode === 'auto' || raw.mode === 'shop' ? raw.mode : 'start';
+  return {
+    mode,
+    level: str(raw.level, '').trim(),
+    score: Math.round(num(raw.score, 0, 0, 1e12)),
+    price: Math.round(num(raw.price, 0, 0, 1e12)),
   };
 }
 
@@ -453,6 +483,7 @@ export function normalizeSummon(raw: any): SummonDef {
   const interval = num(raw?.summonInterval, d.summonInterval, 0, 3600);
   return {
     ...c,
+    unlock: undefined,
     attackType: raw?.attackType === 'area' || raw?.attackType === 'none' ? raw.attackType : 'basic',
     summonAttack: 'basic',
     summons: [],
@@ -514,13 +545,17 @@ export function normalizeEnemy(raw: any): EnemyDef {
   };
 }
 
-/** 敌人的无尽模式数值：没有设置的按生命值估算 */
-function normalizeEndlessEnemy(raw: any, maxHp: number): Pick<EnemyDef, 'endlessScore' | 'endlessDifficulty' | 'endlessRank'> {
+/**
+ * 敌人的无尽模式数值：没有设置的按生命值估算。
+ * 以前每组的数量 = 出现位列 ×「每位列数量」（默认 1）：没有「出现数量」的旧数据用原来的出现位列，每组的数量不变
+ */
+function normalizeEndlessEnemy(raw: any, maxHp: number): EndlessEnemyFields {
   const d = endlessDefaults(maxHp);
   return {
     endlessScore: num(raw?.endlessScore, d.endlessScore, -99999, 99999),
     endlessDifficulty: num(raw?.endlessDifficulty, d.endlessDifficulty, -99999, 99999),
     endlessRank: Math.round(num(raw?.endlessRank, d.endlessRank, 1, 50)),
+    endlessCount: Math.round(num(raw?.endlessCount ?? raw?.endlessRank, d.endlessCount, 1, 99)),
   };
 }
 
@@ -729,6 +764,7 @@ export function normalizeProgress(raw: any): ProgressData {
     squad: strList(raw?.squad)
       .filter((id, i, arr) => arr.indexOf(id) === i)
       .slice(0, 12),
+    owned: strList(raw?.owned).filter((id, i, arr) => arr.indexOf(id) === i),
   };
 }
 
@@ -758,8 +794,7 @@ export function newEndlessConfig(): EndlessConfig {
     difficultyPerWave: 0.5,
     groupsPerWave: 2,
     groupsGrowth: 0.5,
-    countPerRank: 1,
-    intervalPerRank: 0.6,
+    groupInterval: 0.8,
     countGrowth: 5,
     hpGrowth: 8,
     atkGrowth: 3,
@@ -878,8 +913,8 @@ export function normalizeEndless(raw: any): EndlessConfig {
     difficultyPerWave: num(raw.difficultyPerWave, d.difficultyPerWave, -1000, 1000),
     groupsPerWave: num(raw.groupsPerWave, d.groupsPerWave, 1, 50),
     groupsGrowth: num(raw.groupsGrowth, d.groupsGrowth, -50, 50),
-    countPerRank: num(raw.countPerRank, d.countPerRank, 0.1, 50),
-    intervalPerRank: num(raw.intervalPerRank, d.intervalPerRank, 0.05, 60),
+    // 以前是「每位列间隔」（组内间隔 = 位列 × 该值），现在所有敌人用同一个组内间隔
+    groupInterval: num(raw.groupInterval ?? raw.intervalPerRank, d.groupInterval, 0.05, 60),
     countGrowth: num(raw.countGrowth, d.countGrowth, -100, 1000),
     hpGrowth: num(raw.hpGrowth, d.hpGrowth, -100, 1000),
     atkGrowth: num(raw.atkGrowth, d.atkGrowth, -100, 1000),

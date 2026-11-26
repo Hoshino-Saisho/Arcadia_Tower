@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, type KeyboardEvent, type PointerEvent } from 
 import { ICON_ZOOM_MAX, ICON_ZOOM_MIN, iconPoint, iconZoom } from '../../core/defaults';
 import type { CharacterDef, EnemyDef, IconPoint } from '../../core/types';
 import { useIcon } from '../../game/icons';
-import { drawCharacterToken, drawEnemyToken } from '../../game/shapes';
+import { IMAGE_TILES } from '../../game/entities';
+import { drawImageToken } from '../../game/shapes';
 
 const BOX = 220;
 
@@ -12,8 +13,8 @@ export interface IconFramePatch {
 }
 
 /**
- * 图标取景：在图片上点击 / 拖动选择中心点（对齐到圆形 / 多边形的中心），滑块调整缩放。
- * 图片上圈出的区域就是游戏中显示的部分，右侧是实时预览（和游戏中的绘制完全一致）。
+ * 图标取景：在图片上点击 / 拖动选择中心点（对齐到单位的中心），滑块调整缩放。
+ * 图片上框出的方形就是游戏中显示的部分（地图上是以单位为中心、3×3 格大小的方形），右侧是实时预览。
  */
 export function IconFramer({
   kind,
@@ -37,17 +38,11 @@ export function IconFramer({
   const fit = Math.min(BOX / w, BOX / h);
   const center = def.iconCenter ?? { x: 0.5, y: 0.5 };
   const zoom = def.iconZoom ?? 1;
-  // 游戏中显示的区域（图片像素）：圆形半径 = 短边 / 2 / 缩放；敌人的多边形比圆形大 8%
-  const radius = (Math.min(w, h) / 2 / zoom) * (kind === 'enemy' ? 1.08 : 1);
+  // 游戏中显示的区域（图片像素）：方形，半边长 = 短边 / 2 / 缩放
+  const radius = Math.min(w, h) / 2 / zoom;
   const cx = center.x * w;
   const cy = center.y * h;
-  const sides = kind === 'enemy' ? (def as EnemyDef).sides : 0;
-  const shapePoints = sides
-    ? Array.from({ length: sides }, (_, i) => {
-        const a = -Math.PI / 2 + (i / sides) * Math.PI * 2;
-        return `${cx + Math.cos(a) * radius},${cy + Math.sin(a) * radius}`;
-      }).join(' ')
-    : '';
+  const size = kind === 'enemy' ? (def as EnemyDef).size : 1;
   const stroke = Math.max(w, h) / 160;
 
   const setCenter = (p: IconPoint) => onChange({ iconCenter: iconPoint(p) });
@@ -88,15 +83,18 @@ export function IconFramer({
             <defs>
               <mask id={maskId}>
                 <rect x={0} y={0} width={w} height={h} fill="white" />
-                {sides ? <polygon points={shapePoints} fill="black" /> : <circle cx={cx} cy={cy} r={radius} fill="black" />}
+                <rect x={cx - radius} y={cy - radius} width={radius * 2} height={radius * 2} fill="black" />
               </mask>
             </defs>
             <rect x={0} y={0} width={w} height={h} fill="rgba(8,10,16,0.62)" mask={`url(#${maskId})`} />
-            {sides ? (
-              <polygon points={shapePoints} fill="none" stroke="#ffffff" strokeWidth={stroke} strokeLinejoin="round" />
-            ) : (
-              <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#ffffff" strokeWidth={stroke} />
-            )}
+            <rect x={cx - radius} y={cy - radius} width={radius * 2} height={radius * 2} fill="none" stroke="#ffffff" strokeWidth={stroke} />
+            {/* 3×3 格的分隔线：中间一格是单位所在的方块 */}
+            {[1, 2].map((i) => (
+              <g key={i} stroke="rgba(255,255,255,0.35)" strokeWidth={stroke * 0.6}>
+                <line x1={cx - radius + (radius * 2 * i) / IMAGE_TILES} y1={cy - radius} x2={cx - radius + (radius * 2 * i) / IMAGE_TILES} y2={cy + radius} />
+                <line x1={cx - radius} y1={cy - radius + (radius * 2 * i) / IMAGE_TILES} x2={cx + radius} y2={cy - radius + (radius * 2 * i) / IMAGE_TILES} />
+              </g>
+            ))}
             <line x1={cx - radius * 0.22} y1={cy} x2={cx + radius * 0.22} y2={cy} stroke="#ffd166" strokeWidth={stroke} />
             <line x1={cx} y1={cy - radius * 0.22} x2={cx} y2={cy + radius * 0.22} stroke="#ffd166" strokeWidth={stroke} />
             <circle cx={cx} cy={cy} r={stroke * 2.2} fill="#ffd166" />
@@ -133,7 +131,10 @@ export function IconFramer({
           </button>
         </div>
       </div>
-      <div className="muted small">在图片上点击或拖动，选择对齐到{kind === 'enemy' ? '多边形' : '圆形'}中心的位置；框内就是游戏中显示的部分。</div>
+      <div className="muted small">
+        在图片上点击或拖动，选择对齐到单位中心的位置；方框内就是游戏中显示的部分：地图上是 {IMAGE_TILES}×{IMAGE_TILES} 格的方形
+        {kind === 'enemy' && size !== 1 ? `（乘以体型 ${size}）` : ''}，中间一格是单位所在的方块。图片不会被裁成圆形，透明的部分会露出地图。
+      </div>
     </div>
   );
 }
@@ -150,8 +151,7 @@ function FramedToken({ kind, def, img, size }: { kind: 'character' | 'enemy'; de
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
-    if (kind === 'character') drawCharacterToken(ctx, def as CharacterDef, size / 2, size / 2 - size * 0.04, size * 0.38, { icon: img });
-    else drawEnemyToken(ctx, def as EnemyDef, size / 2, size / 2, size * 0.36, -Math.PI / 2, { icon: img });
+    drawImageToken(ctx, img, def, size / 2, size / 2, size);
   }, [kind, def, img, size]);
   return <canvas ref={ref} className="unit-token" style={{ width: size, height: size }} title={size > 50 ? '预览' : '游戏中的大小'} />;
 }

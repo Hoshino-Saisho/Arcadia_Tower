@@ -5,6 +5,7 @@ import { levelCode } from '../../core/ids';
 import { endlessRewards, grantRewards, levelMap, rollRewards, type RolledRewards } from '../../core/leveling';
 import { ProgressView } from '../../core/progress';
 import { battleRoster } from '../../core/squad';
+import { claimUnlocks, ownedCharacters } from '../../core/unlock';
 import { DAMAGE_TYPE_LABEL, formatModifier, formatNumber } from '../../core/stats';
 import { loadDatabase, loadLevel, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
 import type { CharacterDef, GridPos, LevelDef } from '../../core/types';
@@ -89,7 +90,10 @@ interface PendingDeploy {
   tile: GridPos;
 }
 
-/** 部署卡片上的一次按下：轻点 = 选中；拖动 = 拖到地图上部署；手机上横向滑动 = 滚动卡片栏 */
+/** 指针事件里用到的部分（React 的指针事件和原生的 PointerEvent 都可以） */
+type PointerLike = { pointerId: number; clientX: number; clientY: number };
+
+/** 部署卡片上的一次按下：轻点 = 选中；拖动 = 拖到地图上部署；手机上卡片栏放不下时横向滑动 = 滚动卡片栏 */
 interface CardPress {
   id: string;
   pointerId: number;
@@ -134,8 +138,9 @@ export function Battle({
 }) {
   const engineRef = useRef<GameEngine>(null as unknown as GameEngine);
   if (!engineRef.current) {
-    // 出战的角色 = 玩家的编队（最多 12 个）∩ 本关可用角色；角色试用时是全部角色
-    const team = training ? { roster: db.characters, fallback: false } : battleRoster(db.characters, db.progress.squad, level.settings.availableCharacters);
+    // 出战的角色 = 玩家的编队（最多 12 个，只有已拥有的角色）∩ 本关可用角色；角色试用时是全部角色，编辑器试玩时不检查是否拥有
+    const owned = test ? db.characters : ownedCharacters(db.characters, db.progress);
+    const team = training ? { roster: db.characters, fallback: false } : battleRoster(owned, db.progress.squad, level.settings.availableCharacters, db.characters);
     engineRef.current = new GameEngine(level, team.roster, db.enemies, {
       skills: db.skills,
       loadouts: training ? {} : db.progress.loadouts,
@@ -174,6 +179,8 @@ export function Battle({
   const [newBest, setNewBest] = useState(false);
   /** 肉鸽：显示持有的牌 */
   const [showHand, setShowHand] = useState(false);
+  /** 这次结算后新获得的角色（通关指定关卡 / 无尽模式分数达到后自动获得） */
+  const [gained, setGained] = useState<CharacterDef[]>([]);
 
   const ctrl = useRef<Ctrl>({ started, paused, speed, placing, pending, selectedUid, showRoutes });
   ctrl.current = { started, paused, speed, placing, pending, selectedUid, showRoutes };
@@ -252,6 +259,7 @@ export function Battle({
       if (test) return;
       (async () => {
         let progress = await loadProgress();
+        const before = progress;
         const r = endlessRewards(db.endless, db.currency, engine.score);
         progress = grantRewards(progress, r);
         const best = progress.endlessBest;
@@ -259,8 +267,11 @@ export function Battle({
           progress = { ...progress, endlessBest: { score: engine.score, wave: engine.wave, time: Math.round(engine.time * 10) / 10 } };
           setNewBest(true);
         }
-        await saveProgress(progress);
+        // 无尽模式分数达到后自动获得的角色
+        const unlocked = claimUnlocks(db.characters, before, progress);
+        await saveProgress(unlocked.progress);
         setRewards(r);
+        setGained(unlocked.gained);
       })().catch((err) => toast(`保存失败：${String(err)}`, 'error'));
       return;
     }
@@ -269,12 +280,17 @@ export function Battle({
     (async () => {
       let progress = await loadProgress();
       if (!test) {
+        const before = progress;
         // 通关奖励：每次通关都获得固定的货币，经验书按概率掉落
         const r = rollRewards(db.currency, level.settings);
         progress = grantRewards(progress, r);
         if (!progress.cleared.includes(level.id)) progress.cleared = [...progress.cleared, level.id];
+        // 通关这一关后自动获得的角色
+        const unlocked = claimUnlocks(db.characters, before, progress);
+        progress = unlocked.progress;
         await saveProgress(progress);
         setRewards(r);
+        setGained(unlocked.gained);
       }
       const view = new ProgressView(db.chapters, progress, db.levelCodes);
       const n = view.nextLevel(level.chapterId, level.index);
@@ -468,7 +484,23 @@ export function Battle({
     }
     pressRef.current = { id, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, lastX: e.clientX, lastY: e.clientY, touch: e.pointerType !== 'mouse', summon, mode: 'press' };
   };
-  const onCardPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+  /** 拿起卡片开始拖动；不能部署时（金钱不够、冷却中……）提示原因 */
+  const startDrag = (d: CardPress): boolean => {
+    const def = engine.deployable(d.id);
+    const st = def ? engine.cardState(def) : { ok: false, reason: '本关不能使用该角色' };
+    if (!st.ok) {
+      toast(st.reason!, 'error', 1500);
+      d.mode = 'blocked';
+      return false;
+    }
+    d.mode = 'drag';
+    setPending(null);
+    setSelectedUid(null);
+    setPlacing(d.id);
+    setDragging(d.id);
+    return true;
+  };
+  const onCardPointerMove = (e: PointerLike) => {
     const d = pressRef.current;
     if (!d || d.pointerId !== e.pointerId || d.mode === 'blocked') return;
     const bar = barRef.current;
@@ -476,22 +508,15 @@ export function Battle({
       if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 8) return;
       const a = bar ? clientToLocal(bar, d.sx, d.sy) : { x: d.sx, y: d.sy };
       const b = bar ? clientToLocal(bar, e.clientX, e.clientY) : { x: e.clientX, y: e.clientY };
-      if (d.touch && !d.summon && bar && bar.scrollWidth > bar.clientWidth + 1 && Math.abs(b.x - a.x) > Math.abs(b.y - a.y)) {
+      // 手机上卡片栏放不下时：明显的横向滑动 = 滚动卡片栏；其他方向（往地图上拖）= 直接拿起卡片
+      if (d.touch && !d.summon && bar && bar.scrollWidth > bar.clientWidth + 1 && Math.abs(b.x - a.x) > Math.abs(b.y - a.y) * 1.5) {
         d.mode = 'pan';
-      } else {
-        const def = engine.deployable(d.id);
-        const st = def ? engine.cardState(def) : { ok: false, reason: '本关不能使用该角色' };
-        if (!st.ok) {
-          toast(st.reason!, 'error', 1500);
-          d.mode = 'blocked';
-          return;
-        }
-        d.mode = 'drag';
-        setPending(null);
-        setSelectedUid(null);
-        setPlacing(d.id);
-        setDragging(d.id);
-      }
+      } else if (!startDrag(d)) return;
+    } else if (d.mode === 'pan' && bar) {
+      // 滚动卡片栏时手指往上拖出卡片栏 = 改成拖动部署
+      const a = clientToLocal(bar, d.sx, d.sy);
+      const b = clientToLocal(bar, e.clientX, e.clientY);
+      if (a.y - b.y > 32 && !startDrag(d)) return;
     }
     if (d.mode === 'pan' && bar) {
       const a = clientToLocal(bar, d.lastX, d.lastY);
@@ -504,7 +529,7 @@ export function Battle({
     d.lastX = e.clientX;
     d.lastY = e.clientY;
   };
-  const onCardPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const onCardPointerUp = (e: PointerLike) => {
     const d = pressRef.current;
     if (!d || d.pointerId !== e.pointerId) return;
     pressRef.current = null;
@@ -521,15 +546,39 @@ export function Battle({
       }
     }
   };
-  const onCardPointerCancel = () => {
+  const onCardPointerCancel = (e: PointerLike) => {
     const d = pressRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
     pressRef.current = null;
-    if (d?.mode === 'drag') {
+    if (d.mode === 'drag') {
       endDrag();
       setPlacing(null);
       hoverRef.current = null;
     }
   };
+  // 拖动中的移动 / 松开在 window 上监听：手指离开卡片、卡片重新渲染或失去指针捕获时也不会中断
+  const cardHandlers = useRef({ move: onCardPointerMove, up: onCardPointerUp, cancel: onCardPointerCancel });
+  cardHandlers.current = { move: onCardPointerMove, up: onCardPointerUp, cancel: onCardPointerCancel };
+  useEffect(() => {
+    const move = (e: PointerEvent) => cardHandlers.current.move(e);
+    const up = (e: PointerEvent) => cardHandlers.current.up(e);
+    const cancel = (e: PointerEvent) => cardHandlers.current.cancel(e);
+    // 手机（尤其是 iPhone 的 Safari 不完全支持 touch-action: none）：按着卡片移动时阻止页面滚动 / 回弹，
+    // 否则浏览器会接管手势并取消拖动，只能先点卡片再点地图
+    const touchMove = (e: TouchEvent) => {
+      if (pressRef.current && e.cancelable) e.preventDefault();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('touchmove', touchMove, { passive: false });
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('touchmove', touchMove);
+    };
+  }, []);
 
   const selected = selectedUid != null ? engine.unitByUid(selectedUid) : undefined;
   const rate = engine.moneyPerSecond * 60;
@@ -552,11 +601,7 @@ export function Battle({
         key={(summon ? 'summon:' : '') + def.id}
         className={`deploy-card${summon ? ' summon-card' : ''}${placing === def.id ? ' selected' : ''}${dragging === def.id ? ' dragging' : ''}${st.ok ? '' : ' disabled'}${cooling ? ' cooling' : ''}`}
         onPointerDown={(e) => onCardPointerDown(e, def.id, summon)}
-        onPointerMove={onCardPointerMove}
-        onPointerUp={onCardPointerUp}
-        onPointerCancel={onCardPointerCancel}
-        onLostPointerCapture={() => pressRef.current && onCardPointerCancel()}
-        // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
+        // 鼠标 / 触摸由指针事件处理（按下在卡片上，移动 / 松开在 window 上）；这里只处理键盘（Enter / 空格）触发的点击
         onClick={(e) => e.detail === 0 && selectCard(def.id)}
         onContextMenu={(e) => e.preventDefault()}
         title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${cdTime > 0 ? ` · 部署冷却 ${formatNumber(Math.round(cdTime * 10) / 10)} 秒${Math.abs(cdTime - def.deployCooldown) > 1e-6 ? `（原本 ${def.deployCooldown} 秒）` : ''}` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
@@ -817,6 +862,7 @@ export function Battle({
                     {rewards ? <RewardList cfg={db.currency} rewards={rewards} /> : <span className="muted small">结算中…</span>}
                   </div>
                 )}
+                <GainedCharacters list={gained} />
                 <div className="row gap-s center">
                   <button className="btn btn-primary" onClick={onRestart}>
                     再来一次
@@ -859,6 +905,7 @@ export function Battle({
                   {rewards ? <RewardList cfg={db.currency} rewards={rewards} /> : <span className="muted small">结算中…</span>}
                 </div>
               )}
+              <GainedCharacters list={gained} />
               {engine.status === 'won' && test && <div className="muted small">试玩模式：不计进度，没有通关奖励</div>}
               {engine.status === 'won' && !test && <div className="muted small">进度已保存</div>}
               <div className="row gap-s center">
@@ -1099,6 +1146,25 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
       <button className="btn btn-danger" onClick={onRetreat}>
         撤退（{retreatRefund(unit.cost) >= 0 ? `返还 ${retreatRefund(unit.cost)}` : `扣除 ${-retreatRefund(unit.cost)}`}）
       </button>
+    </div>
+  );
+}
+
+/** 结算时新获得的角色（通关指定关卡 / 无尽模式分数达到后自动获得） */
+function GainedCharacters({ list }: { list: CharacterDef[] }) {
+  if (!list.length) return null;
+  return (
+    <div className="result-gained">
+      <div className="result-rewards-title">获得新角色</div>
+      <div className="gained-list">
+        {list.map((c) => (
+          <span key={c.id} className="gained-chip">
+            <UnitToken kind="character" def={c} size={34} />
+            {c.name}
+          </span>
+        ))}
+      </div>
+      <div className="muted small">已经可以在编队中使用</div>
     </div>
   );
 }

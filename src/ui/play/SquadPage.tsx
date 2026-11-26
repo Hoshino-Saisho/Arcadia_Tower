@@ -3,13 +3,14 @@ import { characterProgress } from '../../core/leveling';
 import { SQUAD_SIZE, resolveSquad } from '../../core/squad';
 import { loadDatabase, loadProgress, saveProgress, type GameDatabase } from '../../core/storage/repository';
 import type { CharacterDef } from '../../core/types';
+import { describeUnlock, isOwned, ownedCharacters, unlockOf } from '../../core/unlock';
 import { toast } from '../common/toast';
 import { UnitToken } from '../common/tokens';
 import { navigate } from '../router';
 
 /**
- * 编队：选择出战的角色（最多 12 个，按顺序显示在战斗的部署栏里）。
- * 关卡只允许部分角色时，出战的是编队里本关可用的角色。
+ * 编队：选择出战的角色（最多 12 个，按顺序显示在战斗的部署栏里）。只有已获得的角色可以出战，
+ * 没有获得的角色显示在最后（灰色），点击查看获得方式。关卡只允许部分角色时，出战的是编队里本关可用的角色。
  */
 export function SquadPage() {
   const [db, setDb] = useState<GameDatabase | null>(null);
@@ -18,13 +19,15 @@ export function SquadPage() {
   useEffect(() => {
     loadDatabase().then((d) => {
       setDb(d);
-      setSquad(resolveSquad(d.characters, d.progress.squad).map((c) => c.id));
+      setSquad(resolveSquad(ownedCharacters(d.characters, d.progress), d.progress.squad).map((c) => c.id));
     }, (e) => setError(String(e)));
   }, []);
   if (error) return <div className="page-msg">读取数据失败：{error}</div>;
   if (!db) return <div className="page-msg">加载中…</div>;
 
   const byId = new Map(db.characters.map((c) => [c.id, c]));
+  const owned = ownedCharacters(db.characters, db.progress);
+  const locked = db.characters.filter((c) => !isOwned(c, db.progress));
   const persist = (next: string[]) => {
     setSquad(next);
     void (async () => {
@@ -38,6 +41,8 @@ export function SquadPage() {
   };
   const toggle = (id: string) => {
     if (squad.includes(id)) return persist(squad.filter((x) => x !== id));
+    const c = byId.get(id);
+    if (c && !isOwned(c, db.progress)) return toast(`还没有获得${c.name}：${describeUnlock(unlockOf(c), db.currency.name)}`, 'info', 2600);
     if (squad.length >= SQUAD_SIZE) return toast(`编队最多 ${SQUAD_SIZE} 个角色，请先移除一个`, 'error', 1800);
     persist([...squad, id]);
   };
@@ -63,7 +68,7 @@ export function SquadPage() {
           </span>
         </h2>
         <div className="row gap-s">
-          <button className="btn btn-s btn-ghost" onClick={() => persist(db.characters.slice(0, SQUAD_SIZE).map((c) => c.id))} title={`使用前 ${SQUAD_SIZE} 个角色`}>
+          <button className="btn btn-s btn-ghost" onClick={() => persist(owned.slice(0, SQUAD_SIZE).map((c) => c.id))} title={`使用前 ${SQUAD_SIZE} 个已拥有的角色`}>
             默认编队
           </button>
           <button className="btn btn-s btn-ghost" disabled={!squad.length} onClick={() => persist([])}>
@@ -102,11 +107,12 @@ export function SquadPage() {
       </div>
       <div className="muted small squad-hint">
         点击下方的角色加入 / 移出编队；顺序就是战斗中部署栏的顺序（数字键 1~9、0 选择）。关卡只允许部分角色时，出战的是编队里本关可用的角色。
-        {!squad.length && ` 编队为空时使用前 ${SQUAD_SIZE} 个角色。`}
+        {!squad.length && ` 编队为空时使用前 ${SQUAD_SIZE} 个已拥有的角色。`}
+        {locked.length > 0 && ' 灰色的角色还没有获得，可以在商店购买或达成条件后获得。'}
       </div>
 
       <div className="codex-grid squad-grid">
-        {db.characters.map((c) => {
+        {owned.map((c) => {
           const at = squad.indexOf(c.id);
           return (
             <button key={c.id} className={`codex-entry${at >= 0 ? ' active' : ''}`} onClick={() => toggle(c.id)}>
@@ -121,7 +127,22 @@ export function SquadPage() {
             </button>
           );
         })}
+        {locked.map((c) => (
+          <button key={c.id} className="codex-entry locked" onClick={() => toggle(c.id)} title={describeUnlock(unlockOf(c), db.currency.name)}>
+            <span className="lock-badge">未获得</span>
+            <UnitToken kind="character" def={c} size={48} dim />
+            <span className="codex-entry-name">{c.name}</span>
+            <span className="muted small">{unlockOf(c).mode === 'shop' ? '在商店购买' : '达成条件后获得'}</span>
+          </button>
+        ))}
       </div>
+      {locked.some((c) => unlockOf(c).mode === 'shop') && (
+        <div className="row center squad-shop-link">
+          <button className="btn btn-s" onClick={() => navigate('/game/shop')}>
+            去商店看看 →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
