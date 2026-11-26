@@ -134,5 +134,125 @@
     {"bookId":"B001","score":20,"amount":1},
     {"bookId":"B002","score":100,"amount":1},
     {"bookId":"B003","score":500,"amount":1}
-  ]
+  ],
+  "rogue": {
+    "enabled": true,
+    "everyWaves": 5,
+    "startDraw": false,
+    "choices": 3,
+    "maxHeld": 9,
+    "cards": [
+      {
+        "id": "K001",
+        "name": "锋刃",
+        "color": "#e8590c",
+        "weight": 10,
+        "copies": 2,
+        "effects": [{"kind":"ally","stat":"atk","mode":"percent","value":3,"perLevel":2}],
+        "description": "全体角色的攻击力提升"
+      },
+      {
+        "id": "K002",
+        "name": "坚壁",
+        "color": "#4c6ef5",
+        "weight": 10,
+        "copies": 3,
+        "effects": [
+          {"kind":"ally","stat":"maxHp","mode":"percent","value":5,"perLevel":5},
+          {"kind":"ally","stat":"def","mode":"add","value":10,"perLevel":5}
+        ],
+        "description": "全体角色更耐打"
+      },
+      {
+        "id": "K003",
+        "name": "疾风",
+        "color": "#20c997",
+        "weight": 8,
+        "copies": 3,
+        "effects": [{"kind":"ally","stat":"attackInterval","mode":"percent","value":-4,"perLevel":-2}],
+        "description": "全体角色攻击更快"
+      },
+      {
+        "id": "K004",
+        "name": "鹰眼",
+        "color": "#fab005",
+        "weight": 4,
+        "copies": 3,
+        "effects": [{"kind":"ally","stat":"range","mode":"add","value":0.5,"perLevel":0.5}],
+        "description": "稀有：全体角色的攻击范围变大（每 2 张升 1 级）"
+      },
+      {
+        "id": "K005",
+        "name": "泥沼",
+        "color": "#8d6e63",
+        "weight": 8,
+        "copies": 3,
+        "effects": [{"kind":"enemy","stat":"speed","mode":"percent","value":-10,"perLevel":-4}],
+        "description": "全体敌人走得更慢"
+      },
+      {
+        "id": "K006",
+        "name": "破甲",
+        "color": "#ae3ec9",
+        "weight": 8,
+        "copies": 4,
+        "effects": [
+          {"kind":"enemy","stat":"def","mode":"percent","value":-15,"perLevel":-8},
+          {"kind":"enemy","stat":"res","mode":"add","value":-5,"perLevel":-5}
+        ],
+        "description": "全体敌人的物抗和法抗降低"
+      },
+      {
+        "id": "K007",
+        "name": "军饷",
+        "color": "#f59f00",
+        "weight": 10,
+        "copies": 1,
+        "effects": [
+          {"kind":"moneyRate","stat":"atk","mode":"add","value":20,"perLevel":15},
+          {"kind":"money","stat":"atk","mode":"add","value":10,"perLevel":5}
+        ],
+        "description": "每分钟多一些金钱，选择时立即获得一笔"
+      },
+      {
+        "id": "K008",
+        "name": "赏金",
+        "color": "#d9480f",
+        "weight": 6,
+        "copies": 1,
+        "effects": [{"kind":"killMoney","stat":"atk","mode":"add","value":1,"perLevel":1}],
+        "description": "击败敌人额外获得金钱"
+      },
+      {
+        "id": "K009",
+        "name": "精简",
+        "color": "#15aabf",
+        "weight": 3,
+        "copies": 2,
+        "effects": [{"kind":"cost","stat":"atk","mode":"add","value":-1,"perLevel":-1}],
+        "description": "稀有：全体部署费用降低（每 2 张升 1 级）"
+      },
+      {
+        "id": "K010",
+        "name": "城防",
+        "color": "#82c91e",
+        "weight": 6,
+        "copies": 3,
+        "effects": [{"kind":"baseHp","stat":"atk","mode":"add","value":2,"perLevel":1}],
+        "description": "基地血量增加"
+      },
+      {
+        "id": "K011",
+        "name": "野心",
+        "color": "#e64980",
+        "weight": 5,
+        "copies": 1,
+        "effects": [
+          {"kind":"score","stat":"atk","mode":"add","value":30,"perLevel":20},
+          {"kind":"enemy","stat":"atk","mode":"percent","value":10,"perLevel":10}
+        ],
+        "description": "有代价：分数大幅增加，但敌人的攻击力也提高"
+      }
+    ]
+  }
 }
