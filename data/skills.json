@@ -24,7 +24,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -55,7 +56,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -82,7 +84,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": -5,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -109,7 +112,8 @@
           "regenMode": "flat",
           "damageType": "true",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "damage",
@@ -123,7 +127,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "modify",
@@ -137,7 +142,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -165,7 +171,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "regen",
@@ -179,7 +186,8 @@
           "regenMode": "flat",
           "damageType": "true",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -207,7 +215,8 @@
           "regenMode": "atk",
           "damageType": "true",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -234,7 +243,8 @@
           "regenMode": "flat",
           "damageType": "true",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "damage",
@@ -248,7 +258,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -275,7 +286,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -303,7 +315,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "modify",
@@ -317,7 +330,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -345,7 +359,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "money",
@@ -359,7 +374,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 30,
-          "moneyRate": 1
+          "moneyRate": 1,
+          "cooldown": 0
         }
       ]
     },
@@ -386,7 +402,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 1,
-          "moneyRate": 1
+          "moneyRate": 1,
+          "cooldown": 0
         }
       ]
     },
@@ -413,7 +430,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -443,7 +461,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -470,7 +489,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         },
         {
           "kind": "damage",
@@ -484,7 +504,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -511,7 +532,8 @@
           "regenMode": "flat",
           "damageType": "magic",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -543,7 +565,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -559,32 +582,19 @@
       "duration": 15,
       "effects": [
         {
-          "kind": "modify",
-          "target": "allies",
-          "scope": "range",
-          "radius": 2,
-          "maxTargets": -1,
-          "modifiers": [{"stat":"atk","mode":"percent","value":20}],
-          "duration": 0,
-          "amount": 0,
-          "regenMode": "flat",
-          "damageType": "physical",
-          "money": 0,
-          "moneyRate": 0
-        },
-        {
-          "kind": "modify",
+          "kind": "cooldown",
           "target": "self",
           "scope": "range",
           "radius": 0,
           "maxTargets": -1,
-          "modifiers": [{"stat":"def","mode":"percent","value":30}],
+          "modifiers": [],
           "duration": 0,
           "amount": 0,
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 1
         }
       ]
     },
@@ -611,7 +621,8 @@
           "regenMode": "flat",
           "damageType": "true",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -638,7 +649,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -666,7 +678,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -693,7 +706,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -721,7 +735,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     },
@@ -749,7 +764,8 @@
           "regenMode": "flat",
           "damageType": "physical",
           "money": 0,
-          "moneyRate": 0
+          "moneyRate": 0,
+          "cooldown": 0
         }
       ]
     }
