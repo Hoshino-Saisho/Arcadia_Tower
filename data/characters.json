@@ -357,7 +357,7 @@
       "skills": ["S018"],
       "skillSlots": 1,
       "onHit": null,
-      "growth": {"maxHp":50,"atk":3,"def":3,"res":0},
+      "growth": {"maxHp":250,"atk":5,"def":3,"res":0},
       "description": "你知道的"
     }
   ]
