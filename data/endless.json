@@ -138,7 +138,7 @@
   "rogue": {
     "enabled": true,
     "everyWaves": 5,
-    "startDraw": false,
+    "startDraw": true,
     "choices": 3,
     "maxHeld": 9,
     "cards": [
