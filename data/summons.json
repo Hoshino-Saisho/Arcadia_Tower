@@ -49,7 +49,7 @@
       "placement": "ground",
       "cost": 3,
       "maxHp": 300,
-      "atk": 300,
+      "atk": 400,
       "def": 30,
       "res": 100,
       "damageType": "true",
