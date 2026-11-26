@@ -71,6 +71,8 @@ export interface Unit extends CombatantBase {
   canBlock: boolean;
   /** 当前阻挡的敌人 uid */
   blocked: number[];
+  /** 部署时付的费用（撤退时按它返还；肉鸽的牌可以改变费用） */
+  cost: number;
   deployedAt: number;
   /** 最近一次攻击的朝向（弧度） */
   facing: number;

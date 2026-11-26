@@ -3752,3 +3752,323 @@ select.input {
 .game-stage.active .squad-slot {
   min-height: 96px;
 }
+
+/* ---------- 无尽模式 · 肉鸽抽牌 ---------- */
+.badge-up {
+  background: #4a3711;
+  color: #ffd27a;
+}
+.card-cost.cheaper {
+  background: #0f3a2a;
+  color: #6ff0b0;
+}
+.card-cost.pricier {
+  background: #4a1a1c;
+  color: #ff9a9e;
+}
+button.hud-stat {
+  cursor: pointer;
+  color: inherit;
+}
+.hud-stat.rogue .hud-icon {
+  color: #c3a6ff;
+}
+.hud-stat.rogue.active,
+button.hud-stat:hover {
+  border-color: var(--border-2);
+  background: var(--panel-3);
+}
+.rogue-overlay {
+  z-index: 20;
+  background: rgba(5, 8, 12, 0.72);
+}
+.rogue-draw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px 16px;
+  max-width: 96%;
+  max-height: 96%;
+  overflow: auto;
+}
+.rogue-draw-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.rogue-draw-cards {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.rogue-draw-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rogue-card {
+  --card-color: #7c9cff;
+  position: relative;
+  width: 208px;
+  min-height: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  border: 2px solid color-mix(in srgb, var(--card-color) 70%, #000);
+  background: linear-gradient(170deg, color-mix(in srgb, var(--card-color) 22%, var(--panel)) 0%, var(--panel) 55%);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+}
+.rogue-card.pickable {
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s,
+    border-color 0.12s;
+  animation: rogue-in 0.25s ease-out both;
+}
+.rogue-card.pickable:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.rogue-card.pickable:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.rogue-card.pickable:hover,
+.rogue-card.pickable:focus-visible {
+  transform: translateY(-6px);
+  border-color: var(--card-color);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.55), 0 0 0 3px color-mix(in srgb, var(--card-color) 35%, transparent);
+  outline: none;
+}
+@keyframes rogue-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+}
+.rogue-card.compact {
+  width: 100%;
+  min-height: 0;
+  gap: 6px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.rogue-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rogue-card-key {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border-2);
+  font-size: 12px;
+  color: var(--muted);
+}
+.rogue-card-name {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.rogue-card.compact .rogue-card-name {
+  font-size: 15px;
+}
+.rogue-card-lv {
+  font-size: 12px;
+  color: var(--muted);
+}
+.rogue-card-badge {
+  margin-left: auto;
+}
+.rogue-card-effects {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+.rogue-card.compact .rogue-card-effects {
+  gap: 3px;
+}
+.rogue-card-effect {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+.rogue-card.compact .rogue-card-effect {
+  font-size: 12px;
+}
+.rogue-effect-label {
+  color: #c6cfdd;
+}
+.rogue-effect-value {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rogue-effect-value.up {
+  color: #ffd27a;
+}
+.rogue-effect-value s {
+  color: var(--muted);
+  font-weight: 400;
+}
+.rogue-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rogue-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+.rogue-pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: rgba(0, 0, 0, 0.35);
+}
+.rogue-card-desc {
+  line-height: 1.45;
+}
+.rogue-hand {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 5;
+  width: 260px;
+  max-height: calc(100% - 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(20, 26, 37, 0.95);
+  border: 1px solid var(--border-2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.rogue-hand-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+}
+/* 手机舞台（960×540）：牌矮一点，三张放得下 */
+.game-stage.active .rogue-card:not(.compact) {
+  min-height: 0;
+}
+.game-stage.active .rogue-draw {
+  gap: 10px;
+  padding: 10px;
+}
+.endless-deck {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 24px;
+}
+.endless-deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+  text-align: left;
+}
+/* 无尽模式编辑器 · 牌组 */
+.rogue-deck-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.rogue-deck-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--panel);
+  cursor: pointer;
+  min-width: 0;
+}
+.rogue-deck-row:hover {
+  border-color: var(--border);
+}
+.rogue-deck-row.active {
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.rogue-deck-row.off {
+  opacity: 0.55;
+}
+.rogue-deck-name {
+  white-space: nowrap;
+}
+.rogue-deck-sum {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rogue-level-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.rogue-level-table {
+  border-collapse: separate;
+  border-spacing: 4px 4px;
+}
+.rogue-level-table th {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 0 2px;
+}
+.rogue-level-table td.center {
+  text-align: center;
+}
+.rogue-level-table .copies-row td {
+  background: rgba(242, 181, 68, 0.06);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.rogue-effect-pick {
+  display: flex;
+  gap: 4px;
+  min-width: 300px;
+}
+.rogue-effect-pick select {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+.rogue-deck-preview {
+  overflow: auto;
+  padding: 12px;
+}
+.rogue-deck-preview .rogue-card:not(.compact) {
+  align-self: center;
+}

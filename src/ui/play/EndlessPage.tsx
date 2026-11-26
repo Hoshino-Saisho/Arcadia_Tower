@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { formatCount } from '../../core/leveling';
 import { loadDatabase, type GameDatabase } from '../../core/storage/repository';
 import { TileGrid } from '../../core/tiles';
+import { RogueCardFace } from '../common/rogueCard';
 import { BookChip, CurrencyBadge, Wallet } from '../common/wallet';
 import { navigate } from '../router';
 
@@ -20,6 +21,9 @@ export function EndlessPage() {
   const best = db.progress.endlessBest;
   const locked = !!cfg.unlockAfter && !db.progress.cleared.includes(cfg.unlockAfter);
   const grid = TileGrid.fromLevel(cfg.map);
+  const rogue = cfg.rogue;
+  // 权重为 0 的牌不会被抽到，不显示
+  const deck = rogue.cards.filter((c) => c.weight > 0);
   const ready = grid.find('spawn').length > 0 && grid.find('base').length > 0;
 
   return (
@@ -53,6 +57,13 @@ export function EndlessPage() {
             </li>
             <li>一开始只会出现难度低的敌人，难度高的敌人在后面的波次出现。</li>
             <li>击败敌人获得分数；基地血量归零或主动「结束挑战」时结算，分数兑换成奖励。</li>
+            {rogue.enabled && (
+              <li>
+                <span className="accent">❖ 抽牌</span>：{rogue.startDraw ? '开局和' : ''}每 {rogue.everyWaves} 波开始时暂停，从随机抽到的 {rogue.choices} 张牌里选 1 张。
+                再次选择已经持有的牌会积累升级进度，凑够数量就升级
+                {rogue.maxHeld > 0 ? `；最多持有 ${rogue.maxHeld} 种不同的牌，满了以后只会抽到已经持有的牌` : ''}。
+              </li>
+            )}
           </ul>
           <div className="endless-rates">
             <span className="muted small">分数兑换</span>
@@ -75,6 +86,16 @@ export function EndlessPage() {
           </button>
           {locked && <div className="muted">通关 {cfg.unlockAfter} 后解锁</div>}
           {!ready && <div className="field-error">无尽模式的地图还没有搭建好（需要敌人出现点和基地）</div>}
+          {rogue.enabled && deck.length > 0 && (
+            <div className="endless-deck">
+              <div className="muted small">❖ 牌组（{deck.length} 种，显示 Lv.1 的效果）</div>
+              <div className="endless-deck-grid">
+                {deck.map((c) => (
+                  <RogueCardFace key={c.id} card={c} level={1} compact />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

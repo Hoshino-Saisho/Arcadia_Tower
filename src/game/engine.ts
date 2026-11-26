@@ -1,10 +1,11 @@
 import { LEAK_DAMAGE, isSummonDef, resolveLoadout, retreatRefund, summonAsEnemy, summonsOfSide } from '../core/defaults';
 import { planWave } from '../core/endless';
+import { drawOffer, emptyBonus, gainCard, rogueBonus, valueAt, type HeldCard, type RogueBonus } from '../core/rogue';
 import { leveledCharacter } from '../core/leveling';
 import { tileInRange, tileOf } from '../core/range';
 import { applyModifiers, computeDamage, isBuff } from '../core/stats';
 import { TileGrid } from '../core/tiles';
-import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, SkillDamageType, SkillDef, SkillEffect, StatModifier, SummonDef } from '../core/types';
+import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, RogueCard, RogueConfig, SkillDamageType, SkillDef, SkillEffect, StatModifier, SummonDef } from '../core/types';
 import { attackBehavior, tileOfCombatant } from './attacks';
 import {
   BLOCK_DISTANCE,
@@ -76,6 +77,22 @@ export interface TrainingOptions {
   respawnDelay?: number;
 }
 
+/** 肉鸽：正在等待玩家选择的牌（选择前战斗暂停） */
+export interface RogueOffer {
+  cards: string[];
+  /** 抽牌时的波次（0 = 开局） */
+  wave: number;
+}
+
+/** 肉鸽：最近一次选择的结果（界面提示用） */
+export interface RoguePick {
+  id: string;
+  level: number;
+  copies: number;
+  isNew: boolean;
+  leveled: boolean;
+}
+
 /** 卡片状态：能否部署；冷却中时附带剩余时间 */
 export interface CardState {
   ok: boolean;
@@ -112,10 +129,15 @@ export class GameEngine {
   readonly endless: EndlessConfig | null;
   /** 角色试用设置（普通关卡为 null） */
   readonly training: TrainingOptions | null;
+  /** 肉鸽：抽牌规则和牌组（不是无尽模式 / 没有开启 = null） */
+  readonly rogue: RogueConfig | null;
+  /** 肉鸽：牌 ID → 牌 */
+  readonly rogueCards: Map<string, RogueCard>;
 
   time = 0;
   hp: number;
-  readonly maxHp: number;
+  /** 基地血量上限（肉鸽的牌可以改变） */
+  maxHp: number;
   money: number;
   status: GameStatus = 'running';
   killed = 0;
@@ -129,6 +151,15 @@ export class GameEngine {
   score = 0;
   nextWaveAt = Infinity;
   finishedByPlayer = false;
+  /** 肉鸽：持有的牌（按获得顺序）、正在等待选择的牌、持有的牌带来的加成 */
+  held: HeldCard[] = [];
+  offer: RogueOffer | null = null;
+  bonus: RogueBonus = emptyBonus();
+  /** 肉鸽：因为没有可以抽的牌而跳过的抽牌次数；最近一次选择的结果 */
+  skippedDraws = 0;
+  lastPick: RoguePick | null = null;
+  /** 肉鸽：还没有处理的抽牌次数（同时到了好几次时依次抽） */
+  private drawsQueued = 0;
   /** 角色试用：敌人停止移动；伤害 / 治疗统计（从 meterStart 开始计算） */
   frozen = false;
   damageDealt = 0;
@@ -168,6 +199,8 @@ export class GameEngine {
     this.loadouts = opts.loadouts ?? {};
     this.endless = opts.endless ?? null;
     this.training = opts.training && opts.training.path.length >= 2 ? opts.training : null;
+    this.rogue = this.endless?.rogue.enabled ? this.endless.rogue : null;
+    this.rogueCards = new Map((this.rogue?.cards ?? []).map((c) => [c.id, c]));
     this.rng = opts.rng ?? Math.random;
     const sched = buildSchedule(level, this.grid, this.enemyDefs, !!this.endless);
     this.schedule = sched.events;
@@ -184,6 +217,8 @@ export class GameEngine {
       if (!this.enemyDefs.size) this.warnings.push('还没有任何敌人');
     }
     if (this.training) this.spawnTraining();
+    // 肉鸽：开局先抽一次牌（第 1 波之前）
+    if (this.rogue?.startDraw) this.queueDraw();
     // 攻击方式是「召唤」但没有可以召唤的召唤物：部署后不会出现召唤物
     for (const c of this.roster) {
       if (c.attackType === 'summon' && !this.chosenSummon(c)) this.warnings.push(`「${c.name}」的攻击方式是召唤，但还没有设置召唤物（在角色编辑中添加），部署后不会出现召唤物`);
@@ -228,8 +263,10 @@ export class GameEngine {
     return Math.max(1, Math.floor(this.levels[charId] ?? 1));
   }
 
+  /** 每秒金钱变化：关卡的自动回复 + 肉鸽的牌（每分钟金钱） */
   get moneyPerSecond(): number {
-    return this.level.settings.autoMoney ? this.level.settings.moneyPerMinute / 60 : 0;
+    const s = this.level.settings;
+    return ((s.autoMoney ? s.moneyPerMinute : 0) + this.bonus.moneyRate) / 60;
   }
 
   /* ================= 主循环 ================= */
@@ -239,6 +276,8 @@ export class GameEngine {
       this.updateEffects(dt);
       return;
     }
+    // 肉鸽：等待玩家选择牌时战斗暂停
+    if (this.offer) return;
     this.time += dt;
     // 每分钟回复可以是负数（金钱随时间减少，最少为 0）
     if (this.moneyPerSecond) this.changeMoney(this.moneyPerSecond * dt);
@@ -278,6 +317,8 @@ export class GameEngine {
       const start = this.nextWaveAt;
       this.wave++;
       this.nextWaveAt += cfg.waveInterval;
+      // 肉鸽：第 N、2N、3N… 波开始时抽牌
+      if (this.rogue && this.wave % this.rogue.everyWaves === 0) this.queueDraw();
       if (!this.lineRoutes.length) continue;
       const plan = planWave(cfg, [...this.enemyDefs.values()], this.lineRoutes.length, this.wave, this.rng);
       for (const g of plan.groups) {
@@ -346,6 +387,8 @@ export class GameEngine {
       hpScale: ev.hpScale,
       atkScale: ev.atkScale,
     };
+    // 肉鸽：全体敌人的属性加成
+    if (this.bonus.enemy.length) this.refreshStats(e);
     // 召唤者：每种召唤物在出现后「首次召唤」秒第一次召唤
     const calls = this.enemySummonsOf(def);
     if (calls.length) e.summonTimers = calls.map((m) => ({ id: m.id, next: this.time + m.summonFirst }));
@@ -358,6 +401,65 @@ export class GameEngine {
     this.addEffect({ kind: 'spawn', x: e.x, y: e.y, duration: 0.45, color: def.color });
     // 出现点本身就是基地的极端情况
     if (ev.path.length === 1) this.leak(e);
+  }
+
+  /* ================= 肉鸽：抽牌 / 选择 / 加成 ================= */
+
+  /** 安排一次抽牌（正在选择时排在后面） */
+  private queueDraw() {
+    this.drawsQueued++;
+    if (!this.offer) this.nextOffer();
+  }
+
+  /** 抽出下一次要选择的牌；没有可以抽的牌（全部满级 / 持有的种类已满并且都满级）时跳过 */
+  private nextOffer() {
+    while (!this.offer && this.drawsQueued > 0 && this.rogue) {
+      this.drawsQueued--;
+      const cards = drawOffer(this.rogue, this.held, this.rng);
+      if (cards.length) this.offer = { cards, wave: this.wave };
+      else this.skippedDraws++;
+    }
+  }
+
+  /** 选择一张抽到的牌（null = 跳过），返回错误原因或 null；之后战斗继续（还有排着的抽牌时接着抽） */
+  pickCard(id: string | null): string | null {
+    const offer = this.offer;
+    if (!offer || this.status !== 'running') return '现在没有可以选择的牌';
+    if (id != null && !offer.cards.includes(id)) return '只能选择抽到的牌';
+    this.offer = null;
+    this.lastPick = null;
+    if (id != null) this.gainCard(id);
+    this.nextOffer();
+    return null;
+  }
+
+  private gainCard(id: string) {
+    const card = this.rogueCards.get(id);
+    if (!card) return;
+    const res = gainCard(this.held, card);
+    this.held = res.held;
+    this.lastPick = { id, level: res.level, copies: res.copies, isNew: res.isNew, leveled: res.leveled };
+    // 立即获得金钱：每次选择这张牌都结算（按选择后的等级）
+    for (const e of card.effects) if (e.kind === 'money') this.changeMoney(valueAt(e, res.level));
+    this.applyBonus();
+  }
+
+  /** 重新计算持有的牌的加成：基地血量的变化立即生效，全体角色 / 敌人的属性立即重算 */
+  private applyBonus() {
+    const prevHp = Math.round(this.bonus.baseHp);
+    this.bonus = rogueBonus(this.rogueCards, this.held);
+    const dHp = Math.round(this.bonus.baseHp) - prevHp;
+    if (dHp) {
+      this.maxHp = Math.max(1, this.maxHp + dHp);
+      // 血量上限减少时不会因此直接输掉：最少留 1 点
+      this.hp = Math.min(this.maxHp, Math.max(this.hp > 0 ? 1 : 0, this.hp + dHp));
+    }
+    for (const c of this.allCombatants()) this.refreshStats(c);
+  }
+
+  /** 部署费用（肉鸽的牌可以改变） */
+  costOf(def: CharacterDef): number {
+    return def.cost + this.bonus.cost;
   }
 
   /** 敌人召唤：每种召唤物按自己的召唤间隔召唤（每个召唤者同时存在的数量不超过上限） */
@@ -427,6 +529,7 @@ export class GameEngine {
       summonerUid: owner.uid,
       summon: m,
     };
+    if (this.bonus.enemy.length) this.refreshStats(e);
     this.enemies.push(e);
     this.addEffect({ kind: 'spawn', x: e.x, y: e.y, duration: 0.45, color: def.color });
   }
@@ -489,7 +592,11 @@ export class GameEngine {
    */
   private refreshStats(c: Combatant, sync = true) {
     const prevMax = c.stats.maxHp;
-    c.stats = c.statuses.length ? applyModifiers(c.base, c.statuses.map((s) => s.modifiers)) : { ...c.base };
+    const lists = c.statuses.map((s) => s.modifiers);
+    // 肉鸽：持有的牌给全体角色 / 全体敌人的属性加成
+    const extra = c.side === 'ally' ? this.bonus.ally : this.bonus.enemy;
+    if (extra.length) lists.push(extra);
+    c.stats = lists.length ? applyModifiers(c.base, lists) : { ...c.base };
     const delta = c.stats.maxHp - prevMax;
     if (sync && c.hp > 0 && Math.abs(delta) > 1e-9) c.hp = Math.max(Math.min(1, c.hp), c.hp + delta);
     if (c.hp > c.stats.maxHp) c.hp = c.stats.maxHp;
@@ -716,9 +823,11 @@ export class GameEngine {
             this.killed++;
             if (this.training) this.respawnAt = this.time + (this.training.respawnDelay ?? 1.5);
           }
-          if (this.endless) this.score += e.def.endlessScore;
-          // 击杀奖励可以是负数（击败时扣除金钱）
-          if (e.def.reward) this.moneyText({ x: e.x - 0.2, y: e.y + 0.2 }, this.changeMoney(e.def.reward));
+          // 分数可以被肉鸽的牌加成（%）
+          if (this.endless) this.score += e.def.endlessScore * (1 + this.bonus.score / 100);
+          // 击杀奖励可以是负数（击败时扣除金钱）；肉鸽的牌可以增加每个敌人的奖励
+          const reward = e.def.reward + this.bonus.killMoney;
+          if (reward) this.moneyText({ x: e.x - 0.2, y: e.y + 0.2 }, this.changeMoney(reward));
           this.addEffect({ kind: 'death', x: e.x, y: e.y, duration: 0.4, color: e.def.color, size: enemyRadius(e.def) });
         }
       }
@@ -1024,7 +1133,7 @@ export class GameEngine {
     if (isSummonDef(def) && !this.summonersOf(def.id).length) return { ok: false, reason: '召唤者不在场', cooldown };
     if (def.maxDeploy > 0 && this.deployedCount(def.id) >= def.maxDeploy) return { ok: false, reason: '已达部署上限', cooldown };
     if (cooldown > 1e-9) return { ok: false, reason: `部署冷却中（还需 ${Math.ceil(cooldown - 1e-6)} 秒）`, cooldown };
-    if (Math.floor(this.money + 1e-9) < def.cost) return { ok: false, reason: '金钱不足', cooldown };
+    if (Math.floor(this.money + 1e-9) < this.costOf(def)) return { ok: false, reason: '金钱不足', cooldown };
     return { ok: true, cooldown };
   }
 
@@ -1051,7 +1160,8 @@ export class GameEngine {
     const err = this.checkDeploy(def, tile);
     if (err) return err;
     // 费用可以是负数：部署时获得金钱
-    this.changeMoney(-def.cost);
+    const cost = this.costOf(def);
+    this.changeMoney(-cost);
     // 部署冷却：同一个角色在冷却结束前不能再次部署
     if (def.deployCooldown > 0) this.readyAt.set(def.id, this.time + def.deployCooldown);
     const c = tileCenter(tile);
@@ -1089,21 +1199,24 @@ export class GameEngine {
       attackCd: 0,
       canBlock: t.walkable,
       blocked: [],
+      cost,
       deployedAt: this.time,
       flash: 0,
       healFlash: 0,
       attackAnim: 0,
       facing: 0,
     });
+    // 肉鸽：全体角色的属性加成
+    if (this.bonus.ally.length) this.refreshStats(this.units[this.units.length - 1]);
     this.addEffect({ kind: 'deploy', x: c.x, y: c.y, duration: 0.4, color: def.color });
     return null;
   }
 
-  /** 撤退：返还一半费用（费用是负数时扣回一半），返回实际的金钱变化 */
+  /** 撤退：返还部署时付的费用的一半（费用是负数时扣回一半），返回实际的金钱变化 */
   retreat(uid: number): number {
     const u = this.unitByUid(uid);
     if (!u || this.status !== 'running') return 0;
-    const change = this.changeMoney(retreatRefund(u.def.cost));
+    const change = this.changeMoney(retreatRefund(u.cost));
     this.dismissSummons(u.uid);
     this.releaseBlocked(u);
     this.units = this.units.filter((x) => x !== u);

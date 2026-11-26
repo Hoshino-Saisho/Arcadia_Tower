@@ -448,11 +448,62 @@ export interface BookScoreRate extends ScoreRate {
 }
 
 /**
+ * 肉鸽牌的效果种类：
+ *  ally = 全体角色的属性；enemy = 全体敌人的属性；money = 选择时立即获得金钱；moneyRate = 每分钟金钱；
+ *  killMoney = 每击败 1 个敌人额外获得的金钱；cost = 全体部署费用（负数 = 更便宜）；
+ *  baseHp = 基地血量（上限和当前血量一起增加）；score = 分数加成（%）
+ */
+export type RogueEffectKind = 'ally' | 'enemy' | 'money' | 'moneyRate' | 'killMoney' | 'cost' | 'baseHp' | 'score';
+
+/** 肉鸽牌的一个效果 */
+export interface RogueEffect {
+  kind: RogueEffectKind;
+  /** ally / enemy：修改的属性 */
+  stat: StatKey;
+  /** ally / enemy：固定值（add）或百分比（percent） */
+  mode: 'add' | 'percent';
+  /** 每一级的数值：第 i 项 = Lv.(i+1)（负数 = 减少） */
+  values: number[];
+}
+
+/** 肉鸽牌（无尽模式的牌组） */
+export interface RogueCard {
+  /** 自动生成，不能修改 */
+  id: string;
+  name: string;
+  color: string;
+  description?: string;
+  /** 抽牌权重：越大越容易被抽到，0 = 不会被抽到 */
+  weight: number;
+  /** 升级：第 i 项 = 从 Lv.(i+1) 升到 Lv.(i+2) 需要再抽到几张同样的牌（最高等级 = 长度 + 1） */
+  copies: number[];
+  effects: RogueEffect[];
+}
+
+/**
+ * 无尽模式的肉鸽玩法：开局和每隔几波暂停，从牌组里随机抽出几张牌，玩家选择 1 张。
+ * 再次选择持有的牌 = 积累升级进度，凑够数量就升级；持有的种类达到上限后只会抽到已经持有、还能升级的牌。
+ */
+export interface RogueConfig {
+  enabled: boolean;
+  /** 每隔几波抽一次牌（第 N、2N、3N… 波开始时） */
+  everyWaves: number;
+  /** 开局（第 1 波之前）先抽一次 */
+  startDraw: boolean;
+  /** 每次抽出几张（选择 1 张） */
+  choices: number;
+  /** 最多持有几种不同的牌（0 = 不限） */
+  maxHeld: number;
+  cards: RogueCard[];
+}
+
+/**
  * 无尽模式（data/endless.json）：
  *  - 地图和路线在无尽模式编辑器里搭建（时间线里的积木 = 额外固定出现的敌人）
  *  - 敌人一波一波自动出现：当前难度 = 起始难度 + (波次 − 1) × 每波增加，只出现难度不超过当前难度的敌人
  *  - 每组敌人的数量和组内间隔由敌人的「出现位列」决定；每波敌人越来越多、越来越强
  *  - 击败敌人获得分数，结束时按兑换比例换成游戏外货币和经验书
+ *  - 肉鸽玩法：每隔几波三选一抽牌（见 RogueConfig）
  */
 export interface EndlessConfig {
   /** 在游戏主页显示无尽模式 */
@@ -488,6 +539,8 @@ export interface EndlessConfig {
   currencyRate: ScoreRate;
   /** 分数兑换经验书 */
   bookRates: BookScoreRate[];
+  /** 肉鸽玩法：抽牌规则和牌组 */
+  rogue: RogueConfig;
 }
 
 /** 无尽模式的最好成绩 */

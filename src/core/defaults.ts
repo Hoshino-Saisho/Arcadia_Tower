@@ -1,4 +1,5 @@
 import { levelCode, shortUid } from './ids';
+import { sampleRogueCards } from './rogue';
 import { STATS } from './stats';
 import { makeEmptyGrid, resizeGrid } from './tiles';
 import type {
@@ -22,6 +23,10 @@ import type {
   LevelSettings,
   OnHitEffect,
   ProgressData,
+  RogueCard,
+  RogueConfig,
+  RogueEffect,
+  RogueEffectKind,
   RouteDef,
   RouteWait,
   SkillDef,
@@ -759,6 +764,79 @@ export function newEndlessConfig(): EndlessConfig {
       { bookId: 'B002', score: 100, amount: 1 },
       { bookId: 'B003', score: 500, amount: 1 },
     ],
+    rogue: newRogueConfig(),
+  };
+}
+
+/** 肉鸽玩法的默认设置：每 3 波三选一，开局先抽一次，最多持有 6 种，牌组是样本牌 */
+export function newRogueConfig(): RogueConfig {
+  return { enabled: true, everyWaves: 3, startDraw: true, choices: 3, maxHeld: 6, cards: sampleRogueCards() };
+}
+
+/** 新的效果：每一级的数值按种类给一个合理的起点（第 1 级的值 × 等级） */
+export function newRogueEffect(kind: RogueEffectKind, levels: number): RogueEffect {
+  const base: Record<RogueEffectKind, number> = { ally: 10, enemy: -10, money: 10, moneyRate: 20, killMoney: 1, cost: -1, baseHp: 2, score: 20 };
+  const stat: StatKey = kind === 'enemy' ? 'speed' : 'atk';
+  return { kind, stat, mode: kind === 'ally' || kind === 'enemy' ? 'percent' : 'add', values: Array.from({ length: Math.max(1, levels) }, (_, i) => base[kind] * (i + 1)) };
+}
+
+/** 新的牌：3 级（升级各需要再抽到 1 / 2 张），全体角色攻击力 +10% / +20% / +30% */
+export function newRogueCard(id: string): RogueCard {
+  return { id, name: '新的牌', color: '#7c9cff', weight: 10, copies: [1, 2], effects: [newRogueEffect('ally', 3)] };
+}
+
+const ROGUE_KINDS: RogueEffectKind[] = ['ally', 'enemy', 'money', 'moneyRate', 'killMoney', 'cost', 'baseHp', 'score'];
+
+function normalizeRogueEffect(raw: any, levels: number): RogueEffect | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const kind: RogueEffectKind = ROGUE_KINDS.includes(raw.kind) ? raw.kind : 'ally';
+  const stat: StatKey = STATS.some((x) => x.key === raw.stat) ? raw.stat : kind === 'enemy' ? 'speed' : 'atk';
+  const list: number[] = Array.isArray(raw.values) ? raw.values.map((v: unknown) => num(v, 0, -99999, 99999)) : [];
+  // 每一级都要有数值：缺少的等级用最后一级的数值补上，多出来的去掉
+  const values = Array.from({ length: levels }, (_, i) => list[Math.min(i, list.length - 1)] ?? 0);
+  return { kind, stat, mode: raw.mode === 'add' ? 'add' : 'percent', values };
+}
+
+function normalizeRogueCard(raw: any, fallbackId: string): RogueCard | null {
+  if (!raw || typeof raw !== 'object') return null;
+  // 升级需要的数量：每一级至少 1 张，最多 19 次升级（20 级）
+  const copies: number[] = Array.isArray(raw.copies) ? raw.copies.slice(0, 19).map((v: unknown) => Math.round(num(v, 1, 1, 99))) : [];
+  const levels = copies.length + 1;
+  const effects: RogueEffect[] = Array.isArray(raw.effects) ? raw.effects.map((e: any) => normalizeRogueEffect(e, levels)).filter((e: RogueEffect | null): e is RogueEffect => !!e) : [];
+  return {
+    id: str(raw.id, fallbackId).trim() || fallbackId,
+    name: str(raw.name, '牌').trim() || '牌',
+    color: str(raw.color, '#7c9cff'),
+    description: typeof raw.description === 'string' && raw.description ? raw.description : undefined,
+    weight: num(raw.weight, 10, 0, 1000),
+    copies,
+    effects,
+  };
+}
+
+/** 肉鸽设置：没有设置时（旧数据）使用默认设置和样本牌组；ID 重复的牌自动改名 */
+export function normalizeRogue(raw: any): RogueConfig {
+  const d = newRogueConfig();
+  if (!raw || typeof raw !== 'object') return d;
+  const seen = new Set<string>();
+  const cards: RogueCard[] = [];
+  if (Array.isArray(raw.cards)) {
+    raw.cards.forEach((c: any, i: number) => {
+      const card = normalizeRogueCard(c, `K${String(i + 1).padStart(3, '0')}`);
+      if (!card) return;
+      let id = card.id;
+      for (let n = 2; seen.has(id); n++) id = `${card.id}_${n}`;
+      seen.add(id);
+      cards.push({ ...card, id });
+    });
+  }
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : d.enabled,
+    everyWaves: Math.round(num(raw.everyWaves, d.everyWaves, 1, 100)),
+    startDraw: typeof raw.startDraw === 'boolean' ? raw.startDraw : d.startDraw,
+    choices: Math.round(num(raw.choices, d.choices, 1, 5)),
+    maxHeld: Math.round(num(raw.maxHeld, d.maxHeld, 0, 50)),
+    cards: Array.isArray(raw.cards) ? cards : d.cards,
   };
 }
 
@@ -792,5 +870,6 @@ export function normalizeEndless(raw: any): EndlessConfig {
     atkGrowth: num(raw.atkGrowth, d.atkGrowth, -100, 1000),
     currencyRate: normalizeRate(raw.currencyRate, d.currencyRate),
     bookRates,
+    rogue: normalizeRogue(raw.rogue),
   };
 }

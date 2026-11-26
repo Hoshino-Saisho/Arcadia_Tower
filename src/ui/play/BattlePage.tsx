@@ -20,6 +20,7 @@ import { UnitToken } from '../common/tokens';
 import { RewardList } from '../common/wallet';
 import { navigate } from '../router';
 import { MusicControl } from './HomePage';
+import { RogueDraw, RogueHand, pickMessage } from './RoguePanels';
 
 type LoadState =
   | { status: 'loading' }
@@ -171,6 +172,8 @@ export function Battle({
   const [rewards, setRewards] = useState<RolledRewards | null>(null);
   /** 无尽模式：这次是否刷新了最好成绩 */
   const [newBest, setNewBest] = useState(false);
+  /** 肉鸽：显示持有的牌 */
+  const [showHand, setShowHand] = useState(false);
 
   const ctrl = useRef<Ctrl>({ started, paused, speed, placing, pending, selectedUid, showRoutes });
   ctrl.current = { started, paused, speed, placing, pending, selectedUid, showRoutes };
@@ -357,10 +360,37 @@ export function Battle({
     hoverRef.current = null;
   }, []);
 
-  // 键盘：Esc 取消、空格暂停、数字键选卡
+  /** 肉鸽：选择一张抽到的牌（null = 跳过） */
+  const pickCard = useCallback(
+    (id: string | null) => {
+      const err = engine.pickCard(id);
+      if (err) return toast(err, 'error', 1500);
+      const msg = pickMessage(engine);
+      if (msg) toast(msg, 'ok', 1600);
+      setTick((t) => t + 1);
+    },
+    [engine],
+  );
+  // 肉鸽：没有可以抽的牌（都已满级）时提示一下
+  const skippedRef = useRef(0);
+  useEffect(() => {
+    if (engine.skippedDraws > skippedRef.current) {
+      skippedRef.current = engine.skippedDraws;
+      toast('牌组里没有可以抽的牌了（都已满级），这次没有抽牌', 'info', 2500);
+    }
+  });
+
+  // 键盘：Esc 取消、空格暂停、数字键选卡（正在选择肉鸽的牌时：数字键选牌）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
+      if (engine.offer && engine.status === 'running') {
+        if (/^[1-9]$/.test(e.key)) {
+          const id = engine.offer.cards[Number(e.key) - 1];
+          if (id) pickCard(id);
+        } else if (e.key === ' ') e.preventDefault();
+        return;
+      }
       if (ctrl.current.pending) {
         // 等待确认部署：Enter = 部署，Esc = 取消
         if (e.key === 'Enter') {
@@ -385,7 +415,7 @@ export function Battle({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [engine, selectCard, confirmPending, cancelPending]);
+  }, [engine, selectCard, confirmPending, cancelPending, pickCard]);
 
   /** 屏幕坐标 → 方块（手机版舞台缩放 / 旋转时也正确） */
   const tileFromClient = (cx: number, cy: number) => {
@@ -530,7 +560,7 @@ export function Battle({
         title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
       >
         {summon ? <span className="card-key summon-tag">召唤</span> : <span className="card-key">{i < 9 ? i + 1 : i === 9 ? 0 : ''}</span>}
-        <span className="card-cost">{def.cost}</span>
+        <span className={`card-cost${engine.costOf(def) < def.cost ? ' cheaper' : engine.costOf(def) > def.cost ? ' pricier' : ''}`}>{engine.costOf(def)}</span>
         {lv > 1 && <span className="card-lv">Lv.{lv}</span>}
         <UnitToken kind={summon ? 'summon' : 'character'} def={def} size={44} dim={!st.ok} />
         <span className="card-name">{def.name}</span>
@@ -569,10 +599,10 @@ export function Battle({
             <span className="hud-icon">❤</span>
             {engine.hp}/{engine.maxHp}
           </div>
-          <div className="hud-stat money" title={settings.autoMoney && rate ? `每分钟${rate > 0 ? '自动回复' : '减少'} ${Math.abs(rate)}` : '不自动回复'}>
+          <div className="hud-stat money" title={rate ? `每分钟${rate > 0 ? '自动回复' : '减少'} ${Number(Math.abs(rate).toFixed(1))}` : '不自动回复'}>
             <span className="hud-icon">◆</span>
             {Math.floor(engine.money)}
-            {settings.autoMoney && rate !== 0 && (
+            {rate !== 0 && (
               <small>
                 {rate > 0 ? '+' : '−'}
                 {Number(Math.abs(rate).toFixed(1))}/分
@@ -585,10 +615,17 @@ export function Battle({
                 <span className="hud-icon">≋</span>第 {engine.wave} 波
                 {engine.status === 'running' && Number.isFinite(engine.nextWaveAt) && <small>{Math.max(0, Math.ceil(engine.nextWaveAt - engine.time))}s</small>}
               </div>
-              <div className="hud-stat score" title="分数（击败敌人获得）">
+              <div className="hud-stat score" title={engine.bonus.score ? `分数（击败敌人获得，牌的加成 ${engine.bonus.score > 0 ? '+' : ''}${formatNumber(engine.bonus.score)}%）` : '分数（击败敌人获得）'}>
                 <span className="hud-icon">★</span>
                 {formatNumber(Math.round(engine.score * 100) / 100)}
               </div>
+              {engine.rogue && (
+                <button className={`hud-stat rogue${showHand ? ' active' : ''}`} onClick={() => setShowHand((v) => !v)} title="持有的牌（点击查看）">
+                  <span className="hud-icon">❖</span>
+                  {engine.held.length}
+                  {engine.rogue.maxHeld > 0 && <small>/{engine.rogue.maxHeld}</small>}
+                </button>
+              )}
             </>
           ) : (
             <div className="hud-stat" title="已处理敌人 / 敌人总数">
@@ -665,6 +702,13 @@ export function Battle({
               {endless ? (
                 <>
                   <strong>{db.endless.name}</strong>：敌人会一波一波不断出现，越来越多、越来越强。击败敌人得分，基地血量 {engine.maxHp}，血量归零时按分数结算奖励。
+                  {engine.rogue && (
+                    <>
+                      <br />
+                      <span className="accent">❖ 抽牌</span>：{engine.rogue.startDraw ? '开局和' : ''}每 {engine.rogue.everyWaves} 波开始时暂停，从抽到的 {engine.rogue.choices} 张牌里选 1 张；再次选择持有的牌可以升级
+                      {engine.rogue.maxHeld > 0 ? `，最多持有 ${engine.rogue.maxHeld} 种` : ''}。
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -693,6 +737,7 @@ export function Battle({
         {pending && engine.status === 'running' && (
           <DeployConfirm
             def={engine.deployable(pending.id) ?? engine.roster[0]}
+            cost={engine.costOf(engine.deployable(pending.id) ?? engine.roster[0])}
             tile={pending.tile}
             vp={vpRef.current}
             fieldW={wrapRef.current?.clientWidth ?? 800}
@@ -700,6 +745,9 @@ export function Battle({
             onCancel={cancelPending}
           />
         )}
+
+        {showHand && engine.rogue && <RogueHand engine={engine} onClose={() => setShowHand(false)} />}
+        {engine.offer && engine.status === 'running' && <RogueDraw engine={engine} onPick={pickCard} />}
 
         {selected && (
           <UnitPanel
@@ -740,6 +788,12 @@ export function Battle({
                     <>
                       <dt>击败召唤物</dt>
                       <dd>{engine.summonsKilled}</dd>
+                    </>
+                  )}
+                  {engine.rogue && engine.held.length > 0 && (
+                    <>
+                      <dt>持有的牌</dt>
+                      <dd>{engine.held.map((h) => `${engine.rogueCards.get(h.id)?.name ?? h.id} Lv.${h.level}`).join('、')}</dd>
                     </>
                   )}
                   <dt>用时</dt>
@@ -869,6 +923,7 @@ export function Battle({
 /** 部署确认：显示在目标方块旁边，此时战斗暂停 */
 function DeployConfirm({
   def,
+  cost,
   tile,
   vp,
   fieldW,
@@ -876,6 +931,8 @@ function DeployConfirm({
   onCancel,
 }: {
   def: CharacterDef;
+  /** 实际费用（肉鸽的牌可以改变） */
+  cost: number;
   tile: GridPos;
   vp: Viewport;
   fieldW: number;
@@ -896,7 +953,7 @@ function DeployConfirm({
         <div className="grow">
           <div className="deploy-confirm-name">部署「{def.name}」？</div>
           <div className="muted small">
-            {def.cost >= 0 ? `费用 ${def.cost}` : `部署获得 ${-def.cost} 金钱`} · 已暂停
+            {cost >= 0 ? `费用 ${cost}` : `部署获得 ${-cost} 金钱`} · 已暂停
           </div>
         </div>
       </div>
@@ -1032,7 +1089,7 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
         </div>
       )}
       <button className="btn btn-danger" onClick={onRetreat}>
-        撤退（{retreatRefund(unit.def.cost) >= 0 ? `返还 ${retreatRefund(unit.def.cost)}` : `扣除 ${-retreatRefund(unit.def.cost)}`}）
+        撤退（{retreatRefund(unit.cost) >= 0 ? `返还 ${retreatRefund(unit.cost)}` : `扣除 ${-retreatRefund(unit.cost)}`}）
       </button>
     </div>
   );
