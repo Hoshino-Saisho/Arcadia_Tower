@@ -27,6 +27,7 @@
       "endlessScore": 4,
       "endlessDifficulty": 1,
       "endlessRank": 3,
+      "endlessCount": 3,
       "description": "普通近战敌人"
     },
     {
@@ -56,6 +57,7 @@
       "endlessScore": 2,
       "endlessDifficulty": 1,
       "endlessRank": 4,
+      "endlessCount": 4,
       "description": "移动很快，不会攻击角色"
     },
     {
@@ -85,6 +87,7 @@
       "endlessScore": 25,
       "endlessDifficulty": 3,
       "endlessRank": 1,
+      "endlessCount": 1,
       "description": "又慢又硬，物抗高但法抗低；会释放盾墙"
     },
     {
@@ -114,6 +117,7 @@
       "endlessScore": 15,
       "endlessDifficulty": 2,
       "endlessRank": 2,
+      "endlessCount": 2,
       "description": "远程法伤，攻击 2 格内的角色，会施放毒雾"
     },
     {
@@ -143,6 +147,7 @@
       "endlessScore": 15,
       "endlessDifficulty": 2,
       "endlessRank": 2,
+      "endlessCount": 2,
       "description": "治疗附近受伤的敌人，并让它们加速"
     },
     {
@@ -171,7 +176,8 @@
       "onHit": null,
       "endlessScore": 15,
       "endlessDifficulty": 1,
-      "endlessRank": 2
+      "endlessRank": 2,
+      "endlessCount": 2
     },
     {
       "id": "E007",
@@ -199,7 +205,8 @@
       "onHit": null,
       "endlessScore": 100,
       "endlessDifficulty": 6,
-      "endlessRank": 1
+      "endlessRank": 10,
+      "endlessCount": 1
     }
   ]
 }
