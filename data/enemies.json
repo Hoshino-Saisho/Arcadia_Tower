@@ -204,7 +204,7 @@
       "skillSlots": 1,
       "onHit": null,
       "endlessScore": 100,
-      "endlessDifficulty": 6,
+      "endlessDifficulty": 8,
       "endlessRank": 10,
       "endlessCount": 1
     }
