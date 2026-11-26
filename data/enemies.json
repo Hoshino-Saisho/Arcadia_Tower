@@ -145,7 +145,7 @@
       "skillSlots": 1,
       "onHit": null,
       "endlessScore": 15,
-      "endlessDifficulty": 2,
+      "endlessDifficulty": 3,
       "endlessRank": 2,
       "endlessCount": 2,
       "description": "治疗附近受伤的敌人，并让它们加速"
