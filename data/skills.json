@@ -594,7 +594,7 @@
           "damageType": "physical",
           "money": 0,
           "moneyRate": 0,
-          "cooldown": 1
+          "cooldown": 10
         }
       ]
     },

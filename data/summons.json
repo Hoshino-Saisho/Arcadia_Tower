@@ -48,7 +48,7 @@
       "color": "#cfd8dc",
       "placement": "ground",
       "cost": 3,
-      "maxHp": 600,
+      "maxHp": 300,
       "atk": 300,
       "def": 30,
       "res": 100,
