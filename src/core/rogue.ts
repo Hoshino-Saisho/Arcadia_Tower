@@ -29,10 +29,12 @@ export interface RogueBonus {
   baseHp: number;
   /** 分数加成（%） */
   score: number;
+  /** 减少部署冷却（%，正数 = 冷却变短） */
+  cooldown: number;
 }
 
 export function emptyBonus(): RogueBonus {
-  return { ally: [], enemy: [], moneyRate: 0, killMoney: 0, cost: 0, baseHp: 0, score: 0 };
+  return { ally: [], enemy: [], moneyRate: 0, killMoney: 0, cost: 0, baseHp: 0, score: 0, cooldown: 0 };
 }
 
 /** 效果种类的说明（编辑器下拉框） */
@@ -45,6 +47,7 @@ export const ROGUE_EFFECT_KINDS: { kind: RogueEffectKind; label: string; hint: s
   { kind: 'cost', label: '部署费用', hint: '全体角色和召唤物的部署费用（负数 = 更便宜）' },
   { kind: 'baseHp', label: '基地血量', hint: '基地的血量上限和当前血量一起增加' },
   { kind: 'score', label: '分数加成', hint: '击败敌人获得的分数增加（%）' },
+  { kind: 'cooldown', label: '减少部署冷却', hint: '全体角色和召唤物的部署冷却缩短（%，正数 = 变短，负数 = 变长；100% = 没有冷却）' },
 ];
 
 /** 效果在某一级的数值：Lv.1 的数值 + 每次升级增加的数值 × (等级 − 1) */
@@ -62,6 +65,8 @@ function withUnit(e: RogueEffect, v: number): string {
     const unit = e.mode === 'percent' ? '%' : info.unit === '%' ? ' 点' : info.unit ? ` ${info.unit}` : '';
     return `${signed(v)}${unit}`;
   }
+  // 减少部署冷却：显示冷却时间的变化（减少 10% → 「−10%」）
+  if (e.kind === 'cooldown') return `${signed(-v)}%`;
   return e.kind === 'score' ? `${signed(v)}%` : signed(v);
 }
 
@@ -85,6 +90,8 @@ export function describeRogueEffect(e: RogueEffect, level: number): string {
       return `基地血量 ${signed(v)}`;
     case 'score':
       return `分数 ${signed(v)}%`;
+    case 'cooldown':
+      return `部署冷却 ${signed(-v)}%`;
   }
 }
 
@@ -117,6 +124,8 @@ export function rogueEffectLabel(e: RogueEffect): string {
       return '基地血量';
     case 'score':
       return '分数';
+    case 'cooldown':
+      return '部署冷却';
   }
 }
 
@@ -135,6 +144,7 @@ export function rogueBonus(cards: Map<string, RogueCard>, held: HeldCard[]): Rog
       else if (e.kind === 'cost') b.cost += v;
       else if (e.kind === 'baseHp') b.baseHp += v;
       else if (e.kind === 'score') b.score += v;
+      else if (e.kind === 'cooldown') b.cooldown += v;
     }
   }
   return b;
@@ -232,5 +242,8 @@ export function sampleRogueCards(): RogueCard[] {
       effects: [plain('score', 30, 20), enemy('atk', 'percent', 10, 5)],
       description: '有代价：分数大幅增加，但敌人的攻击力也提高',
     },
+    { id: 'K012', name: '整备', color: '#748ffc', weight: 6, copies: 1, effects: [plain('cooldown', 15, 10)], description: '全体角色的部署冷却缩短' },
+    { id: 'K013', name: '专注', color: '#4dabf7', weight: 7, copies: 1, effects: [ally('spRate', 'percent', 15, 10)], description: '全体角色的技能 SP 积累更快' },
+    { id: 'K014', name: '干扰', color: '#9775fa', weight: 6, copies: 1, effects: [enemy('spRate', 'percent', -20, -10)], description: '全体敌人的技能 SP 积累更慢' },
   ];
 }

@@ -22,6 +22,7 @@ export const STATS: StatInfo[] = [
   { key: 'blockCount', label: '阻挡数', unit: '' },
   { key: 'speed', label: '移动速度', unit: '格/秒' },
   { key: 'hpRegen', label: '每秒生命回复', unit: '' },
+  { key: 'spRate', label: 'SP 积累速度', unit: '倍' },
 ];
 
 const BY_KEY = new Map(STATS.map((s) => [s.key, s]));
@@ -66,6 +67,7 @@ export function applyModifiers(base: Stats, modifierLists: StatModifier[][]): St
   if (out.targetCount >= 0) out.targetCount = Math.max(1, Math.round(out.targetCount));
   out.blockCount = Math.max(0, Math.round(out.blockCount));
   out.speed = Math.max(0, out.speed);
+  out.spRate = Math.max(0, out.spRate);
   return out;
 }
 

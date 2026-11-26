@@ -4089,3 +4089,6 @@ button.hud-stat:hover {
   white-space: nowrap;
   padding: 0 6px;
 }
+.effect-card.cooldown {
+  border-left: 3px solid #748ffc;
+}

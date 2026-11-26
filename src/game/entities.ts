@@ -129,7 +129,7 @@ export interface Projectile {
   /** 治疗子弹（攻击队友且攻击力为负数） */
   heal: boolean;
   damageType: SkillDamageType;
-  onHit: { modifiers: StatModifier[]; duration: number; key: string } | null;
+  onHit: { modifiers: StatModifier[]; duration: number; key: string; cooldown?: number } | null;
   color: string;
   radius: number;
 }
@@ -182,6 +182,7 @@ export function unitBaseStats(d: CharacterDef): Stats {
     blockCount: d.blockCount,
     speed: 0,
     hpRegen: 0,
+    spRate: 1,
   };
 }
 
@@ -197,5 +198,6 @@ export function enemyBaseStats(d: EnemyDef): Stats {
     blockCount: 0,
     speed: d.speed,
     hpRegen: 0,
+    spRate: 1,
   };
 }

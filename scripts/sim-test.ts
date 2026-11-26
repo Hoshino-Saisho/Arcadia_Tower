@@ -16,6 +16,7 @@
  * 13. 编队：最多 12 个、顺序、和关卡可用角色的组合
  * 14. 敌人的召唤物：召唤节奏、同时存在上限、继承、沿路线前进、进入基地、击败奖励、随召唤者消失、无敌、阵营限制
  * 15. 无尽模式 · 肉鸽抽牌：抽牌时机、三选一、升级（等级没有上限）、持有上限、每种效果
+ * 16. SP 积累速度（属性）与部署冷却（牌 / 技能 / 命中效果；角色和敌人方向相反）
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,6 +27,7 @@ import {
   normalizeChapter,
   normalizeCurrency,
   normalizeEndless,
+  normalizeEffect,
   normalizeEnemy,
   normalizeLevel,
   normalizeProgress,
@@ -47,14 +49,14 @@ import {
   rollRewards,
   usefulBooks,
 } from '../src/core/leveling';
-import { describeAttack } from '../src/core/describe';
+import { describeAttack, describeEffect, describeOnHit } from '../src/core/describe';
 import { checkManualPath, findPath, resolveRoute, resolveWaits, visitNumbers } from '../src/core/pathfinding';
 import { eligibleEnemies, firstWaveOf, groupSize, planWave, seededRng, waveGroupCount } from '../src/core/endless';
-import { drawOffer, drawPool, gainCard, nextDrawWave, sampleRogueCards, valueAt, type HeldCard } from '../src/core/rogue';
+import { describeRogueEffect, drawOffer, drawPool, gainCard, nextDrawWave, rogueBonus, rogueStepText, sampleRogueCards, valueAt, type HeldCard } from '../src/core/rogue';
 import { battleRoster, resolveSquad } from '../src/core/squad';
 import { ProgressView } from '../src/core/progress';
 import { rangeOffsets, tileInRange } from '../src/core/range';
-import { applyModifiers, computeDamage } from '../src/core/stats';
+import { applyModifiers, computeDamage, formatModifier } from '../src/core/stats';
 import { TileGrid } from '../src/core/tiles';
 import type { CharacterDef, EnemyDef, GridPos, LevelDef, RogueCard, SkillDef } from '../src/core/types';
 import { FIXED_DT, GameEngine } from '../src/game/engine';
@@ -177,7 +179,7 @@ console.log('\n[4] 战斗机制');
   check(computeDamage(100, 'true', 500, 90) === 100, '真伤无视物抗和法抗');
   check(rangeOffsets(1).length === 5 && rangeOffsets(1.5).length === 9 && rangeOffsets(2).length === 13, '射程按方块：1 = 十字 5 格，1.5 = 3×3，2 = 13 格');
   check(!tileInRange({ x: 0, y: 0 }, { x: 1, y: 1 }, 1) && tileInRange({ x: 0, y: 0 }, { x: 1, y: 1 }, 1.5), '射程 1 打不到斜角方块，1.5 可以');
-  const base = { maxHp: 1000, atk: 100, def: 100, res: 30, attackInterval: 1, range: 1, targetCount: 1, blockCount: 1, speed: 1, hpRegen: 0 };
+  const base = { maxHp: 1000, atk: 100, def: 100, res: 30, attackInterval: 1, range: 1, targetCount: 1, blockCount: 1, speed: 1, hpRegen: 0, spRate: 1 };
   const mod = applyModifiers(base, [[{ stat: 'def', mode: 'add', value: -40 }, { stat: 'res', mode: 'add', value: -20 }, { stat: 'atk', mode: 'percent', value: 50 }]]);
   check(mod.def === 60 && mod.res === 10 && mod.atk === 150, '同一个效果可以同时降低物抗 / 法抗并提升攻击力');
   check(applyModifiers({ ...base, targetCount: -1 }, [[{ stat: 'targetCount', mode: 'add', value: 2 }]]).targetCount === -1, '目标数 -1（全部）不受修改影响');
@@ -585,7 +587,7 @@ console.log('\n[7] 升级与通关奖励');
 
 console.log('\n[8] 负数数值');
 {
-  const base = { maxHp: 1000, atk: 100, def: -50, res: -100, attackInterval: 1, range: 1, targetCount: 1, blockCount: 1, speed: 1, hpRegen: 0 };
+  const base = { maxHp: 1000, atk: 100, def: -50, res: -100, attackInterval: 1, range: 1, targetCount: 1, blockCount: 1, speed: 1, hpRegen: 0, spRate: 1 };
   check(computeDamage(100, 'physical', -50, 0) === 150, '物抗 −50：100 物伤 → 150');
   check(computeDamage(100, 'magic', 0, -100) === 200, '法抗 −100：100 法伤 → 200（两倍）');
   const up = applyModifiers(base, [[{ stat: 'def', mode: 'percent', value: 30 }]]);
@@ -1097,6 +1099,109 @@ console.log('\n[15] 无尽模式 · 肉鸽抽牌');
   const engOff = new GameEngine(lvR, [], [walker], { skills: [], endless: { ...cfgR, rogue: { ...cfgR.rogue, enabled: false } }, rng: seededRng(1) });
   for (let t = 0; t < 12; t += FIXED_DT) engOff.step(FIXED_DT);
   check(!engOff.offer && engOff.rogue === null && engOff.wave >= 2, '关闭肉鸽玩法时不会抽牌');
+}
+
+console.log('\n[16] SP 积累速度与部署冷却');
+{
+  // 数据
+  check(formatModifier({ stat: 'spRate', mode: 'percent', value: 20 }) === 'SP 积累速度 +20%', '新属性「SP 积累速度」（增益 / 减益、命中效果、牌都可以用）');
+  const cdEff = normalizeEffect({ kind: 'cooldown', cooldown: 4 });
+  check(cdEff.kind === 'cooldown' && cdEff.cooldown === 4, '技能效果「部署冷却」可以保存 / 读取');
+  check(
+    describeEffect(cdEff, 0, 'ally') === '部署冷却：全部角色剩余的部署冷却减少 4 秒' && describeEffect(cdEff, 0, 'enemy') === '部署冷却：玩家剩余的部署冷却增加 4 秒',
+    `说明：角色释放「${describeEffect(cdEff, 0, 'ally')}」，敌人释放「${describeEffect(cdEff, 0, 'enemy')}」`,
+  );
+  const ohOnly = normalizeCharacter({ id: 'OH', onHit: { cooldown: 1.5 } }).onHit;
+  check(!!ohOnly && ohOnly.modifiers.length === 0 && ohOnly.cooldown === 1.5 && normalizeCharacter({ id: 'OH2', onHit: { modifiers: [] } }).onHit === null, '命中效果可以只有部署冷却（没有增益 / 减益）');
+  check(describeOnHit({ modifiers: [], duration: 1, cooldown: 1 }, 'enemy')?.includes('玩家剩余的部署冷却增加 1 秒') === true, '敌人的命中效果：玩家剩余的部署冷却增加');
+  const samples = sampleRogueCards();
+  const focus = samples.find((c) => c.id === 'K013')!;
+  const b13 = rogueBonus(new Map([[focus.id, focus]]), [{ id: 'K013', level: 2, copies: 0 }]);
+  check(
+    samples.length === 14 && samples.some((c) => c.effects.some((e) => e.kind === 'cooldown')) && b13.ally[0]?.stat === 'spRate' && b13.ally[0].value === 25,
+    '样本牌新增「整备」（部署冷却）、「专注」（角色 SP 积累速度，Lv.2 +25%）、「干扰」（敌人 SP 积累速度）',
+  );
+
+  const lvC = normalizeLevel({
+    id: 'T_16',
+    width: 7,
+    height: 3,
+    grid: ['HHHHHHH', 'SGGGGGB', 'HHHHHHH'],
+    settings: { initialHp: 99, initialMoney: 999, autoMoney: false },
+    lines: [{ id: 'L', name: 't', route: { mode: 'auto', spawn: { x: 0, y: 1 } }, blocks: [{ id: 'b', enemyId: 'SLOWE', count: 1, interval: 1, startTime: 0 }] }],
+  });
+  const withEnemy = (id: string) => ({ ...lvC, lines: lvC.lines.map((l) => ({ ...l, blocks: l.blocks.map((b) => ({ ...b, enemyId: id })) })) });
+  const charge = normalizeSkill({ id: 'CHG', name: '蓄力', spMax: 100, spGain: 'auto', spRate: 1, trigger: 'manual', effects: [] });
+  const combo = normalizeSkill({ id: 'CMB', name: '连击', spMax: 100, spGain: 'attack', spRate: 2, trigger: 'manual', effects: [] });
+  const cdr = normalizeSkill({ id: 'CDR', name: '急救调度', spMax: 10, spInitial: 10, spGain: 'auto', spRate: 1, trigger: 'auto', duration: 0, effects: [{ kind: 'cooldown', cooldown: 4 }] });
+  const slowE = normalizeEnemy({ id: 'SLOWE', maxHp: 1e9, speed: 0.01, canAttack: false, skills: ['CHG'], skillSlots: 1 });
+  const caster = normalizeEnemy({ id: 'CDE', maxHp: 1e9, speed: 0.01, canAttack: false, skills: ['CDR'], skillSlots: 1 });
+  const hitter = normalizeEnemy({ id: 'HITE', maxHp: 1e9, speed: 0.01, atk: 1, attackRange: 9, attackInterval: 1, attackType: 'area', onHit: { cooldown: 2 } });
+  const mk = (id: string, extra: Record<string, unknown> = {}) => normalizeCharacter({ id, name: id, placement: 'high', cost: 0, atk: 1, range: 1, attackType: 'none', ...extra });
+  const runFor = (eng: GameEngine, sec: number) => {
+    const end = eng.time + sec;
+    while (eng.status === 'running' && eng.time < end - 1e-9) eng.step(FIXED_DT);
+  };
+
+  // SP 积累速度：每秒自动积累 / 每次攻击积累都乘以它；角色和敌人都可以被改变
+  const pA = mk('PA', { skills: ['CHG'], skillSlots: 1 });
+  const pB = mk('PB', { skills: ['CHG'], skillSlots: 1 });
+  const pC = mk('PC', { skills: ['CMB'], skillSlots: 1, attackType: 'area', range: 9 });
+  const engS = new GameEngine(lvC, [pA, pB, pC], [slowE], { skills: [charge, combo] });
+  engS.step(FIXED_DT);
+  const foe = engS.enemies[0];
+  engS.deploy('PA', { x: 1, y: 0 });
+  engS.deploy('PB', { x: 3, y: 0 });
+  const [ua, ub] = engS.units;
+  const fast = { key: 't', name: '加速', color: '#fff', modifiers: [{ stat: 'spRate' as const, mode: 'percent' as const, value: 100 }], duration: 100 };
+  engS.addStatus(ua, fast);
+  engS.addStatus(foe, { ...fast, modifiers: [{ stat: 'spRate', mode: 'percent', value: -50 }] });
+  const foeSp0 = foe.skills[0].sp;
+  runFor(engS, 2);
+  check(Math.abs(ua.skills[0].sp - 2 * ub.skills[0].sp) < 1e-6 && ub.skills[0].sp > 1.9, `SP 积累速度 +100%：每秒自动积累翻倍（${ua.skills[0].sp.toFixed(2)} 对 ${ub.skills[0].sp.toFixed(2)}）`);
+  check(Math.abs(foe.skills[0].sp - foeSp0 - 1) < 0.02, `敌人的 SP 积累速度 −50%：2 秒只积累 ${(foe.skills[0].sp - foeSp0).toFixed(2)}`);
+  engS.deploy('PC', { x: 5, y: 0 });
+  const uc = engS.units[2];
+  engS.addStatus(uc, { ...fast, modifiers: [{ stat: 'spRate', mode: 'percent', value: 50 }] });
+  engS.step(FIXED_DT);
+  check(uc.skills[0].sp === 3, `攻击积累 SP 也乘以 SP 积累速度：每次攻击 2 × 1.5 = ${uc.skills[0].sp}`);
+
+  // 牌：部署冷却 −50% → 冷却 10 秒的角色只需要 5 秒
+  const waiter = mk('WT', { deployCooldown: 10 });
+  const cdCard: RogueCard = { id: 'K', name: '整备', color: '#748ffc', weight: 10, copies: 1, effects: [{ kind: 'cooldown', stat: 'atk', mode: 'add', value: 50, perLevel: 25 }] };
+  check(describeRogueEffect(cdCard.effects[0], 1) === '部署冷却 −50%' && rogueStepText(cdCard.effects[0]) === '−25%', '牌「减少部署冷却 50」显示为「部署冷却 −50%」，每级 −25%');
+  const cfgC = { ...newEndlessConfig(), firstWave: 999, rogue: { enabled: true, everyWaves: 5, startDraw: true, choices: 1, maxHeld: 0, cards: [cdCard] } };
+  const engK = new GameEngine(lvC, [waiter], [slowE], { skills: [], endless: cfgC, rng: seededRng(1) });
+  engK.pickCard('K');
+  check(engK.bonus.cooldown === 50 && engK.cooldownOf(waiter) === 5, '牌「减少部署冷却 50%」：冷却 10 秒的角色变成 5 秒');
+  engK.deploy('WT', { x: 1, y: 0 });
+  check(Math.abs(engK.cooldownLeft('WT') - 5) < 1e-9 && engK.cardState(waiter).cooldownTotal === 5, '部署后冷却 5 秒，卡片上的进度按 5 秒计算');
+
+  // 技能：角色释放 → 剩余的部署冷却减少；敌人释放 → 增加
+  const helper = mk('HP', { skills: ['CDR'], skillSlots: 1 });
+  const engD = new GameEngine(lvC, [waiter, helper], [slowE], { skills: [cdr] });
+  engD.deploy('WT', { x: 1, y: 0 });
+  engD.deploy('HP', { x: 3, y: 0 });
+  engD.step(FIXED_DT);
+  check(Math.abs(engD.cooldownLeft('WT') - (6 - FIXED_DT)) < 1e-6, `角色释放「部署冷却 4 秒」：剩余冷却 10 → ${engD.cooldownLeft('WT').toFixed(2)}`);
+  check(engD.cooldownLeft('HP') === 0, '没有在冷却的角色不受影响');
+  const engE2 = new GameEngine(withEnemy('CDE'), [waiter], [caster], { skills: [cdr] });
+  engE2.deploy('WT', { x: 1, y: 0 });
+  engE2.step(FIXED_DT);
+  check(Math.abs(engE2.cooldownLeft('WT') - (14 - FIXED_DT)) < 1e-6 && engE2.cardState(waiter).cooldownTotal >= 14 - FIXED_DT - 1e-6, `敌人释放同样的技能：玩家的部署冷却增加 4 秒（剩余 ${engE2.cooldownLeft('WT').toFixed(2)}），进度条跟着变长`);
+
+  // 命中效果：角色每命中一个目标减少剩余的部署冷却；敌人命中时增加
+  const striker = mk('ST', { attackType: 'area', range: 9, attackInterval: 1, onHit: { cooldown: 1.5 } });
+  const engH = new GameEngine(lvC, [waiter, striker], [slowE], { skills: [] });
+  engH.step(FIXED_DT);
+  engH.deploy('WT', { x: 1, y: 0 });
+  engH.deploy('ST', { x: 3, y: 0 });
+  engH.step(FIXED_DT);
+  check(Math.abs(engH.cooldownLeft('WT') - (8.5 - FIXED_DT)) < 1e-6, `角色的命中效果：每命中一个目标，剩余的部署冷却 −1.5 秒（剩余 ${engH.cooldownLeft('WT').toFixed(2)}）`);
+  const engH2 = new GameEngine(withEnemy('HITE'), [waiter], [hitter], { skills: [] });
+  engH2.deploy('WT', { x: 1, y: 0 });
+  runFor(engH2, 0.6);
+  check(Math.abs(engH2.cooldownLeft('WT') - (10 - 0.6 + 2)) < 0.05, `敌人的命中效果：命中角色时玩家的部署冷却 +2 秒（剩余 ${engH2.cooldownLeft('WT').toFixed(2)}）`);
 }
 
 console.log(failures ? `\n失败 ${failures} 项` : warnings ? `\n全部通过（${warnings} 项提醒）` : '\n全部通过');

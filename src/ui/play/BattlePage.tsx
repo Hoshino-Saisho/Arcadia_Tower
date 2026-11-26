@@ -544,7 +544,9 @@ export function Battle({
     const count = engine.deployedCount(def.id);
     const skills = engine.loadoutOf(def);
     const lv = summon ? 1 : engine.levelOf(def.id);
-    const cooling = st.cooldown > 0 && def.deployCooldown > 0;
+    // 部署冷却（肉鸽的牌可以缩短，技能 / 命中效果可以减少或延长）
+    const cooling = st.cooldown > 0;
+    const cdTime = engine.cooldownOf(def);
     return (
       <button
         key={(summon ? 'summon:' : '') + def.id}
@@ -557,7 +559,7 @@ export function Battle({
         // 鼠标 / 触摸由上面的指针事件处理；这里只处理键盘（Enter / 空格）触发的点击
         onClick={(e) => e.detail === 0 && selectCard(def.id)}
         onContextMenu={(e) => e.preventDefault()}
-        title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${def.deployCooldown > 0 ? ` · 部署冷却 ${def.deployCooldown} 秒` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
+        title={`${summon ? '召唤物 · ' : ''}${def.name}（${def.id}）${summon ? '' : `Lv.${lv}`}\n${placementText(def.placement)} · ${def.attackTarget === 'ally' && def.atk < 0 ? `治疗 ${-def.atk}` : `攻击 ${def.atk}（${DAMAGE_TYPE_LABEL[def.damageType]}）`} · 物抗 ${def.def} · 法抗 ${def.res}% · 范围 ${def.range}${cdTime > 0 ? ` · 部署冷却 ${formatNumber(Math.round(cdTime * 10) / 10)} 秒${Math.abs(cdTime - def.deployCooldown) > 1e-6 ? `（原本 ${def.deployCooldown} 秒）` : ''}` : ''}${skills.length ? `\n技能：${skills.map((s) => s.name).join('、')}` : ''}${summon ? '\n数值会继承召唤者的一部分' : ''}${st.ok ? '' : '\n' + st.reason}`}
       >
         {summon ? <span className="card-key summon-tag">召唤</span> : <span className="card-key">{i < 9 ? i + 1 : i === 9 ? 0 : ''}</span>}
         <span className={`card-cost${engine.costOf(def) < def.cost ? ' cheaper' : engine.costOf(def) > def.cost ? ' pricier' : ''}`}>{engine.costOf(def)}</span>
@@ -570,7 +572,7 @@ export function Battle({
         </span>
         {cooling && (
           // 部署冷却：遮罩从上往下退去，中间显示剩余秒数
-          <span className="card-cooldown" style={{ ['--cd' as string]: `${Math.min(1, st.cooldown / def.deployCooldown) * 100}%` }}>
+          <span className="card-cooldown" style={{ ['--cd' as string]: `${Math.min(1, st.cooldown / Math.max(1e-6, st.cooldownTotal)) * 100}%` }}>
             <span className="mono">{st.cooldown.toFixed(st.cooldown < 10 ? 1 : 0)}</span>
           </span>
         )}
@@ -1032,6 +1034,12 @@ function UnitPanel({ unit, onRetreat, onSkill, onClose }: { unit: Unit; onRetrea
         </dd>
         <dt>阻挡</dt>
         <dd>{unit.canBlock ? `${unit.blocked.length}/${s.blockCount}` : '—（高台）'}</dd>
+        {Math.abs(s.spRate - b.spRate) > 1e-6 && (
+          <>
+            <dt>SP 积累速度</dt>
+            <dd>{stat(Math.round(s.spRate * 100), Math.round(b.spRate * 100), '%')}</dd>
+          </>
+        )}
       </dl>
       {(unit.statuses.length > 0 || unit.regens.length > 0) && (
         <div className="status-list">

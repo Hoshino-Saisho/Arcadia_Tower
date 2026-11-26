@@ -44,6 +44,7 @@ function describeMoney(e: SkillEffect, skillDuration: number, side: 'ally' | 'en
 /** side：释放者是角色还是敌人（敌人的金钱效果 = 玩家失去金钱） */
 export function describeEffect(e: SkillEffect, skillDuration: number, side: 'ally' | 'enemy' = 'ally'): string {
   if (e.kind === 'money') return describeMoney(e, skillDuration, side);
+  if (e.kind === 'cooldown') return `部署冷却：${describeCooldown(e.cooldown, side)}`;
   const t = targetText(e);
   if (e.kind === 'regen') {
     const dur = e.duration > 0 ? e.duration : skillDuration;
@@ -117,7 +118,18 @@ export function describeSummonTiming(s: { summonFirst: number; summonInterval: n
   return first + repeat + cap;
 }
 
-export function describeOnHit(h: OnHitEffect | null): string | null {
-  if (!h || !h.modifiers.length) return null;
-  return `命中附带：${h.modifiers.map(formatModifier).join('，')}，持续 ${formatNumber(h.duration)} 秒`;
+/** 部署冷却的变化：角色 = 减少玩家剩余的部署冷却；敌人 = 增加（数值为负数时反过来） */
+function describeCooldown(seconds: number, side: 'ally' | 'enemy'): string {
+  if (!seconds) return '（未设置数值）';
+  const shorter = side === 'ally' ? seconds > 0 : seconds < 0;
+  return `${side === 'enemy' ? '玩家' : '全部角色'}剩余的部署冷却${shorter ? '减少' : '增加'} ${formatNumber(Math.abs(seconds))} 秒`;
+}
+
+/** 命中附带效果的说明；side：攻击者是角色还是敌人（部署冷却的方向相反） */
+export function describeOnHit(h: OnHitEffect | null, side: 'ally' | 'enemy' = 'ally'): string | null {
+  if (!h) return null;
+  const parts: string[] = [];
+  if (h.modifiers.length) parts.push(`${h.modifiers.map(formatModifier).join('，')}，持续 ${formatNumber(h.duration)} 秒`);
+  if (h.cooldown) parts.push(`每命中一个目标，${describeCooldown(h.cooldown, side)}`);
+  return parts.length ? `命中附带：${parts.join('；')}` : null;
 }

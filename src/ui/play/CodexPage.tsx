@@ -198,7 +198,7 @@ function EnemyDetail({ def, skills, summons }: { def: EnemyDef; skills: Map<stri
           <span className="muted small">射程（中间 = 敌人所在方块）</span>
         </div>
       )}
-      {describeOnHit(def.onHit) && <div className="codex-note">{describeOnHit(def.onHit)}</div>}
+      {describeOnHit(def.onHit, 'enemy') && <div className="codex-note">{describeOnHit(def.onHit, 'enemy')}</div>}
       <SkillList ids={def.skills} slots={def.skillSlots} skills={skills} side="enemy" />
       <EnemySummonList def={def} summons={summons} skills={skills} />
     </>

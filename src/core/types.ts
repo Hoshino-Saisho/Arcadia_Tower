@@ -49,7 +49,9 @@ export type StatKey =
   | 'targetCount'
   | 'blockCount'
   | 'speed'
-  | 'hpRegen';
+  | 'hpRegen'
+  /** 技能 SP 积累速度（倍数，默认 1；攻击获得的 SP 和每秒自动获得的 SP 都乘以它） */
+  | 'spRate';
 
 /** 一条属性修改：固定值（add）或百分比（percent），正数 / 负数都可以 */
 export interface StatModifier {
@@ -58,11 +60,13 @@ export interface StatModifier {
   value: number;
 }
 
-/** 普通攻击命中时附带的效果（增益 / 减益），作用于被攻击的目标 */
+/** 普通攻击命中时附带的效果：增益 / 减益作用于被攻击的目标；部署冷却作用于玩家 */
 export interface OnHitEffect {
   modifiers: StatModifier[];
   /** 持续时间（秒） */
   duration: number;
+  /** 每次命中减少玩家剩余的部署冷却（秒，负数 = 增加）；敌人命中时反过来（玩家的部署冷却增加） */
+  cooldown?: number;
 }
 
 /** 技能效果 */
@@ -70,9 +74,10 @@ export interface SkillEffect {
   /**
    * modify = 增益 / 减益（修改属性一段时间）；damage = 伤害 / 治疗（立即生效）；
    * money = 金钱（释放时立即获得 + 持续期间每秒获得；敌人释放时玩家失去对应金钱）；
-   * regen = 持续治疗（每秒治疗）/ 持续伤害（数值为负数时每秒受到伤害，按伤害类型结算物抗 / 法抗）
+   * regen = 持续治疗（每秒治疗）/ 持续伤害（数值为负数时每秒受到伤害，按伤害类型结算物抗 / 法抗）；
+   * cooldown = 部署冷却（释放时立即减少全部角色剩余的部署冷却；敌人释放时玩家的部署冷却增加）
    */
-  kind: 'modify' | 'damage' | 'money' | 'regen';
+  kind: 'modify' | 'damage' | 'money' | 'regen' | 'cooldown';
   /** 作用对象：自身 / 友方 / 敌方（money 不使用） */
   target: 'self' | 'allies' | 'enemies';
   /** range = 半径内；all = 全场 */
@@ -97,6 +102,8 @@ export interface SkillEffect {
   money: number;
   /** money：持续期间每秒获得的金钱（负数 = 每秒消耗）；施放者离场后停止 */
   moneyRate: number;
+  /** cooldown：减少的部署冷却（秒，负数 = 增加） */
+  cooldown: number;
 }
 
 /** 技能定义（技能库 data/skills.json） */
@@ -451,9 +458,9 @@ export interface BookScoreRate extends ScoreRate {
  * 肉鸽牌的效果种类：
  *  ally = 全体角色的属性；enemy = 全体敌人的属性；money = 选择时立即获得金钱；moneyRate = 每分钟金钱；
  *  killMoney = 每击败 1 个敌人额外获得的金钱；cost = 全体部署费用（负数 = 更便宜）；
- *  baseHp = 基地血量（上限和当前血量一起增加）；score = 分数加成（%）
+ *  baseHp = 基地血量（上限和当前血量一起增加）；score = 分数加成（%）；cooldown = 减少部署冷却（%，正数 = 冷却变短，负数 = 变长）
  */
-export type RogueEffectKind = 'ally' | 'enemy' | 'money' | 'moneyRate' | 'killMoney' | 'cost' | 'baseHp' | 'score';
+export type RogueEffectKind = 'ally' | 'enemy' | 'money' | 'moneyRate' | 'killMoney' | 'cost' | 'baseHp' | 'score' | 'cooldown';
 
 /** 肉鸽牌的一个效果：Lv.N 的数值 = value + perLevel × (N − 1)（等级没有上限） */
 export interface RogueEffect {

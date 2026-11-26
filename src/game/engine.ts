@@ -3,7 +3,7 @@ import { planWave } from '../core/endless';
 import { drawOffer, emptyBonus, gainCard, rogueBonus, valueAt, type HeldCard, type RogueBonus } from '../core/rogue';
 import { leveledCharacter } from '../core/leveling';
 import { tileInRange, tileOf } from '../core/range';
-import { applyModifiers, computeDamage, isBuff } from '../core/stats';
+import { applyModifiers, computeDamage, formatNumber, isBuff } from '../core/stats';
 import { TileGrid } from '../core/tiles';
 import type { CharacterDef, EndlessConfig, EnemyDef, GridPos, LevelDef, RogueCard, RogueConfig, SkillDamageType, SkillDef, SkillEffect, StatModifier, SummonDef } from '../core/types';
 import { attackBehavior, tileOfCombatant } from './attacks';
@@ -99,6 +99,8 @@ export interface CardState {
   reason?: string;
   /** 部署冷却的剩余时间（秒），没有冷却为 0 */
   cooldown: number;
+  /** 这次部署冷却的总时间（秒，显示进度用；冷却被延长时也会变长） */
+  cooldownTotal: number;
 }
 
 /**
@@ -183,6 +185,8 @@ export class GameEngine {
   private seq = 1;
   /** 部署冷却：角色 ID → 可以再次部署的时间 */
   private readyAt = new Map<string, number>();
+  /** 部署冷却：角色 ID → 这次冷却的总时间 */
+  private cooldownTotal = new Map<string, number>();
 
   constructor(level: LevelDef, characters: CharacterDef[], enemies: EnemyDef[], opts: EngineOptions = {}) {
     this.level = level;
@@ -649,7 +653,8 @@ export class GameEngine {
           }
           continue;
         }
-        if (s.def.spGain === 'auto') s.sp = Math.min(s.def.spMax, s.sp + s.def.spRate * dt);
+        // SP 积累速度（属性）可以被增益 / 减益、肉鸽的牌改变
+        if (s.def.spGain === 'auto') s.sp = Math.min(s.def.spMax, s.sp + s.def.spRate * dt * c.stats.spRate);
         const autoCast = s.def.trigger === 'auto' || c.side === 'enemy';
         if (autoCast && s.sp >= s.def.spMax - 1e-9 && this.worthCasting(c, s.def)) this.castSkill(c, s);
       }
@@ -759,7 +764,7 @@ export class GameEngine {
         c.attackCd = c.stats.attackInterval;
         // 攻击成功（无论攻击敌人还是队友）→ 积累 SP
         for (const s of c.skills) {
-          if (!s.active && s.def.spGain === 'attack') s.sp = Math.min(s.def.spMax, s.sp + s.def.spRate);
+          if (!s.active && s.def.spGain === 'attack') s.sp = Math.min(s.def.spMax, s.sp + s.def.spRate * c.stats.spRate);
         }
       } else {
         c.attackCd = 0;
@@ -779,10 +784,10 @@ export class GameEngine {
         if (p.heal) {
           this.heal(src ?? null, target, p.atk);
           // 命中附带效果对治疗的队友同样生效（例如治疗时附带增益）
-          if (p.onHit) this.applyOnHit(target, p.onHit, src);
+          if (p.onHit) this.applyOnHit(target, p.onHit, src, p.sourceSide);
         } else {
           this.dealDamage(target, p.atk, p.damageType);
-          if (p.onHit) this.applyOnHit(target, p.onHit, src);
+          if (p.onHit) this.applyOnHit(target, p.onHit, src, p.sourceSide);
           this.addEffect({ kind: 'hit', x: target.x, y: target.y, duration: 0.18, color: p.color });
         }
         continue;
@@ -921,18 +926,30 @@ export class GameEngine {
   healWithAttack(attacker: Combatant, target: Combatant) {
     this.heal(attacker, target, -attacker.stats.atk);
     const oh = attacker.def.onHit;
-    if (oh && oh.modifiers.length) this.applyOnHit(target, { ...oh, key: `onhit:${attacker.def.id}` }, attacker);
+    if (oh && (oh.modifiers.length || oh.cooldown)) this.applyOnHit(target, { ...oh, key: `onhit:${attacker.def.id}` }, attacker, attacker.side);
   }
 
   /** 普通攻击立即命中（范围伤害）：伤害 + 命中附带效果 */
   hitWithAttack(attacker: Combatant, target: Combatant) {
     this.dealDamage(target, attacker.stats.atk, attacker.def.damageType);
     const oh = attacker.def.onHit;
-    if (oh && oh.modifiers.length) this.applyOnHit(target, { ...oh, key: `onhit:${attacker.def.id}` }, attacker);
+    if (oh && (oh.modifiers.length || oh.cooldown)) this.applyOnHit(target, { ...oh, key: `onhit:${attacker.def.id}` }, attacker, attacker.side);
   }
 
-  private applyOnHit(target: Combatant, oh: { modifiers: StatModifier[]; duration: number; key: string }, src: Combatant | null | undefined) {
-    this.addStatus(target, { key: oh.key, name: src ? `${src.def.name}的攻击效果` : '攻击效果', color: src?.def.color ?? '#ffffff', modifiers: oh.modifiers, duration: oh.duration });
+  /**
+   * 命中附带效果：增益 / 减益加在被命中的目标身上；
+   * 部署冷却作用于玩家：角色命中 = 减少剩余的部署冷却，敌人命中 = 增加（每命中一个目标结算一次）
+   */
+  private applyOnHit(
+    target: Combatant,
+    oh: { modifiers: StatModifier[]; duration: number; key: string; cooldown?: number },
+    src: Combatant | null | undefined,
+    side: 'ally' | 'enemy',
+  ) {
+    if (oh.modifiers.length) {
+      this.addStatus(target, { key: oh.key, name: src ? `${src.def.name}的攻击效果` : '攻击效果', color: src?.def.color ?? '#ffffff', modifiers: oh.modifiers, duration: oh.duration });
+    }
+    if (oh.cooldown) this.changeCooldowns(side === 'ally' ? -oh.cooldown : oh.cooldown);
   }
 
   /** 发射子弹（默认攻击）：攻击队友且攻击力为负数时发射治疗子弹 */
@@ -952,7 +969,7 @@ export class GameEngine {
       atk: heal ? -attacker.stats.atk : attacker.stats.atk,
       heal,
       damageType: type,
-      onHit: oh && oh.modifiers.length ? { ...oh, key: `onhit:${attacker.def.id}` } : null,
+      onHit: oh && (oh.modifiers.length || oh.cooldown) ? { ...oh, key: `onhit:${attacker.def.id}` } : null,
       color: heal ? '#5dff9d' : type === 'magic' ? '#c79bff' : type === 'true' ? '#fff3c4' : attacker.def.color,
       radius: 0.08,
     });
@@ -992,7 +1009,8 @@ export class GameEngine {
 
   /** 自动释放前判断是否值得释放：攻击敌人的技能需要有敌人，治疗技能需要有受伤的队友 */
   private worthCasting(c: Combatant, skill: SkillDef): boolean {
-    const offensive = skill.effects.filter((e) => e.kind !== 'money' && e.target === 'enemies');
+    // 金钱 / 部署冷却没有作用对象，不需要等敌人进入范围
+    const offensive = skill.effects.filter((e) => e.kind !== 'money' && e.kind !== 'cooldown' && e.target === 'enemies');
     if (offensive.length) return offensive.some((e) => this.effectTargets(c, e).length > 0);
     const heals = skill.effects.filter((e) => (e.kind === 'damage' && e.amount < 0) || (e.kind === 'regen' && e.amount > 0));
     if (heals.length) return heals.some((e) => this.effectTargets(c, e).some((t) => t.hp < t.stats.maxHp - 0.01));
@@ -1008,6 +1026,14 @@ export class GameEngine {
     }
     skill.effects.forEach((eff, i) => {
       const key = `skill:${skill.id}:${c.uid}:${i}`;
+      if (eff.kind === 'cooldown') {
+        // 角色释放 = 减少玩家剩余的部署冷却；敌人释放 = 玩家剩余的部署冷却增加
+        const sec = c.side === 'ally' ? -eff.cooldown : eff.cooldown;
+        if (sec && this.changeCooldowns(sec)) {
+          this.addEffect({ kind: 'text', x: c.x, y: c.y - 0.75, duration: 1, color: sec < 0 ? '#9fd3ff' : '#ff9f6b', text: `冷却 ${sec < 0 ? '−' : '+'}${formatNumber(Math.abs(sec))}s` });
+        }
+        return;
+      }
       if (eff.kind === 'money') {
         // 角色释放 = 玩家获得金钱；敌人释放 = 玩家失去金钱
         const sign = c.side === 'ally' ? 1 : -1;
@@ -1087,6 +1113,26 @@ export class GameEngine {
     return t == null ? 0 : Math.max(0, t - this.time);
   }
 
+  /** 部署后的冷却时间（秒）：角色的部署冷却 × (1 − 肉鸽牌「减少部署冷却」%)，最少为 0 */
+  cooldownOf(def: CharacterDef): number {
+    return Math.max(0, def.deployCooldown * (1 - this.bonus.cooldown / 100));
+  }
+
+  /** 改变全部正在进行的部署冷却（秒，负数 = 减少），返回有没有改变 */
+  changeCooldowns(seconds: number): boolean {
+    let changed = false;
+    for (const [id, t] of this.readyAt) {
+      if (t <= this.time + 1e-9) continue;
+      const next = Math.max(this.time, t + seconds);
+      if (Math.abs(next - t) < 1e-9) continue;
+      this.readyAt.set(id, next);
+      // 冷却被延长时总时间也跟着变长（进度不会超过 100%）
+      if (next - this.time > (this.cooldownTotal.get(id) ?? 0)) this.cooldownTotal.set(id, next - this.time);
+      changed = true;
+    }
+    return changed;
+  }
+
   /** 角色选择的召唤物（攻击方式不是「召唤」= null；没有选择 = 第一个有效的召唤物） */
   chosenSummon(def: CharacterDef): SummonDef | null {
     if (def.attackType !== 'summon' || isSummonDef(def)) return null;
@@ -1129,12 +1175,13 @@ export class GameEngine {
   /** 当前是否买得起 / 还能部署（不看位置） */
   cardState(def: CharacterDef): CardState {
     const cooldown = this.cooldownLeft(def.id);
-    if (this.status !== 'running') return { ok: false, reason: '战斗已结束', cooldown };
-    if (isSummonDef(def) && !this.summonersOf(def.id).length) return { ok: false, reason: '召唤者不在场', cooldown };
-    if (def.maxDeploy > 0 && this.deployedCount(def.id) >= def.maxDeploy) return { ok: false, reason: '已达部署上限', cooldown };
-    if (cooldown > 1e-9) return { ok: false, reason: `部署冷却中（还需 ${Math.ceil(cooldown - 1e-6)} 秒）`, cooldown };
-    if (Math.floor(this.money + 1e-9) < this.costOf(def)) return { ok: false, reason: '金钱不足', cooldown };
-    return { ok: true, cooldown };
+    const cd = { cooldown, cooldownTotal: cooldown > 0 ? Math.max(cooldown, this.cooldownTotal.get(def.id) ?? cooldown) : 0 };
+    if (this.status !== 'running') return { ok: false, reason: '战斗已结束', ...cd };
+    if (isSummonDef(def) && !this.summonersOf(def.id).length) return { ok: false, reason: '召唤者不在场', ...cd };
+    if (def.maxDeploy > 0 && this.deployedCount(def.id) >= def.maxDeploy) return { ok: false, reason: '已达部署上限', ...cd };
+    if (cooldown > 1e-9) return { ok: false, reason: `部署冷却中（还需 ${Math.ceil(cooldown - 1e-6)} 秒）`, ...cd };
+    if (Math.floor(this.money + 1e-9) < this.costOf(def)) return { ok: false, reason: '金钱不足', ...cd };
+    return { ok: true, ...cd };
   }
 
   /** 检查能否部署到某个方块，返回 null 表示可以，否则返回原因 */
@@ -1163,7 +1210,12 @@ export class GameEngine {
     const cost = this.costOf(def);
     this.changeMoney(-cost);
     // 部署冷却：同一个角色在冷却结束前不能再次部署
-    if (def.deployCooldown > 0) this.readyAt.set(def.id, this.time + def.deployCooldown);
+    // 肉鸽的牌可以缩短部署冷却
+    const cdTime = this.cooldownOf(def);
+    if (cdTime > 0) {
+      this.readyAt.set(def.id, this.time + cdTime);
+      this.cooldownTotal.set(def.id, cdTime);
+    }
     const c = tileCenter(tile);
     const t = this.grid.get(tile.x, tile.y)!;
     const base = unitBaseStats(def);

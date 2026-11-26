@@ -230,6 +230,7 @@ export function newEffect(kind: SkillEffect['kind'] = 'modify'): SkillEffect {
     damageType: 'physical',
     money: kind === 'money' ? 10 : 0,
     moneyRate: 0,
+    cooldown: kind === 'cooldown' ? 5 : 0,
   };
 }
 
@@ -380,10 +381,13 @@ export function normalizeModifier(raw: any): StatModifier | null {
 const modList = (v: unknown): StatModifier[] =>
   Array.isArray(v) ? v.map(normalizeModifier).filter((m): m is StatModifier => !!m) : [];
 
+/** 命中附带效果：有属性修改或者部署冷却时才保留 */
 function normalizeOnHit(raw: any): OnHitEffect | null {
-  if (!raw || !Array.isArray(raw.modifiers)) return null;
-  const modifiers = modList(raw.modifiers);
-  return modifiers.length ? { modifiers, duration: num(raw.duration, 3, 0.1, 3600) } : null;
+  if (!raw || typeof raw !== 'object') return null;
+  const modifiers = modList(Array.isArray(raw.modifiers) ? raw.modifiers : []);
+  const cooldown = num(raw.cooldown, 0, -3600, 3600);
+  if (!modifiers.length && !cooldown) return null;
+  return { modifiers, duration: num(raw.duration, 3, 0.1, 3600), ...(cooldown ? { cooldown } : {}) };
 }
 
 export function normalizeCharacter(raw: any): CharacterDef {
@@ -521,7 +525,7 @@ function normalizeEndlessEnemy(raw: any, maxHp: number): Pick<EnemyDef, 'endless
 }
 
 export function normalizeEffect(raw: any): SkillEffect {
-  const kind: SkillEffect['kind'] = raw?.kind === 'damage' || raw?.kind === 'money' || raw?.kind === 'regen' ? raw.kind : 'modify';
+  const kind: SkillEffect['kind'] = raw?.kind === 'damage' || raw?.kind === 'money' || raw?.kind === 'regen' || raw?.kind === 'cooldown' ? raw.kind : 'modify';
   const d = newEffect(kind);
   return {
     kind,
@@ -536,6 +540,7 @@ export function normalizeEffect(raw: any): SkillEffect {
     damageType: raw?.damageType === 'magic' || raw?.damageType === 'true' ? raw.damageType : 'physical',
     money: num(raw?.money, d.money, -100000, 100000),
     moneyRate: num(raw?.moneyRate, 0, -100000, 100000),
+    cooldown: num(raw?.cooldown, d.cooldown, -3600, 3600),
   };
 }
 
@@ -784,6 +789,7 @@ export function newRogueEffect(kind: RogueEffectKind): RogueEffect {
     cost: [-1, -1],
     baseHp: [2, 1],
     score: [20, 10],
+    cooldown: [15, 10],
   };
   const stat: StatKey = kind === 'enemy' ? 'speed' : 'atk';
   return { kind, stat, mode: kind === 'ally' || kind === 'enemy' ? 'percent' : 'add', value: base[kind][0], perLevel: base[kind][1] };
@@ -794,7 +800,7 @@ export function newRogueCard(id: string): RogueCard {
   return { id, name: '新的牌', color: '#7c9cff', weight: 10, copies: 1, effects: [newRogueEffect('ally')] };
 }
 
-const ROGUE_KINDS: RogueEffectKind[] = ['ally', 'enemy', 'money', 'moneyRate', 'killMoney', 'cost', 'baseHp', 'score'];
+const ROGUE_KINDS: RogueEffectKind[] = ['ally', 'enemy', 'money', 'moneyRate', 'killMoney', 'cost', 'baseHp', 'score', 'cooldown'];
 
 function normalizeRogueEffect(raw: any): RogueEffect | null {
   if (!raw || typeof raw !== 'object') return null;
