@@ -350,7 +350,7 @@
       "range": 0,
       "blockCount": 0,
       "maxDeploy": 0,
-      "deployCooldown": 60,
+      "deployCooldown": 80,
       "attackType": "area",
       "summonAttack": "basic",
       "summons": [],
