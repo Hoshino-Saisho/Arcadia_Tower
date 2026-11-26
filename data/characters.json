@@ -340,7 +340,7 @@
       "placement": "any",
       "cost": 50,
       "maxHp": 1000,
-      "atk": 200,
+      "atk": 250,
       "def": 50,
       "res": 0,
       "damageType": "physical",
