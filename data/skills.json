@@ -454,7 +454,7 @@
           "maxTargets": -1,
           "modifiers": [
             {"stat":"targetCount","mode":"add","value":1},
-            {"stat":"attackInterval","mode":"percent","value":-20}
+            {"stat":"attackInterval","mode":"percent","value":-40}
           ],
           "duration": 0,
           "amount": 0,
