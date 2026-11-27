@@ -246,7 +246,7 @@
         "description": "基地血量增加",
         "weight": 6,
         "copies": 3,
-        "effects": [{"kind":"baseHp","stat":"atk","mode":"add","value":2,"perLevel":1}]
+        "effects": [{"kind":"baseHp","stat":"atk","mode":"add","value":5,"perLevel":5}]
       },
       {
         "id": "K011",
