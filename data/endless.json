@@ -257,7 +257,7 @@
         "copies": 1,
         "effects": [
           {"kind":"score","stat":"atk","mode":"add","value":30,"perLevel":20},
-          {"kind":"enemy","stat":"atk","mode":"percent","value":10,"perLevel":10}
+          {"kind":"enemy","stat":"maxHp","mode":"percent","value":10,"perLevel":10}
         ]
       }
     ]
