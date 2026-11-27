@@ -24,7 +24,7 @@
       "autoMoney": true,
       "moneyPerMinute": 40,
       "availableCharacters": [],
-      "battleMusic": "",
+      "battleMusic": "sample_battle.wav",
       "rewardMultiplier": 1
     },
     "lines": [
@@ -124,8 +124,7 @@
   "difficultyPerWave": 0.2,
   "groupsPerWave": 1,
   "groupsGrowth": 0.2,
-  "countPerRank": 1,
-  "intervalPerRank": 1,
+  "groupInterval": 1,
   "countGrowth": 3,
   "hpGrowth": 5,
   "atkGrowth": 5,
@@ -207,7 +206,7 @@
         "copies": 4,
         "effects": [
           {"kind":"enemy","stat":"def","mode":"percent","value":-15,"perLevel":-8},
-          {"kind":"enemy","stat":"res","mode":"add","value":-5,"perLevel":-5}
+          {"kind":"enemy","stat":"res","mode":"add","value":-10,"perLevel":-5}
         ]
       },
       {
